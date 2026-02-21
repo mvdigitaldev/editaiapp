@@ -19,6 +19,12 @@ abstract class AuthDataSource {
   Future<UserModel?> getCurrentUser();
 
   Future<void> resetPassword(String email);
+
+  Future<UserModel> updateProfile({String? displayName, String? avatarUrl});
+
+  Future<void> updatePassword(String newPassword);
+
+  Future<void> deleteAccount();
 }
 
 class AuthDataSourceImpl implements AuthDataSource {
@@ -64,13 +70,7 @@ class AuthDataSourceImpl implements AuthDataSource {
         throw Exception('Falha ao criar usuário');
       }
 
-      // Criar perfil do usuário
-      await _createUserProfile(
-        response.user!.id,
-        email: email,
-        displayName: displayName,
-      );
-
+      // Perfil é criado pelo trigger handle_new_user em public.users; leitura via view user_profiles
       return await _getUserProfile(response.user!.id);
     } catch (e) {
       throw AuthFailure(message: e.toString());
@@ -92,7 +92,12 @@ class AuthDataSourceImpl implements AuthDataSource {
       final user = _supabase.auth.currentUser;
       if (user == null) return null;
 
-      return await _getUserProfile(user.id);
+      try {
+        return await _getUserProfile(user.id);
+      } catch (_) {
+        await _supabase.auth.signOut();
+        rethrow;
+      }
     } catch (e) {
       throw AuthFailure(message: e.toString());
     }
@@ -107,6 +112,50 @@ class AuthDataSourceImpl implements AuthDataSource {
     }
   }
 
+  @override
+  Future<UserModel> updateProfile({String? displayName, String? avatarUrl}) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) throw AuthFailure(message: 'Usuário não autenticado');
+
+      final data = <String, dynamic>{};
+      if (displayName != null) data['display_name'] = displayName;
+      if (avatarUrl != null) data['avatar_url'] = avatarUrl;
+      if (data.isNotEmpty) {
+        await _supabase.auth.updateUser(UserAttributes(data: data));
+      }
+
+      final updates = <String, dynamic>{};
+      if (displayName != null) updates['name'] = displayName;
+      if (avatarUrl != null) updates['avatar_url'] = avatarUrl;
+      if (updates.isNotEmpty) {
+        await _supabase.from('users').update(updates).eq('id', user.id);
+      }
+
+      return await _getUserProfile(user.id);
+    } catch (e) {
+      throw AuthFailure(message: e.toString());
+    }
+  }
+
+  @override
+  Future<void> updatePassword(String newPassword) async {
+    try {
+      await _supabase.auth.updateUser(UserAttributes(password: newPassword));
+    } catch (e) {
+      throw AuthFailure(message: e.toString());
+    }
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    // deleteUser() existe apenas na API admin (service_role), não no client.
+    // Exclusão real pode ser feita via Edge Function ou painel; aqui retornamos falha informativa.
+    throw AuthFailure(
+      message: 'Exclusão de conta deve ser solicitada ao suporte ou pelo painel.',
+    );
+  }
+
   Future<UserModel> _getUserProfile(String userId) async {
     try {
       final response = await _supabase
@@ -117,34 +166,7 @@ class AuthDataSourceImpl implements AuthDataSource {
 
       return UserModel.fromJson(response);
     } catch (e) {
-      // Se o perfil não existe, criar um básico
-      final user = _supabase.auth.currentUser;
-      if (user != null) {
-        await _createUserProfile(userId, email: user.email);
-        return UserModel(
-          id: userId,
-          email: user.email,
-          subscriptionTier: 'free',
-        );
-      }
       throw AuthFailure(message: 'Perfil não encontrado');
-    }
-  }
-
-  Future<void> _createUserProfile(
-    String userId, {
-    String? email,
-    String? displayName,
-  }) async {
-    try {
-      await _supabase.from('user_profiles').insert({
-        'id': userId,
-        'email': email,
-        'display_name': displayName,
-        'subscription_tier': 'free',
-      });
-    } catch (e) {
-      // Ignorar se já existe
     }
   }
 }

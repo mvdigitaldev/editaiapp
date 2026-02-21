@@ -17,7 +17,6 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
-  int _currentNavIndex = 0;
   String? _selectedImagePath;
 
   void _handleImageSelected(File image) {
@@ -37,12 +36,10 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     return Scaffold(
       body: SafeArea(
-        child: Stack(
-          children: [
-            SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
                   // Header
                   Padding(
                     padding: const EdgeInsets.all(24),
@@ -192,39 +189,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                       },
                     ),
                   ),
-                  const SizedBox(height: 100), // Space for bottom nav
-                ],
-              ),
-            ),
-            // Bottom Navigation
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: AppBottomNav(
-                currentIndex: _currentNavIndex,
-                onTap: (index) {
-                  setState(() {
-                    _currentNavIndex = index;
-                  });
-                  switch (index) {
-                    case 0:
-                      // Already on home
-                      break;
-                    case 1:
-                      Navigator.of(context).pushNamed('/gallery');
-                      break;
-                    case 2:
-                      // Tools - TODO
-                      break;
-                    case 3:
-                      Navigator.of(context).pushNamed('/profile');
-                      break;
-                  }
-                },
-              ),
-            ),
-          ],
+              const SizedBox(height: 32),
+            ],
+          ),
         ),
       ),
     );

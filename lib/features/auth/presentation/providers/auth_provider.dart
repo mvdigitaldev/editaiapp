@@ -1,12 +1,16 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/datasources/auth_datasource.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../../domain/usecases/delete_account.dart';
 import '../../domain/usecases/get_current_user.dart';
 import '../../domain/usecases/sign_in.dart';
 import '../../domain/usecases/sign_out.dart';
 import '../../domain/usecases/sign_up.dart';
+import '../../domain/usecases/update_password.dart';
+import '../../domain/usecases/update_profile.dart';
 import '../../domain/entities/user.dart' as domain;
 
 // Providers
@@ -38,9 +42,23 @@ final getCurrentUserProvider = Provider<GetCurrentUser>((ref) {
   return GetCurrentUser(ref.watch(authRepositoryProvider));
 });
 
+final updateProfileProvider = Provider<UpdateProfile>((ref) {
+  return UpdateProfile(ref.watch(authRepositoryProvider));
+});
+
+final updatePasswordProvider = Provider<UpdatePassword>((ref) {
+  return UpdatePassword(ref.watch(authRepositoryProvider));
+});
+
+final deleteAccountProvider = Provider<DeleteAccount>((ref) {
+  return DeleteAccount(ref.watch(authRepositoryProvider));
+});
+
 // State Provider
 final authStateProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.watch(getCurrentUserProvider));
+  final notifier = AuthNotifier(ref.watch(getCurrentUserProvider));
+  ref.onDispose(() => notifier.cancelAuthListener());
+  return notifier;
 });
 
 // State
@@ -71,9 +89,25 @@ class AuthState {
 // Notifier
 class AuthNotifier extends StateNotifier<AuthState> {
   final GetCurrentUser _getCurrentUser;
+  StreamSubscription<dynamic>? _authSubscription;
 
   AuthNotifier(this._getCurrentUser) : super(AuthState()) {
     checkAuth();
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
+      (data) {
+        final event = data.event;
+        if (event == AuthChangeEvent.signedOut ||
+            event == AuthChangeEvent.userDeleted ||
+            event == AuthChangeEvent.tokenRefreshed && data.session == null) {
+          checkAuth();
+        }
+      },
+    );
+  }
+
+  void cancelAuthListener() {
+    _authSubscription?.cancel();
+    _authSubscription = null;
   }
 
   Future<void> checkAuth() async {

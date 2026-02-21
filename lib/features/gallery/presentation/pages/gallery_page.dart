@@ -12,7 +12,16 @@ import '../../domain/usecases/get_user_photos.dart';
 import '../../domain/entities/gallery_photo.dart';
 
 class GalleryPage extends ConsumerStatefulWidget {
-  const GalleryPage({super.key});
+  /// Quando true, exibe botão voltar no header (ex.: quando a página é aberta por push).
+  final bool showBackButton;
+  /// Quando true, exibe a barra inferior (não usar quando a página está dentro da MainShellPage).
+  final bool showBottomNav;
+
+  const GalleryPage({
+    super.key,
+    this.showBackButton = true,
+    this.showBottomNav = false,
+  });
 
   @override
   ConsumerState<GalleryPage> createState() => _GalleryPageState();
@@ -21,7 +30,6 @@ class GalleryPage extends ConsumerStatefulWidget {
 class _GalleryPageState extends ConsumerState<GalleryPage> {
   int _currentPage = 0;
   final int _pageSize = 20;
-  int _currentNavIndex = 1;
 
   @override
   Widget build(BuildContext context) {
@@ -36,10 +44,13 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
               padding: const EdgeInsets.all(24),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
+                  if (widget.showBackButton)
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.of(context).pop(),
+                    )
+                  else
+                    const SizedBox(width: 48),
                   const Spacer(),
                   Text(
                     'Galeria',
@@ -108,16 +119,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                 },
               ),
             ),
-            // Bottom Navigation
-            AppBottomNav(
-              currentIndex: _currentNavIndex,
-              onTap: (index) {
-                setState(() {
-                  _currentNavIndex = index;
-                });
-                // TODO: Handle navigation
-              },
-            ),
+            if (widget.showBottomNav)
+              AppBottomNav(
+                currentIndex: 1,
+                onTap: (_) {},
+              ),
           ],
         ),
       ),

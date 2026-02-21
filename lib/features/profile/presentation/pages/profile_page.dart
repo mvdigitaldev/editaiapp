@@ -10,7 +10,6 @@ import '../../../../core/config/app_config.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart'
     as auth_providers;
-import '../widgets/profile_bottom_nav.dart';
 
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
@@ -30,11 +29,6 @@ class ProfilePage extends ConsumerWidget {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  const Spacer(),
                   Text(
                     'Perfil',
                     style: AppTextStyles.headingMedium.copyWith(
@@ -279,10 +273,23 @@ class ProfilePage extends ConsumerWidget {
                       child: Column(
                         children: [
                           _ProfileOption(
+                            icon: Icons.workspace_premium,
+                            label: 'Meu plano',
+                            onTap: () {
+                              Navigator.of(context).pushNamed('/subscription');
+                            },
+                          ),
+                          Divider(
+                            height: 1,
+                            color: isDark
+                                ? AppColors.borderDark
+                                : AppColors.border,
+                          ),
+                          _ProfileOption(
                             icon: Icons.person,
                             label: 'Meus Dados',
                             onTap: () {
-                              // TODO: Navigate to user data
+                              Navigator.of(context).pushNamed('/user-data');
                             },
                           ),
                           Divider(
@@ -476,17 +483,10 @@ class ProfilePage extends ConsumerWidget {
                             : AppColors.textSecondary,
                       ),
                     ),
-                    const SizedBox(height: 100), // Space for bottom nav
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
-            ),
-            // Bottom Navigation
-            ProfileBottomNav(
-              currentIndex: 4,
-              onTap: (index) {
-                // TODO: Handle navigation
-              },
             ),
           ],
         ),

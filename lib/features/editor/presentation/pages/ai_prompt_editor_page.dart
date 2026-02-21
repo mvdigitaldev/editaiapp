@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_button.dart';
-import '../../../../core/widgets/app_bottom_nav.dart';
 
 class AIPromptEditorPage extends StatefulWidget {
   final String? imagePath;
@@ -19,7 +18,6 @@ class AIPromptEditorPage extends StatefulWidget {
 
 class _AIPromptEditorPageState extends State<AIPromptEditorPage> {
   final _promptController = TextEditingController();
-  int _currentNavIndex = 0;
 
   final List<Map<String, dynamic>> _suggestions = [
     {'icon': Icons.auto_fix_high, 'label': 'Remover Fundo', 'color': AppColors.primary},
@@ -281,7 +279,7 @@ class _AIPromptEditorPageState extends State<AIPromptEditorPage> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 100), // Space for bottom nav
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
@@ -300,23 +298,10 @@ class _AIPromptEditorPageState extends State<AIPromptEditorPage> {
                   ),
                 ),
               ),
-              child: Column(
-                children: [
-                  AppButton(
-                    text: 'Gerar Edição',
-                    onPressed: _handleGenerate,
-                    icon: Icons.auto_awesome,
-                  ),
-                  const SizedBox(height: 16),
-                  AppBottomNav(
-                    currentIndex: _currentNavIndex,
-                    onTap: (index) {
-                      setState(() {
-                        _currentNavIndex = index;
-                      });
-                    },
-                  ),
-                ],
+              child: AppButton(
+                text: 'Gerar Edição',
+                onPressed: _handleGenerate,
+                icon: Icons.auto_awesome,
               ),
             ),
           ],

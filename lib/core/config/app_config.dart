@@ -1,14 +1,15 @@
+import 'supabase_config.dart';
+
 class AppConfig {
-  // Supabase Configuration
-  // TODO: Adicionar variáveis de ambiente
+  // Supabase: dart-define tem prioridade; fallback para config local (supabase_config.dart)
   static const String supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: '',
+    defaultValue: SupabaseConfig.url,
   );
-  
+
   static const String supabaseAnonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: '',
+    defaultValue: SupabaseConfig.anonKey,
   );
 
   // App Configuration
@@ -17,6 +18,7 @@ class AppConfig {
 
   // Storage Configuration
   static const String photosBucket = 'photos';
+  static const String avatarsBucket = 'avatars';
   static const int maxFileSizeBytes = 50 * 1024 * 1024; // 50MB
   static const List<String> allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp'];
 

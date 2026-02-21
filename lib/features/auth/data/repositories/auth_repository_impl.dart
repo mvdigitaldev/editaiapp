@@ -82,4 +82,46 @@ class AuthRepositoryImpl implements AuthRepository {
       return Left(UnknownFailure(message: e.toString()));
     }
   }
+
+  @override
+  Future<Either<Failure, domain.User>> updateProfile({
+    String? displayName,
+    String? avatarUrl,
+  }) async {
+    try {
+      final userModel = await _dataSource.updateProfile(
+        displayName: displayName,
+        avatarUrl: avatarUrl,
+      );
+      return Right(userModel.toEntity());
+    } on AuthFailure catch (e) {
+      return Left(e);
+    } catch (e) {
+      return Left(UnknownFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updatePassword(String newPassword) async {
+    try {
+      await _dataSource.updatePassword(newPassword);
+      return const Right(null);
+    } on AuthFailure catch (e) {
+      return Left(e);
+    } catch (e) {
+      return Left(UnknownFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> deleteAccount() async {
+    try {
+      await _dataSource.deleteAccount();
+      return const Right(null);
+    } on AuthFailure catch (e) {
+      return Left(e);
+    } catch (e) {
+      return Left(UnknownFailure(message: e.toString()));
+    }
+  }
 }

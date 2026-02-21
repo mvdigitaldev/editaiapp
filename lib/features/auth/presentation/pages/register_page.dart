@@ -69,68 +69,6 @@ class RegisterPage extends ConsumerWidget {
                 const SizedBox(height: 40),
                 // Form
                 const RegisterForm(),
-                const SizedBox(height: 24),
-                // Divider
-                Row(
-                  children: [
-                    Expanded(
-                      child: Divider(
-                        color: isDark ? AppColors.borderDark : AppColors.border,
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'ou continue com',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Divider(
-                        color: isDark ? AppColors.borderDark : AppColors.border,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                // Social buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          // TODO: Implement Google sign in
-                        },
-                        icon: const Icon(Icons.g_mobiledata, size: 24),
-                        label: const Text('Google'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          side: BorderSide(
-                            color: isDark ? AppColors.borderDark : AppColors.border,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          // TODO: Implement Apple sign in
-                        },
-                        icon: const Icon(Icons.apple, size: 24),
-                        label: const Text('Apple'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          side: BorderSide(
-                            color: isDark ? AppColors.borderDark : AppColors.border,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
                 const SizedBox(height: 32),
                 // Login link
                 Row(

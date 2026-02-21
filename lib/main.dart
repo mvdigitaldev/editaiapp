@@ -15,9 +15,11 @@ import 'features/editor/presentation/pages/ai_prompt_editor_page.dart';
 import 'features/editor/presentation/pages/comparison_page.dart';
 import 'features/editor/presentation/pages/processing_page.dart';
 import 'features/profile/presentation/pages/profile_page.dart';
+import 'features/profile/presentation/pages/user_data_page.dart';
 import 'features/profile/presentation/pages/affiliate_page.dart';
 import 'features/subscription/presentation/pages/subscription_page.dart';
 import 'features/subscription/presentation/pages/credits_shop_page.dart';
+import 'features/home/presentation/pages/main_shell_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,7 +56,7 @@ class MyApp extends StatelessWidget {
         '/': (context) => const AuthWrapper(),
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
-        '/home': (context) => const HomePage(),
+        '/home': (context) => const MainShellPage(),
         '/editor': (context) => const EditorPage(),
         '/gallery': (context) => const GalleryPage(),
         '/pre-evaluation': (context) {
@@ -74,6 +76,7 @@ class MyApp extends StatelessWidget {
         },
         '/processing': (context) => const ProcessingPage(),
         '/profile': (context) => const ProfilePage(),
+        '/user-data': (context) => const UserDataPage(),
         '/affiliate': (context) => const AffiliatePage(),
         '/subscription': (context) => const SubscriptionPage(),
         '/credits-shop': (context) => const CreditsShopPage(),
@@ -98,7 +101,8 @@ class AuthWrapper extends ConsumerWidget {
     }
 
     if (authState.isAuthenticated) {
-      return const HomePage();
+      // Usuário autenticado vai para a shell principal; inicia na aba Editor (índice 2).
+      return const MainShellPage(initialIndex: 2);
     }
 
     return const LoginPage();
