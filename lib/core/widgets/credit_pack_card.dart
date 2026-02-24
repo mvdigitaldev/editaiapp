@@ -116,7 +116,7 @@ class CreditPackCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                'SAVINGS',
+                                'ECONOMIA',
                                 style: AppTextStyles.labelSmall.copyWith(
                                   color: AppColors.textLight,
                                   fontWeight: FontWeight.bold,

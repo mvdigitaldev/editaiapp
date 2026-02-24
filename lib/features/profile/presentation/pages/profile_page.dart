@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:intl/intl.dart';
+import 'package:editaiapp/features/subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_button.dart';
@@ -19,6 +21,16 @@ class ProfilePage extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
+    final creditsUsageAsync = ref.watch(creditsUsageProvider);
+
+    String? renewalText;
+    if (user != null &&
+        user.subscriptionTier.toLowerCase() != 'free' &&
+        user.subscriptionEndsAt != null) {
+      final date = user.subscriptionEndsAt!;
+      final formatter = DateFormat('d MMM', 'pt_BR');
+      renewalText = 'Renova em ${formatter.format(date)}';
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -27,23 +39,12 @@ class ProfilePage extends ConsumerWidget {
             // Header
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Text(
-                    'Perfil',
-                    style: AppTextStyles.headingMedium.copyWith(
-                      color:
-                          isDark ? AppColors.textLight : AppColors.textPrimary,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.settings),
-                    onPressed: () {
-                      // TODO: Navigate to settings
-                    },
-                  ),
-                ],
+              child: Text(
+                'Perfil',
+                style: AppTextStyles.headingMedium.copyWith(
+                  color:
+                      isDark ? AppColors.textLight : AppColors.textPrimary,
+                ),
               ),
             ),
             // Content
@@ -57,50 +58,25 @@ class ProfilePage extends ConsumerWidget {
                       padding: const EdgeInsets.all(24),
                       child: Row(
                         children: [
-                          Stack(
-                            children: [
-                              Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: AppColors.primary.withOpacity(0.2),
-                                    width: 2,
-                                  ),
-                                  image: user?.avatarUrl != null
-                                      ? DecorationImage(
-                                          image: NetworkImage(user!.avatarUrl!),
-                                          fit: BoxFit.cover,
-                                        )
-                                      : null,
-                                ),
-                                child: user?.avatarUrl == null
-                                    ? const Icon(Icons.person, size: 40)
-                                    : const SizedBox.shrink(),
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.primary.withOpacity(0.2),
+                                width: 2,
                               ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: isDark
-                                          ? AppColors.backgroundDark
-                                          : Colors.white,
-                                    ),
-                                  ),
-                                  child: const Icon(
-                                    Icons.edit,
-                                    color: Colors.white,
-                                    size: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
+                              image: user?.avatarUrl != null
+                                  ? DecorationImage(
+                                      image: NetworkImage(user!.avatarUrl!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
+                            ),
+                            child: user?.avatarUrl == null
+                                ? const Icon(Icons.person, size: 40)
+                                : const SizedBox.shrink(),
                           ),
                           const SizedBox(width: 20),
                           Expanded(
@@ -185,48 +161,98 @@ class ProfilePage extends ConsumerWidget {
                                   ),
                                 ],
                               ),
-                              Text(
-                                'Renova em 15 Out',
-                                style: AppTextStyles.labelSmall.copyWith(
+                              if (renewalText != null)
+                                Text(
+                                  renewalText,
+                                  style: AppTextStyles.labelSmall.copyWith(
+                                    color: isDark
+                                        ? AppColors.textTertiary
+                                        : AppColors.textSecondary,
+                                  ),
+                                )
+                              else
+                                const SizedBox.shrink(),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          creditsUsageAsync.when(
+                            loading: () => Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 16),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            error: (error, _) => Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 4),
+                              child: Text(
+                                'Não foi possível carregar o uso de créditos.',
+                                style: AppTextStyles.bodySmall.copyWith(
                                   color: isDark
                                       ? AppColors.textTertiary
                                       : AppColors.textSecondary,
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Créditos de IA',
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  color: isDark
-                                      ? AppColors.textLight
-                                      : AppColors.textPrimary,
-                                ),
-                              ),
-                              Text(
-                                '64/100',
-                                style: AppTextStyles.headingSmall.copyWith(
-                                  color: isDark
-                                      ? AppColors.textLight
-                                      : AppColors.textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          AppProgressIndicator(progress: 0.64),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Você ainda tem 36 créditos premium este mês. Use para remoção de fundo e IA Generativa.',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              color: isDark
-                                  ? AppColors.textTertiary
-                                  : AppColors.textSecondary,
                             ),
+                            data: (usage) {
+                              final used = usage.used;
+                              final total = usage.total;
+                              final progress = usage.progress;
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Créditos de IA',
+                                        style:
+                                            AppTextStyles.bodySmall.copyWith(
+                                          color: isDark
+                                              ? AppColors.textLight
+                                              : AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        total > 0 ? '$used/$total' : '0/0',
+                                        style: AppTextStyles.headingSmall
+                                            .copyWith(
+                                          color: isDark
+                                              ? AppColors.textLight
+                                              : AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  AppProgressIndicator(progress: progress),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    total > 0
+                                        ? 'Você já usou $used créditos do total de $total disponíveis na sua conta.'
+                                        : 'Você ainda não usou créditos na sua conta.',
+                                    style:
+                                        AppTextStyles.bodySmall.copyWith(
+                                      color: isDark
+                                          ? AppColors.textTertiary
+                                          : AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                           const SizedBox(height: 16),
                           SizedBox(
@@ -302,7 +328,7 @@ class ProfilePage extends ConsumerWidget {
                             icon: Icons.receipt_long,
                             label: 'Histórico de Pagamentos',
                             onTap: () {
-                              // TODO: Navigate to payment history
+                              Navigator.of(context).pushNamed('/payment-history');
                             },
                           ),
                           Divider(
@@ -409,13 +435,24 @@ class ProfilePage extends ConsumerWidget {
                           _ProfileOption(
                             icon: Icons.help_outline,
                             label: 'Central de Ajuda',
-                            trailing: const Icon(
-                              Icons.open_in_new,
-                              size: 20,
-                              color: AppColors.textSecondary,
-                            ),
                             onTap: () {
-                              // TODO: Open help center
+                              Navigator.of(context).pushNamed('/help-center');
+                            },
+                          ),
+                          Divider(
+                            height: 1,
+                            color: isDark
+                                ? AppColors.borderDark
+                                : AppColors.border,
+                          ),
+                          _ProfileOption(
+                            icon: Icons.shield_outlined,
+                            label: 'Política de Privacidade',
+                            onTap: () {
+                              Navigator.of(context).pushNamed(
+                                '/legal-document',
+                                arguments: 'privacy-policy',
+                              );
                             },
                           ),
                           Divider(
@@ -426,9 +463,12 @@ class ProfilePage extends ConsumerWidget {
                           ),
                           _ProfileOption(
                             icon: Icons.gavel,
-                            label: 'Termos e Privacidade',
+                            label: 'Termos de Uso',
                             onTap: () {
-                              // TODO: Navigate to terms
+                              Navigator.of(context).pushNamed(
+                                '/legal-document',
+                                arguments: 'terms-of-use',
+                              );
                             },
                           ),
                         ],
@@ -440,13 +480,40 @@ class ProfilePage extends ConsumerWidget {
                       width: double.infinity,
                       child: TextButton.icon(
                         onPressed: () async {
+                          final shouldLogout = await showDialog<bool>(
+                                context: context,
+                                builder: (dialogContext) {
+                                  return AlertDialog(
+                                    title: const Text('Sair da conta'),
+                                    content: const Text(
+                                      'Tem certeza que deseja sair da sua conta?',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(dialogContext).pop(false),
+                                        child: const Text('Cancelar'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(dialogContext).pop(true),
+                                        child: const Text('Sair'),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ) ??
+                              false;
+
+                          if (!shouldLogout) return;
+
                           final signOut =
                               ref.read(auth_providers.signOutProvider);
                           final result = await signOut();
                           result.fold(
                             (failure) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
+                                const SnackBar(
                                   content: Text('Erro ao sair'),
                                   backgroundColor: Colors.red,
                                 ),

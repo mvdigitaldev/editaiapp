@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:editaiapp/features/subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_card.dart';
@@ -13,12 +14,7 @@ class DashboardPage extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
-
-    // Placeholders de créditos até integrar com credits_balance / credit_transactions.
-    const int creditsTotal = 100;
-    const int creditsUsed = 36;
-    final int creditsRemaining = creditsTotal - creditsUsed;
-    final double progress = creditsTotal > 0 ? creditsUsed / creditsTotal : 0.0;
+    final creditsUsageAsync = ref.watch(creditsUsageProvider);
 
     return SafeArea(
       child: Scaffold(
@@ -86,60 +82,93 @@ class DashboardPage extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        Text(
-                          'Este mês',
-                          style: AppTextStyles.labelSmall.copyWith(
-                            color: isDark
-                                ? AppColors.textTertiary
-                                : AppColors.textSecondary,
-                          ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Créditos restantes',
+                    creditsUsageAsync.when(
+                      loading: () => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      error: (error, _) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'Não foi possível carregar o uso de créditos.',
                           style: AppTextStyles.bodySmall.copyWith(
                             color: isDark
                                 ? AppColors.textTertiary
                                 : AppColors.textSecondary,
                           ),
                         ),
-                        Text(
-                          '$creditsRemaining/$creditsTotal',
-                          style: AppTextStyles.headingSmall.copyWith(
-                            color: isDark
-                                ? AppColors.textLight
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 8,
-                        backgroundColor: isDark
-                            ? AppColors.surfaceDarkSecondary
-                            : AppColors.border,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.primary,
-                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Você já usou $creditsUsed créditos este mês. Mantenha um saldo saudável para não interromper seu fluxo criativo.',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: isDark
-                            ? AppColors.textTertiary
-                            : AppColors.textSecondary,
-                      ),
+                      data: (usage) {
+                        final used = usage.used;
+                        final total = usage.total;
+                        final progress = usage.progress;
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Créditos usados',
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: isDark
+                                        ? AppColors.textTertiary
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
+                                Text(
+                                  total > 0 ? '$used/$total' : '0/0',
+                                  style: AppTextStyles.headingSmall.copyWith(
+                                    color: isDark
+                                        ? AppColors.textLight
+                                        : AppColors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 8,
+                                backgroundColor: isDark
+                                    ? AppColors.surfaceDarkSecondary
+                                    : AppColors.border,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  AppColors.primary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              total > 0
+                                  ? 'Você já usou $used créditos do total de $total disponíveis na sua conta.'
+                                  : 'Você ainda não usou créditos na sua conta.',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: isDark
+                                    ? AppColors.textTertiary
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
                     SizedBox(

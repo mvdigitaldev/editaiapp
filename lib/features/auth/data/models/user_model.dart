@@ -11,6 +11,7 @@ class UserModel extends User {
     super.creditsBalance,
     super.trialEndsAt,
     super.subscriptionEndsAt,
+    super.subscriptionStartedAt,
   });
 
   static DateTime? _parseDateTime(dynamic v) {
@@ -39,6 +40,7 @@ class UserModel extends User {
       creditsBalance: _parseInt(json['credits_balance']),
       trialEndsAt: _parseDateTime(json['trial_ends_at']),
       subscriptionEndsAt: _parseDateTime(json['subscription_ends_at']),
+      subscriptionStartedAt: _parseDateTime(json['subscription_started_at']),
     );
   }
 
@@ -53,6 +55,7 @@ class UserModel extends User {
       if (creditsBalance != null) 'credits_balance': creditsBalance,
       if (trialEndsAt != null) 'trial_ends_at': trialEndsAt!.toIso8601String(),
       if (subscriptionEndsAt != null) 'subscription_ends_at': subscriptionEndsAt!.toIso8601String(),
+      if (subscriptionStartedAt != null) 'subscription_started_at': subscriptionStartedAt!.toIso8601String(),
     };
   }
 
@@ -67,6 +70,7 @@ class UserModel extends User {
       creditsBalance: creditsBalance,
       trialEndsAt: trialEndsAt,
       subscriptionEndsAt: subscriptionEndsAt,
+      subscriptionStartedAt: subscriptionStartedAt,
     );
   }
 }

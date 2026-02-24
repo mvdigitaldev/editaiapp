@@ -8,6 +8,7 @@ class User {
   final int? creditsBalance;
   final DateTime? trialEndsAt;
   final DateTime? subscriptionEndsAt;
+  final DateTime? subscriptionStartedAt;
 
   User({
     required this.id,
@@ -19,6 +20,7 @@ class User {
     this.creditsBalance,
     this.trialEndsAt,
     this.subscriptionEndsAt,
+    this.subscriptionStartedAt,
   });
 
   User copyWith({
@@ -31,6 +33,7 @@ class User {
     int? creditsBalance,
     DateTime? trialEndsAt,
     DateTime? subscriptionEndsAt,
+    DateTime? subscriptionStartedAt,
   }) {
     return User(
       id: id ?? this.id,
@@ -42,6 +45,7 @@ class User {
       creditsBalance: creditsBalance ?? this.creditsBalance,
       trialEndsAt: trialEndsAt ?? this.trialEndsAt,
       subscriptionEndsAt: subscriptionEndsAt ?? this.subscriptionEndsAt,
+      subscriptionStartedAt: subscriptionStartedAt ?? this.subscriptionStartedAt,
     );
   }
 }

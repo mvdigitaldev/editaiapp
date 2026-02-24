@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'core/config/app_config.dart';
 import 'core/storage/local_storage.dart' as app_storage;
 import 'core/theme/app_theme.dart';
@@ -20,9 +22,17 @@ import 'features/profile/presentation/pages/affiliate_page.dart';
 import 'features/subscription/presentation/pages/subscription_page.dart';
 import 'features/subscription/presentation/pages/credits_shop_page.dart';
 import 'features/home/presentation/pages/main_shell_page.dart';
+import 'features/subscription/presentation/pages/checkout_webview_page.dart';
+import 'features/profile/presentation/pages/payment_history_page.dart';
+import 'features/profile/presentation/pages/legal_document_page.dart';
+import 'features/profile/presentation/pages/help_center_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar locale PT-BR para formatar datas (ex: \"Renova em 15 out\")
+  Intl.defaultLocale = 'pt_BR';
+  await initializeDateFormatting('pt_BR', null);
 
   // Inicializar Supabase
   await Supabase.initialize(
@@ -80,6 +90,16 @@ class MyApp extends StatelessWidget {
         '/affiliate': (context) => const AffiliatePage(),
         '/subscription': (context) => const SubscriptionPage(),
         '/credits-shop': (context) => const CreditsShopPage(),
+        '/checkout': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as String;
+          return CheckoutWebViewPage(url: args);
+        },
+        '/payment-history': (context) => const PaymentHistoryPage(),
+        '/legal-document': (context) {
+          final slug = ModalRoute.of(context)!.settings.arguments as String;
+          return LegalDocumentPage(slug: slug);
+        },
+        '/help-center': (context) => const HelpCenterPage(),
       },
     );
   }

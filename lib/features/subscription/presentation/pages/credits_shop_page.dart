@@ -1,24 +1,41 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/widgets/credit_indicator.dart';
 import '../../../../core/widgets/credit_pack_card.dart';
 import '../../../../core/widgets/app_card.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../data/datasources/credit_packs_datasource.dart';
+import '../../data/models/credit_pack_model.dart';
 
-class CreditsShopPage extends StatelessWidget {
+final _creditPacksDataSourceProvider = Provider<CreditPacksDataSource>((ref) {
+  return CreditPacksDataSourceImpl(Supabase.instance.client);
+});
+
+final _activeCreditPacksProvider =
+    FutureProvider<List<CreditPackModel>>((ref) async {
+  final ds = ref.watch(_creditPacksDataSourceProvider);
+  return ds.getActivePacks();
+});
+
+class CreditsShopPage extends ConsumerWidget {
   const CreditsShopPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final user = ref.watch(authStateProvider).user;
+    final packsAsync = ref.watch(_activeCreditPacksProvider);
+    final creditsBalance = user?.creditsBalance ?? 0;
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            // Header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
                   IconButton(
@@ -27,9 +44,11 @@ class CreditsShopPage extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    'Extra Credits',
+                    'Créditos Extra',
                     style: AppTextStyles.headingMedium.copyWith(
-                      color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                      color: isDark
+                          ? AppColors.textLight
+                          : AppColors.textPrimary,
                     ),
                   ),
                   const Spacer(),
@@ -37,240 +56,283 @@ class CreditsShopPage extends StatelessWidget {
                 ],
               ),
             ),
-            // Balance Badge
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(9999),
-                    border: Border.all(
-                      color: AppColors.primary.withOpacity(0.2),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.storage,
-                        color: AppColors.primary,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Balance: 12 Credits',
-                        style: AppTextStyles.labelSmall.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ],
+            const SizedBox(height: 4),
+            Expanded(
+              child: packsAsync.when(
+                loading: () => Center(
+                  child: CircularProgressIndicator(
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(AppColors.primary),
                   ),
                 ),
-              ),
-            ),
-            // Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  children: [
-                    // Visual Card
-                    Container(
-                      width: double.infinity,
-                      constraints: const BoxConstraints(maxHeight: 240),
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            AppColors.primary.withOpacity(0.05),
-                            AppColors.primary.withOpacity(0.2),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.primary.withOpacity(0.1),
-                        ),
-                      ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          // Animated circles
-                          Container(
-                            width: 128,
-                            height: 128,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: AppColors.primary.withOpacity(0.2),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            width: 160,
-                            height: 160,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: AppColors.primary.withOpacity(0.1),
-                              ),
-                            ),
-                          ),
-                          // Icon
-                          Icon(
-                            Icons.generating_tokens,
-                            size: 120,
-                            color: AppColors.primary,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    // Title
-                    Text(
-                      'Fuel your creativity',
-                      style: AppTextStyles.headingLarge.copyWith(
-                        color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Choose a pack to unlock premium AI tools',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: isDark
-                            ? AppColors.textTertiary
-                            : AppColors.textSecondary,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 32),
-                    // Credit Packs
-                    CreditPackCard(
-                      icon: Icons.token,
-                      name: 'Starter Pack',
-                      credits: 10,
-                      price: '\$2.99',
-                      onTap: () {
-                        // TODO: Purchase starter pack
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    CreditPackCard(
-                      icon: Icons.toll,
-                      name: 'Pro Pack',
-                      credits: 50,
-                      price: '\$9.99',
-                      isPopular: true,
-                      onTap: () {
-                        // TODO: Purchase pro pack
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    CreditPackCard(
-                      icon: Icons.layers,
-                      name: 'Studio Pack',
-                      credits: 150,
-                      price: '\$24.99',
-                      hasSavings: true,
-                      onTap: () {
-                        // TODO: Purchase studio pack
-                      },
-                    ),
-                    const SizedBox(height: 32),
-                    // Info Card
-                    AppCard(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.info,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              '1 Credit = 1 AI Enhancement. Use them for Face Swap, Upscaling, Background Removal, and Style Transfer. Credits never expire.',
-                              style: AppTextStyles.bodySmall.copyWith(
-                                color: isDark
-                                    ? AppColors.textTertiary
-                                    : AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    // Restore Purchases
-                    TextButton(
-                      onPressed: () {
-                        // TODO: Restore purchases
-                      },
-                      child: Text(
-                        'Restore Purchases',
-                        style: AppTextStyles.labelMedium.copyWith(
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Terms & Privacy
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                error: (error, _) => Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        TextButton(
-                          onPressed: () {
-                            // TODO: Terms
-                          },
-                          child: Text(
-                            'TERMS',
-                            style: AppTextStyles.overline.copyWith(
-                              color: isDark
-                                  ? AppColors.textTertiary
-                                  : AppColors.textSecondary,
-                            ),
-                          ),
-                        ),
+                        Icon(Icons.error_outline,
+                            size: 48, color: AppColors.error),
+                        const SizedBox(height: 16),
                         Text(
-                          '•',
-                          style: TextStyle(
+                          'Não foi possível carregar os pacotes.',
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.bodySmall.copyWith(
                             color: isDark
                                 ? AppColors.textTertiary
                                 : AppColors.textSecondary,
                           ),
                         ),
-                        TextButton(
-                          onPressed: () {
-                            // TODO: Privacy
-                          },
-                          child: Text(
-                            'PRIVACY',
-                            style: AppTextStyles.overline.copyWith(
-                              color: isDark
-                                  ? AppColors.textTertiary
-                                  : AppColors.textSecondary,
-                            ),
-                          ),
+                        const SizedBox(height: 16),
+                        TextButton.icon(
+                          onPressed: () =>
+                              ref.invalidate(_activeCreditPacksProvider),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Tentar novamente'),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 32),
-                  ],
+                  ),
                 ),
+                data: (packs) =>
+                    _buildContent(context, isDark, packs, creditsBalance),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildContent(
+      BuildContext context, bool isDark, List<CreditPackModel> packs,
+      int creditsBalance) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          _buildBalanceCard(isDark, creditsBalance),
+          const SizedBox(height: 24),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Escolha um pacote',
+              style: AppTextStyles.headingSmall.copyWith(
+                color: isDark ? AppColors.textLight : AppColors.textPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Desbloqueie ferramentas premium de IA',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: isDark
+                    ? AppColors.textTertiary
+                    : AppColors.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (packs.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Text(
+                'Nenhum pacote disponível no momento.',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: isDark
+                      ? AppColors.textTertiary
+                      : AppColors.textSecondary,
+                ),
+              ),
+            )
+          else
+            ...packs.map((pack) => Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: CreditPackCard(
+                    icon: _iconForPack(pack),
+                    name: pack.name,
+                    credits: pack.credits,
+                    price: pack.formattedPrice,
+                    isPopular: pack.isPopular,
+                    hasSavings: pack.hasSavings,
+                    onTap: () {
+                      if (pack.linkPayment != null &&
+                          pack.linkPayment!.isNotEmpty) {
+                        Navigator.of(context).pushNamed(
+                          '/checkout',
+                          arguments: pack.linkPayment,
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Link de pagamento não disponível para este pacote.'),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                )),
+          const SizedBox(height: 16),
+          AppCard(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '1 Crédito = 1 edição com IA. Use para remoção de fundo, upscaling, transferência de estilo e muito mais.',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: isDark
+                          ? AppColors.textTertiary
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pushNamed(
+                    '/legal-document',
+                    arguments: 'terms-of-use',
+                  );
+                },
+                child: Text(
+                  'TERMOS',
+                  style: AppTextStyles.overline.copyWith(
+                    color: isDark
+                        ? AppColors.textTertiary
+                        : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              Text(
+                '•',
+                style: TextStyle(
+                  color: isDark
+                      ? AppColors.textTertiary
+                      : AppColors.textSecondary,
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pushNamed(
+                    '/legal-document',
+                    arguments: 'privacy-policy',
+                  );
+                },
+                child: Text(
+                  'PRIVACIDADE',
+                  style: AppTextStyles.overline.copyWith(
+                    color: isDark
+                        ? AppColors.textTertiary
+                        : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBalanceCard(bool isDark, int creditsBalance) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.primary,
+            AppColors.primary.withOpacity(0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(
+              Icons.bolt,
+              color: Colors.white,
+              size: 30,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Seus créditos',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: Colors.white.withOpacity(0.8),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      '$creditsBalance',
+                      style: AppTextStyles.headingLarge.copyWith(
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'disponíveis',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: Colors.white.withOpacity(0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _iconForPack(CreditPackModel pack) {
+    if (pack.hasSavings) return Icons.layers;
+    if (pack.isPopular) return Icons.toll;
+    return Icons.token;
   }
 }

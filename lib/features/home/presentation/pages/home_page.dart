@@ -72,7 +72,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                           onTap: () {
                             Navigator.of(context).pushNamed('/credits-shop');
                           },
-                          child: CreditIndicator(credits: 10),
+                          child: CreditIndicator(
+                            credits: user?.creditsBalance ?? 0,
+                          ),
                         ),
                       ],
                     ),

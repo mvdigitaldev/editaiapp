@@ -319,16 +319,41 @@ class _UserDataPageState extends ConsumerState<UserDataPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      AppTextField(
-                        label: 'Nome',
-                        hint: 'Seu nome',
-                        controller: _nameController,
-                      ),
-                      const SizedBox(height: 16),
-                      AppButton(
-                        text: 'Salvar',
-                        onPressed: _isSavingProfile ? null : _saveProfile,
-                        isLoading: _isSavingProfile,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: AppTextField(
+                              label: 'Nome',
+                              hint: 'Seu nome',
+                              controller: _nameController,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          SizedBox(
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: _isSavingProfile ? null : _saveProfile,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                              ),
+                              child: _isSavingProfile
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  : const Text('Salvar'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
