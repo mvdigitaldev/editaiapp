@@ -1,12 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/credit_indicator.dart';
-import '../../../../core/widgets/upload_area.dart';
-import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
 class HomePage extends ConsumerStatefulWidget {
@@ -17,17 +13,6 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
-  String? _selectedImagePath;
-
-  void _handleImageSelected(File image) {
-    setState(() {
-      _selectedImagePath = image.path;
-    });
-    // Navigate to pre-evaluation
-    Navigator.of(context).pushNamed('/pre-evaluation', arguments: image.path);
-  }
-
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -102,41 +87,38 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // Upload Area
+                  // 4 opções principais (grid 2x2)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: UploadArea(
-                      imagePath: _selectedImagePath,
-                      onImageSelected: _handleImageSelected,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  // Quick Actions
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _QuickActionChip(
-                            icon: Icons.auto_fix_high,
-                            label: 'Auto-ajuste',
-                            onTap: () {},
-                          ),
-                          const SizedBox(width: 12),
-                          _QuickActionChip(
-                            icon: Icons.wallpaper,
-                            label: 'Remover Fundo',
-                            onTap: () {},
-                          ),
-                          const SizedBox(width: 12),
-                          _QuickActionChip(
-                            icon: Icons.aspect_ratio,
-                            label: 'Upscale',
-                            onTap: () {},
-                          ),
-                        ],
-                      ),
+                    child: GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                      childAspectRatio: 1.1,
+                      children: [
+                        _OptionCard(
+                          icon: Icons.text_fields,
+                          label: 'Texto para imagem',
+                          onTap: () => Navigator.of(context).pushNamed('/text-to-image'),
+                        ),
+                        _OptionCard(
+                          icon: Icons.edit,
+                          label: 'Editar imagem',
+                          onTap: () => Navigator.of(context).pushNamed('/edit-image'),
+                        ),
+                        _OptionCard(
+                          icon: Icons.collections,
+                          label: 'Criar composição',
+                          onTap: () => Navigator.of(context).pushNamed('/create-composition'),
+                        ),
+                        _OptionCard(
+                          icon: Icons.wallpaper,
+                          label: 'Remover fundo',
+                          onTap: () => Navigator.of(context).pushNamed('/remove-background'),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -200,12 +182,12 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
-class _QuickActionChip extends StatelessWidget {
+class _OptionCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
 
-  const _QuickActionChip({
+  const _OptionCard({
     required this.icon,
     required this.label,
     required this.onTap,
@@ -215,35 +197,44 @@ class _QuickActionChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(9999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-          borderRadius: BorderRadius.circular(9999),
-          border: Border.all(
-            color: isDark ? AppColors.borderDark : AppColors.border,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? AppColors.borderDark : AppColors.border,
+            ),
           ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: AppColors.primary,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: AppTextStyles.bodySmall.copyWith(
-                color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                fontWeight: FontWeight.w500,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 28, color: AppColors.primary),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                label,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+              ),
+            ],
+          ),
         ),
       ),
     );

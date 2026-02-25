@@ -16,6 +16,10 @@ import 'features/editor/presentation/pages/pre_evaluation_page.dart';
 import 'features/editor/presentation/pages/ai_prompt_editor_page.dart';
 import 'features/editor/presentation/pages/comparison_page.dart';
 import 'features/editor/presentation/pages/processing_page.dart';
+import 'features/editor/presentation/pages/text_to_image_page.dart';
+import 'features/editor/presentation/pages/edit_image_page.dart';
+import 'features/editor/presentation/pages/create_composition_page.dart';
+import 'features/editor/presentation/pages/remove_background_page.dart';
 import 'features/profile/presentation/pages/profile_page.dart';
 import 'features/profile/presentation/pages/user_data_page.dart';
 import 'features/profile/presentation/pages/affiliate_page.dart';
@@ -84,6 +88,10 @@ class MyApp extends StatelessWidget {
             afterImagePath: args['after'],
           );
         },
+        '/text-to-image': (context) => const TextToImagePage(),
+        '/edit-image': (context) => const EditImagePage(),
+        '/create-composition': (context) => const CreateCompositionPage(),
+        '/remove-background': (context) => const RemoveBackgroundPage(),
         '/processing': (context) => const ProcessingPage(),
         '/profile': (context) => const ProfilePage(),
         '/user-data': (context) => const UserDataPage(),

@@ -32,11 +32,12 @@ class _ProcessingPageState extends State<ProcessingPage> {
 
     // Navigate to comparison after processing
     if (mounted) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, String?>?;
       Navigator.of(context).pushReplacementNamed(
         '/comparison',
-        arguments: {
-          'before': null, // TODO: Get from state
-          'after': null, // TODO: Get from state
+        arguments: <String, String?>{
+          'before': args?['before'],
+          'after': args?['after'],
         },
       );
     }
