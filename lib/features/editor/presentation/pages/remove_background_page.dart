@@ -65,6 +65,7 @@ class _RemoveBackgroundPageState extends ConsumerState<RemoveBackgroundPage> {
         return;
       }
 
+      ref.invalidate(creditsUsageProvider);
       Navigator.of(context).pushNamed(
         '/processing',
         arguments: <String, dynamic>{

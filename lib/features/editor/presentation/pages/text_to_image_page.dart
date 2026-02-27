@@ -64,7 +64,7 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
 
       final data = response.data;
       String? taskId;
-      if (data is Map) {
+      if (data != null) {
         final raw = data['task_id'];
         if (raw is String && raw.isNotEmpty) {
           taskId = raw;
@@ -84,6 +84,7 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
       }
 
       // Navega para a tela de processamento em modo Flux
+      ref.invalidate(creditsUsageProvider);
       Navigator.of(context).pushNamed(
         '/processing',
         arguments: <String, dynamic>{

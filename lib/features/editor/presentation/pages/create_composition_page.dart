@@ -81,6 +81,7 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
         return;
       }
 
+      ref.invalidate(creditsUsageProvider);
       Navigator.of(context).pushNamed(
         '/processing',
         arguments: <String, dynamic>{

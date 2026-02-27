@@ -70,6 +70,7 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
         return;
       }
 
+      ref.invalidate(creditsUsageProvider);
       Navigator.of(context).pushNamed(
         '/processing',
         arguments: <String, dynamic>{

@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/credit_indicator.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -18,6 +19,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
+    final creditsUsageAsync = ref.watch(creditsUsageProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -57,8 +59,23 @@ class _HomePageState extends ConsumerState<HomePage> {
                           onTap: () {
                             Navigator.of(context).pushNamed('/credits-shop');
                           },
-                          child: CreditIndicator(
-                            credits: user?.creditsBalance ?? 0,
+                          child: creditsUsageAsync.when(
+                            loading: () => const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  AppColors.primary,
+                                ),
+                              ),
+                            ),
+                            error: (_, __) => CreditIndicator(
+                              credits: user?.creditsBalance ?? 0,
+                            ),
+                            data: (usage) => CreditIndicator(
+                              credits: usage.balance,
+                            ),
                           ),
                         ),
                       ],
