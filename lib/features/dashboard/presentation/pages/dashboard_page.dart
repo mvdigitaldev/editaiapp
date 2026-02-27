@@ -113,10 +113,7 @@ class DashboardPage extends ConsumerWidget {
                         ),
                       ),
                       data: (usage) {
-                        final used = usage.used;
-                        final total = usage.total;
-                        final progress = usage.progress;
-
+                        final balance = usage.balance;
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -124,7 +121,7 @@ class DashboardPage extends ConsumerWidget {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'Créditos usados',
+                                  'Créditos disponíveis',
                                   style: AppTextStyles.bodySmall.copyWith(
                                     color: isDark
                                         ? AppColors.textTertiary
@@ -132,7 +129,7 @@ class DashboardPage extends ConsumerWidget {
                                   ),
                                 ),
                                 Text(
-                                  total > 0 ? '$used/$total' : '0/0',
+                                  '$balance',
                                   style: AppTextStyles.headingSmall.copyWith(
                                     color: isDark
                                         ? AppColors.textLight
@@ -142,24 +139,10 @@ class DashboardPage extends ConsumerWidget {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(999),
-                              child: LinearProgressIndicator(
-                                value: progress,
-                                minHeight: 8,
-                                backgroundColor: isDark
-                                    ? AppColors.surfaceDarkSecondary
-                                    : AppColors.border,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  AppColors.primary,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
                             Text(
-                              total > 0
-                                  ? 'Você já usou $used créditos do total de $total disponíveis na sua conta.'
-                                  : 'Você ainda não usou créditos na sua conta.',
+                              balance > 0
+                                  ? 'Você tem $balance créditos disponíveis para edições e gerações.'
+                                  : 'Recarregue créditos para continuar usando as ferramentas de IA.',
                               style: AppTextStyles.bodySmall.copyWith(
                                 color: isDark
                                     ? AppColors.textTertiary

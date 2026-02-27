@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/aspect_ratio_utils.dart';
@@ -9,22 +12,34 @@ import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/multi_upload_area.dart';
 import '../../../../core/widgets/aspect_ratio_selector.dart';
 
-class CreateCompositionPage extends StatefulWidget {
+class CreateCompositionPage extends ConsumerStatefulWidget {
   const CreateCompositionPage({super.key});
 
   @override
-  State<CreateCompositionPage> createState() => _CreateCompositionPageState();
+  ConsumerState<CreateCompositionPage> createState() => _CreateCompositionPageState();
 }
 
-class _CreateCompositionPageState extends State<CreateCompositionPage> {
+class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
   final List<String> _imagePaths = [];
   final _promptController = TextEditingController();
   String _selectedAspectRatio = '1:1';
   bool _isLoading = false;
 
+  int _getCreditsForImageCount(int n) => 7 + (n - 1) * 3;
+
   Future<void> _handleCreate() async {
     final prompt = _promptController.text.trim();
     if (_imagePaths.isEmpty || prompt.isEmpty || _isLoading) return;
+
+    final requiredCredits = _getCreditsForImageCount(_imagePaths.length);
+    final balance = ref.read(creditsUsageProvider).valueOrNull?.balance ?? 0;
+    if (balance < requiredCredits) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+      );
+      Navigator.of(context).pushNamed('/credits-shop');
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -72,14 +87,21 @@ class _CreateCompositionPageState extends State<CreateCompositionPage> {
           'taskId': taskId,
         },
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
-        ),
-      );
+      if (e is DioException && e.response?.statusCode == 402) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+        );
+        Navigator.of(context).pushNamed('/credits-shop');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
+          ),
+        );
+      }
     }
   }
 
@@ -197,12 +219,19 @@ class _CreateCompositionPageState extends State<CreateCompositionPage> {
                   ),
                 ),
               ),
-              child: AppButton(
-                text: 'Criar composição',
-                onPressed: _handleCreate,
-                icon: Icons.auto_awesome,
-                width: double.infinity,
-                isLoading: _isLoading,
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final balance = ref.watch(creditsUsageProvider).valueOrNull?.balance ?? 0;
+                  final required = _getCreditsForImageCount(_imagePaths.isEmpty ? 1 : _imagePaths.length);
+                  final hasEnough = ref.watch(creditsUsageProvider).isLoading || balance >= required;
+                  return AppButton(
+                    text: 'Criar composição',
+                    onPressed: hasEnough ? _handleCreate : null,
+                    icon: Icons.auto_awesome,
+                    width: double.infinity,
+                    isLoading: _isLoading,
+                  );
+                },
               ),
             ),
           ],

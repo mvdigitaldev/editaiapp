@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/aspect_ratio_utils.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/aspect_ratio_selector.dart';
 
-class TextToImagePage extends StatefulWidget {
+class TextToImagePage extends ConsumerStatefulWidget {
   const TextToImagePage({super.key});
 
   @override
-  State<TextToImagePage> createState() => _TextToImagePageState();
+  ConsumerState<TextToImagePage> createState() => _TextToImagePageState();
 }
 
-class _TextToImagePageState extends State<TextToImagePage> {
+class _TextToImagePageState extends ConsumerState<TextToImagePage> {
   final _promptController = TextEditingController();
   String _selectedAspectRatio = '1:1';
   bool _isLoading = false;
@@ -21,6 +23,15 @@ class _TextToImagePageState extends State<TextToImagePage> {
   Future<void> _handleGenerate() async {
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty || _isLoading) return;
+
+    final balance = ref.read(creditsUsageProvider).valueOrNull?.balance ?? 0;
+    if (balance < 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+      );
+      Navigator.of(context).pushNamed('/credits-shop');
+      return;
+    }
 
     final size = getFluxSizeForAspect(_selectedAspectRatio);
     final supabase = Supabase.instance.client;
@@ -48,6 +59,15 @@ class _TextToImagePageState extends State<TextToImagePage> {
       );
 
       if (!mounted) return;
+
+      if (res.status == 402) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+        );
+        Navigator.of(context).pushNamed('/credits-shop');
+        return;
+      }
 
       final data = res.data;
       String? taskId;
@@ -79,16 +99,22 @@ class _TextToImagePageState extends State<TextToImagePage> {
           'after': null,
         },
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
-        ),
-      );
+      setState(() => _isLoading = false);
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('402') || msg.contains('insufficient') || msg.contains('créditos')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+        );
+        Navigator.of(context).pushNamed('/credits-shop');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
+          ),
+        );
+      }
     }
   }
 
@@ -194,12 +220,18 @@ class _TextToImagePageState extends State<TextToImagePage> {
                   ),
                 ),
               ),
-              child: AppButton(
-                text: 'Gerar',
-                onPressed: _handleGenerate,
-                icon: Icons.auto_awesome,
-                isLoading: _isLoading,
-                width: double.infinity,
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final balance = ref.watch(creditsUsageProvider).valueOrNull?.balance ?? 0;
+                  final hasEnough = ref.watch(creditsUsageProvider).isLoading || balance >= 5;
+                  return AppButton(
+                    text: 'Gerar',
+                    onPressed: hasEnough ? _handleGenerate : null,
+                    icon: Icons.auto_awesome,
+                    isLoading: _isLoading,
+                    width: double.infinity,
+                  );
+                },
               ),
             ),
           ],

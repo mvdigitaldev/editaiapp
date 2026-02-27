@@ -29,7 +29,7 @@ class DioClient {
           handler.next(options);
         },
         onError: (error, handler) {
-          // Tratamento de erro global
+          // 402 = créditos insuficientes (tratado nas páginas)
           handler.next(error);
         },
       ),

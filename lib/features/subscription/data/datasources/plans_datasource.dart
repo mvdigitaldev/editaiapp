@@ -16,7 +16,7 @@ class PlansDataSourceImpl implements PlansDataSource {
     final response = await _supabase
         .from('plans')
         .select(
-          'id, name, description, price, duration_months, monthly_credits, features, link_payment, is_active',
+          'id, name, description, price, duration_months, features, link_payment, is_active',
         )
         .eq('is_active', true)
         .order('price', ascending: true);
