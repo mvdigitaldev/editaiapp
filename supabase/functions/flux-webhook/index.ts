@@ -66,13 +66,6 @@ Deno.serve(async (req) => {
       return new Response(null, { status: 200 });
     }
 
-    const { data: taskRow } = await supabase
-      .from("flux_tasks")
-      .select("edit_id")
-      .eq("task_id", taskId)
-      .single();
-    const editId = taskRow?.edit_id ?? null;
-
     const sampleUrl = result?.sample;
     if (!sampleUrl || typeof sampleUrl !== "string") {
       console.error("[flux-webhook] Resultado sem sample:", payload);
@@ -187,7 +180,7 @@ Deno.serve(async (req) => {
 
     const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(fileName);
 
-    const { error: fluxUpdateErr } = await supabase
+    await supabase
       .from("flux_tasks")
       .update({
         status: "ready",
@@ -196,20 +189,13 @@ Deno.serve(async (req) => {
       })
       .eq("task_id", taskId);
 
-    if (fluxUpdateErr) {
-      console.error("[flux-webhook] Erro ao atualizar flux_tasks:", fluxUpdateErr);
-    }
-
-    if (editId) {
-      const { error: editUpdateErr } = await supabase
-        .from("edits")
-        .update({ status: "completed" })
-        .eq("id", editId);
-      if (editUpdateErr) {
-        console.error("[flux-webhook] Erro ao atualizar edits para completed:", editUpdateErr);
-      }
-    } else {
-      console.warn("[flux-webhook] flux_tasks sem edit_id, edit não atualizado. task_id:", taskId);
+    const { data: task } = await supabase
+      .from("flux_tasks")
+      .select("edit_id")
+      .eq("task_id", taskId)
+      .single();
+    if (task?.edit_id) {
+      await supabase.from("edits").update({ status: "completed" }).eq("id", task.edit_id);
     }
 
     return new Response(null, { status: 200 });

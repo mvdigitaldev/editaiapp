@@ -198,12 +198,43 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
                   final balance = creditsAsync.valueOrNull?.balance ?? 0;
                   final isLoadingCredits = creditsAsync.isLoading;
                   final hasEnoughCredits = isLoadingCredits || balance >= 7;
-                  return AppButton(
-                    text: 'Gerar',
-                    onPressed: hasEnoughCredits ? _handleGenerate : null,
-                    icon: Icons.auto_awesome,
-                    width: double.infinity,
-                    isLoading: _isLoading,
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          if (!hasEnoughCredits && !_isLoading) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Créditos insuficientes. Compre mais para continuar.'),
+                              ),
+                            );
+                            Navigator.of(context).pushNamed('/credits-shop');
+                          }
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: AbsorbPointer(
+                          absorbing: !hasEnoughCredits,
+                          child: AppButton(
+                            text: 'Gerar',
+                            onPressed: hasEnoughCredits ? _handleGenerate : null,
+                            icon: Icons.auto_awesome,
+                            width: double.infinity,
+                            isLoading: _isLoading,
+                          ),
+                        ),
+                      ),
+                      if (!isLoadingCredits && balance < 7) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Você precisa de 7 créditos. Toque no botão para comprar.',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ],
                   );
                 },
               ),

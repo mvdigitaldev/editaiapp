@@ -214,14 +214,47 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
               ),
               child: Consumer(
                 builder: (context, ref, _) {
-                  final balance = ref.watch(creditsUsageProvider).valueOrNull?.balance ?? 0;
-                  final hasEnough = ref.watch(creditsUsageProvider).isLoading || balance >= 5;
-                  return AppButton(
-                    text: 'Gerar',
-                    onPressed: hasEnough ? _handleGenerate : null,
-                    icon: Icons.auto_awesome,
-                    isLoading: _isLoading,
-                    width: double.infinity,
+                  final creditsAsync = ref.watch(creditsUsageProvider);
+                  final balance = creditsAsync.valueOrNull?.balance ?? 0;
+                  final isLoadingCredits = creditsAsync.isLoading;
+                  final hasEnough = isLoadingCredits || balance >= 5;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          if (!hasEnough && !_isLoading) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Créditos insuficientes. Compre mais para continuar.'),
+                              ),
+                            );
+                            Navigator.of(context).pushNamed('/credits-shop');
+                          }
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: AbsorbPointer(
+                          absorbing: !hasEnough,
+                          child: AppButton(
+                            text: 'Gerar',
+                            onPressed: hasEnough ? _handleGenerate : null,
+                            icon: Icons.auto_awesome,
+                            isLoading: _isLoading,
+                            width: double.infinity,
+                          ),
+                        ),
+                      ),
+                      if (!isLoadingCredits && balance < 5) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Você precisa de 5 créditos. Toque no botão para comprar.',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ],
                   );
                 },
               ),

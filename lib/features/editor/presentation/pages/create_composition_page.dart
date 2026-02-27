@@ -221,15 +221,48 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
               ),
               child: Consumer(
                 builder: (context, ref, _) {
-                  final balance = ref.watch(creditsUsageProvider).valueOrNull?.balance ?? 0;
+                  final creditsAsync = ref.watch(creditsUsageProvider);
+                  final balance = creditsAsync.valueOrNull?.balance ?? 0;
                   final required = _getCreditsForImageCount(_imagePaths.isEmpty ? 1 : _imagePaths.length);
-                  final hasEnough = ref.watch(creditsUsageProvider).isLoading || balance >= required;
-                  return AppButton(
-                    text: 'Criar composição',
-                    onPressed: hasEnough ? _handleCreate : null,
-                    icon: Icons.auto_awesome,
-                    width: double.infinity,
-                    isLoading: _isLoading,
+                  final isLoadingCredits = creditsAsync.isLoading;
+                  final hasEnough = isLoadingCredits || balance >= required;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          if (!hasEnough && !_isLoading) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Créditos insuficientes. Compre mais para continuar.'),
+                              ),
+                            );
+                            Navigator.of(context).pushNamed('/credits-shop');
+                          }
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: AbsorbPointer(
+                          absorbing: !hasEnough,
+                          child: AppButton(
+                            text: 'Criar composição',
+                            onPressed: hasEnough ? _handleCreate : null,
+                            icon: Icons.auto_awesome,
+                            width: double.infinity,
+                            isLoading: _isLoading,
+                          ),
+                        ),
+                      ),
+                      if (!isLoadingCredits && balance < required) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Você precisa de $required créditos. Toque no botão para comprar.',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ],
                   );
                 },
               ),

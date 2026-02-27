@@ -157,14 +157,47 @@ class _RemoveBackgroundPageState extends ConsumerState<RemoveBackgroundPage> {
               ),
               child: Consumer(
                 builder: (context, ref, _) {
-                  final balance = ref.watch(creditsUsageProvider).valueOrNull?.balance ?? 0;
-                  final hasEnough = ref.watch(creditsUsageProvider).isLoading || balance >= 7;
-                  return AppButton(
-                    text: 'Remover fundo',
-                    onPressed: hasEnough ? _handleRemove : null,
-                    icon: Icons.wallpaper,
-                    width: double.infinity,
-                    isLoading: _isLoading,
+                  final creditsAsync = ref.watch(creditsUsageProvider);
+                  final balance = creditsAsync.valueOrNull?.balance ?? 0;
+                  final isLoadingCredits = creditsAsync.isLoading;
+                  final hasEnough = isLoadingCredits || balance >= 7;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          if (!hasEnough && !_isLoading) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Créditos insuficientes. Compre mais para continuar.'),
+                              ),
+                            );
+                            Navigator.of(context).pushNamed('/credits-shop');
+                          }
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: AbsorbPointer(
+                          absorbing: !hasEnough,
+                          child: AppButton(
+                            text: 'Remover fundo',
+                            onPressed: hasEnough ? _handleRemove : null,
+                            icon: Icons.wallpaper,
+                            width: double.infinity,
+                            isLoading: _isLoading,
+                          ),
+                        ),
+                      ),
+                      if (!isLoadingCredits && balance < 7) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Você precisa de 7 créditos. Toque no botão para comprar.',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ],
                   );
                 },
               ),
