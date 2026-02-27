@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../../../core/network/dio_client.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/aspect_ratio_utils.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/multi_upload_area.dart';
+import '../../../../core/widgets/aspect_ratio_selector.dart';
 
 class CreateCompositionPage extends StatefulWidget {
   const CreateCompositionPage({super.key});
@@ -14,16 +19,68 @@ class CreateCompositionPage extends StatefulWidget {
 class _CreateCompositionPageState extends State<CreateCompositionPage> {
   final List<String> _imagePaths = [];
   final _promptController = TextEditingController();
+  String _selectedAspectRatio = '1:1';
+  bool _isLoading = false;
 
-  void _handleCreate() {
-    if (_imagePaths.isEmpty || _promptController.text.trim().isEmpty) return;
-    Navigator.of(context).pushNamed(
-      '/processing',
-      arguments: <String, String?>{
-        'before': null,
-        'after': _imagePaths.isNotEmpty ? _imagePaths.first : null,
-      },
-    );
+  Future<void> _handleCreate() async {
+    final prompt = _promptController.text.trim();
+    if (_imagePaths.isEmpty || prompt.isEmpty || _isLoading) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final images = <String>[];
+      for (final path in _imagePaths) {
+        final bytes = await File(path).readAsBytes();
+        images.add(base64Encode(bytes));
+      }
+
+      final size = getFluxSizeForAspect(_selectedAspectRatio);
+      final dio = DioClient();
+      final response = await dio.instance.post<Map<String, dynamic>>(
+        '/functions/v1/editar-multi-imagem-flux',
+        data: {
+          'user_prompt': prompt,
+          'images': images,
+          'width': size.width,
+          'height': size.height,
+        },
+      );
+
+      if (!mounted) return;
+
+      final data = response.data;
+      String? taskId;
+      if (data != null && data['task_id'] is String) {
+        final raw = data['task_id'] as String;
+        if (raw.isNotEmpty) taskId = raw;
+      }
+
+      if (taskId == null) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível iniciar a composição. Tente novamente.'),
+          ),
+        );
+        return;
+      }
+
+      Navigator.of(context).pushNamed(
+        '/processing',
+        arguments: <String, dynamic>{
+          'taskId': taskId,
+        },
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
+        ),
+      );
+    }
   }
 
   @override
@@ -109,6 +166,23 @@ class _CreateCompositionPageState extends State<CreateCompositionPage> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Proporção da imagem',
+                      style: AppTextStyles.labelLarge.copyWith(
+                        color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    AspectRatioSelector(
+                      selected: _selectedAspectRatio,
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedAspectRatio = value;
+                        });
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -127,6 +201,8 @@ class _CreateCompositionPageState extends State<CreateCompositionPage> {
                 text: 'Criar composição',
                 onPressed: _handleCreate,
                 icon: Icons.auto_awesome,
+                width: double.infinity,
+                isLoading: _isLoading,
               ),
             ),
           ],

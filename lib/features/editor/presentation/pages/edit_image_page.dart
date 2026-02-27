@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../../../core/network/dio_client.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_button.dart';
@@ -15,16 +17,64 @@ class EditImagePage extends StatefulWidget {
 class _EditImagePageState extends State<EditImagePage> {
   String? _selectedImagePath;
   final _promptController = TextEditingController();
+  bool _isLoading = false;
 
-  void _handleGenerate() {
-    if (_selectedImagePath == null || _promptController.text.trim().isEmpty) return;
-    Navigator.of(context).pushNamed(
-      '/processing',
-      arguments: <String, String?>{
-        'before': _selectedImagePath,
-        'after': _selectedImagePath,
-      },
-    );
+  Future<void> _handleGenerate() async {
+    final prompt = _promptController.text.trim();
+    if (_selectedImagePath == null || prompt.isEmpty || _isLoading) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final bytes = await File(_selectedImagePath!).readAsBytes();
+      final imageBase64 = base64Encode(bytes);
+      // Usar DioClient: envia apikey + JWT (mesma autenticação que texto para imagem)
+      final dio = DioClient();
+      final response = await dio.instance.post<Map<String, dynamic>>(
+        '/functions/v1/editar-imagem-flux',
+        data: {
+          'user_prompt': prompt,
+          'image_base64': imageBase64,
+        },
+      );
+
+      if (!mounted) return;
+
+      final data = response.data;
+      String? taskId;
+      if (data != null && data['task_id'] is String) {
+        final raw = data['task_id'] as String;
+        if (raw.isNotEmpty) taskId = raw;
+      }
+
+      if (taskId == null) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível iniciar a edição. Tente novamente.'),
+          ),
+        );
+        return;
+      }
+
+      Navigator.of(context).pushNamed(
+        '/processing',
+        arguments: <String, dynamic>{
+          'taskId': taskId,
+          'beforePath': _selectedImagePath,
+          'before': null,
+          'after': null,
+        },
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
+        ),
+      );
+    }
   }
 
   @override
@@ -126,6 +176,8 @@ class _EditImagePageState extends State<EditImagePage> {
                 text: 'Gerar',
                 onPressed: _handleGenerate,
                 icon: Icons.auto_awesome,
+                width: double.infinity,
+                isLoading: _isLoading,
               ),
             ),
           ],

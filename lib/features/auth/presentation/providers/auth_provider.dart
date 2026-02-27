@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:editaiapp/core/services/notification_service.dart';
 import '../../data/datasources/auth_datasource.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -94,8 +96,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier(this._getCurrentUser) : super(AuthState()) {
     checkAuth();
     _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
-      (data) {
+      (data) async {
         final event = data.event;
+        if (!kIsWeb) {
+          if (data.session != null) {
+            try {
+              final ns = NotificationService();
+              if (!ns.isInitialized) await ns.initialize();
+              await ns.refreshToken();
+            } catch (_) {}
+          } else {
+            try {
+              await NotificationService().removeToken();
+            } catch (_) {}
+          }
+        }
         if (event == AuthChangeEvent.signedOut ||
             event == AuthChangeEvent.userDeleted ||
             event == AuthChangeEvent.tokenRefreshed && data.session == null) {
@@ -112,22 +127,33 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> checkAuth() async {
     state = state.copyWith(isLoading: true);
-    final result = await _getCurrentUser();
-    result.fold(
-      (failure) {
-        state = state.copyWith(
-          isLoading: false,
-          isAuthenticated: false,
-        );
-      },
-      (user) {
-        state = state.copyWith(
-          user: user,
-          isLoading: false,
-          isAuthenticated: user != null,
-        );
-      },
-    );
+    try {
+      final result = await _getCurrentUser();
+      result.fold(
+        (failure) {
+          state = state.copyWith(
+            isLoading: false,
+            isAuthenticated: false,
+          );
+        },
+        (user) {
+          state = state.copyWith(
+            user: user,
+            isLoading: false,
+            isAuthenticated: user != null,
+          );
+        },
+      );
+    } catch (e, st) {
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('[Auth] checkAuth error: $e\n$st');
+      }
+      state = state.copyWith(
+        isLoading: false,
+        isAuthenticated: false,
+      );
+    }
   }
 
   void setUser(domain.User? user) {
