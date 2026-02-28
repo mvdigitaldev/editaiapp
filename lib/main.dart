@@ -36,6 +36,7 @@ import 'features/subscription/presentation/pages/checkout_webview_page.dart';
 import 'features/profile/presentation/pages/payment_history_page.dart';
 import 'features/profile/presentation/pages/legal_document_page.dart';
 import 'features/profile/presentation/pages/help_center_page.dart';
+import 'features/dashboard/presentation/pages/credit_history_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -180,6 +181,7 @@ class MyApp extends StatelessWidget {
           return LegalDocumentPage(slug: slug);
         },
         '/help-center': (context) => const HelpCenterPage(),
+        '/credit-history': (context) => const CreditHistoryPage(),
       },
     );
   }

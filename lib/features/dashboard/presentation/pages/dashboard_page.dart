@@ -1,10 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:editaiapp/features/subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../data/datasources/credit_transactions_datasource.dart';
+
+final _creditTransactionsDataSourceProvider =
+    Provider<CreditTransactionsDataSource>((ref) {
+  return CreditTransactionsDataSourceImpl(Supabase.instance.client);
+});
+
+final _currentMonthUsageTotalProvider = FutureProvider<int>((ref) async {
+  final ds = ref.watch(_creditTransactionsDataSourceProvider);
+  final now = DateTime.now();
+  return ds.getMonthlyUsageTotal(now.year, now.month);
+});
 
 class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
@@ -15,6 +28,7 @@ class DashboardPage extends ConsumerWidget {
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
+    final currentMonthTotalAsync = ref.watch(_currentMonthUsageTotalProvider);
 
     return SafeArea(
       child: Scaffold(
@@ -177,22 +191,77 @@ class DashboardPage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              Text(
-                'Histórico de créditos',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: isDark
-                      ? AppColors.textLight
-                      : AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Em breve você verá aqui todas as entradas e saídas de créditos da sua conta.',
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: isDark
-                      ? AppColors.textTertiary
-                      : AppColors.textSecondary,
+              AppCard(
+                padding: const EdgeInsets.all(20),
+                onTap: () =>
+                    Navigator.of(context).pushNamed('/credit-history'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.history,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Histórico de créditos',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: isDark
+                                    ? AppColors.textLight
+                                    : AppColors.textPrimary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    currentMonthTotalAsync.when(
+                      loading: () => Text(
+                        'Carregando...',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: isDark
+                              ? AppColors.textTertiary
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                      error: (_, __) => Text(
+                        '— créditos gastos este mês',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: isDark
+                              ? AppColors.textTertiary
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                      data: (total) => Text(
+                        '$total créditos gastos este mês',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: isDark
+                              ? AppColors.textLight
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: Text(
+                        'Ver histórico',
+                        style: AppTextStyles.labelMedium.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
