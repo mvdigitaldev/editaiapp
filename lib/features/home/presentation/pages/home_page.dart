@@ -1,9 +1,13 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/credit_indicator.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../gallery/data/datasources/edits_gallery_datasource.dart';
+import '../../../gallery/data/models/gallery_edit_model.dart';
+import '../../../gallery/presentation/providers/gallery_provider.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 
 class HomePage extends ConsumerStatefulWidget {
@@ -14,6 +18,34 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
+  List<GalleryEditModel> _recentEdits = [];
+  bool _loadingRecent = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentEdits();
+  }
+
+  Future<void> _loadRecentEdits() async {
+    setState(() => _loadingRecent = true);
+    try {
+      final ds = ref.read(editsGalleryDataSourceProvider);
+      final list = await ds.getEditsForGallery(offset: 0, limit: 4);
+      if (!mounted) return;
+      setState(() {
+        _recentEdits = list;
+        _loadingRecent = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _recentEdits = [];
+        _loadingRecent = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -170,31 +202,74 @@ class _HomePageState extends ConsumerState<HomePage> {
                   // Recent Edits Grid
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: 1,
-                      ),
-                      itemCount: 4,
-                      itemBuilder: (context, index) {
-                        return _RecentEditCard(
-                          imageUrl: 'https://picsum.photos/400?random=$index',
-                          onTap: () {
-                            // TODO: Navigate to edit details
-                          },
-                        );
-                      },
-                    ),
+                    child: _buildRecentEditsGrid(isDark),
                   ),
               const SizedBox(height: 32),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildRecentEditsGrid(bool isDark) {
+    if (_loadingRecent) {
+      return SizedBox(
+        height: 180,
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+            ),
+          ),
+        ),
+      );
+    }
+    if (_recentEdits.isEmpty) {
+      return Container(
+        height: 180,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? AppColors.borderDark : AppColors.border,
+          ),
+        ),
+        child: Text(
+          'Nenhuma edição recente',
+          style: AppTextStyles.bodySmall.copyWith(
+            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+          ),
+        ),
+      );
+    }
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 1,
+      ),
+      itemCount: _recentEdits.length,
+      itemBuilder: (context, index) {
+        final edit = _recentEdits[index];
+        final url = edit.imageUrl;
+        return _RecentEditCard(
+          imageUrl: url,
+          onTap: () {
+            Navigator.of(context).pushNamed(
+              '/edit-detail',
+              arguments: edit.id,
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -262,7 +337,7 @@ class _OptionCard extends StatelessWidget {
 }
 
 class _RecentEditCard extends StatelessWidget {
-  final String imageUrl;
+  final String? imageUrl;
   final VoidCallback onTap;
 
   const _RecentEditCard({
@@ -273,6 +348,7 @@ class _RecentEditCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final url = imageUrl;
 
     return GestureDetector(
       onTap: onTap,
@@ -288,16 +364,31 @@ class _RecentEditCard extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                imageUrl,
-                width: double.infinity,
-                height: double.infinity,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  color: AppColors.border,
-                  child: const Icon(Icons.image),
-                ),
-              ),
+              child: url != null && url.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: url,
+                      width: double.infinity,
+                      height: double.infinity,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                        child: const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        color: AppColors.border,
+                        child: const Icon(Icons.image_not_supported_outlined),
+                      ),
+                    )
+                  : Container(
+                      color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                      child: const Icon(Icons.image),
+                    ),
             ),
             Positioned(
               bottom: 8,

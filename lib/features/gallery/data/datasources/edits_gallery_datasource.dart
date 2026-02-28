@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/edit_detail_model.dart';
 import '../models/gallery_edit_model.dart';
 
 abstract class EditsGalleryDataSource {
@@ -7,6 +8,8 @@ abstract class EditsGalleryDataSource {
     int offset = 0,
     int limit = 20,
   });
+
+  Future<EditDetailModel?> getEditById(String id);
 }
 
 class EditsGalleryDataSourceImpl implements EditsGalleryDataSource {
@@ -30,5 +33,19 @@ class EditsGalleryDataSourceImpl implements EditsGalleryDataSource {
     return (response as List)
         .map((json) => GalleryEditModel.fromJson(json as Map<String, dynamic>))
         .toList();
+  }
+
+  static const _editDetailColumns =
+      'id,user_id,image_id,prompt_text,prompt_text_original,edit_category,edit_goal,desired_style,status,ai_processing_time_ms,credits_used,created_at,updated_at,operation_type,task_id,image_url,file_size,mime_type,width,height';
+
+  @override
+  Future<EditDetailModel?> getEditById(String id) async {
+    final response = await _supabase
+        .from('edits')
+        .select(_editDetailColumns)
+        .eq('id', id)
+        .maybeSingle();
+    if (response == null) return null;
+    return EditDetailModel.fromJson(response as Map<String, dynamic>);
   }
 }

@@ -37,6 +37,7 @@ import 'features/profile/presentation/pages/payment_history_page.dart';
 import 'features/profile/presentation/pages/legal_document_page.dart';
 import 'features/profile/presentation/pages/help_center_page.dart';
 import 'features/dashboard/presentation/pages/credit_history_page.dart';
+import 'features/gallery/presentation/pages/edit_detail_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -182,6 +183,10 @@ class MyApp extends StatelessWidget {
         },
         '/help-center': (context) => const HelpCenterPage(),
         '/credit-history': (context) => const CreditHistoryPage(),
+        '/edit-detail': (context) {
+          final editId = ModalRoute.of(context)!.settings.arguments as String?;
+          return EditDetailPage(editId: editId ?? '');
+        },
       },
     );
   }

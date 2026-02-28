@@ -189,7 +189,7 @@ class CreditsShopPage extends ConsumerWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    '1 Crédito = 1 edição com IA. Use para remoção de fundo, upscaling, transferência de estilo e muito mais.',
+                    'Use para remoção de fundo, upscaling, transferência de estilo e muito mais.',
                     style: AppTextStyles.bodySmall.copyWith(
                       color: isDark
                           ? AppColors.textTertiary

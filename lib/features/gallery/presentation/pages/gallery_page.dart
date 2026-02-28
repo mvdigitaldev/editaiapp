@@ -127,11 +127,23 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                   else
                     const SizedBox(width: 48),
                   const Spacer(),
-                  Text(
-                    'Galeria',
-                    style: AppTextStyles.headingMedium.copyWith(
-                      color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                    ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Galeria',
+                        style: AppTextStyles.headingMedium.copyWith(
+                          color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Arraste para baixo para atualizar',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                   const Spacer(),
                   const SizedBox(width: 48),
@@ -177,98 +189,137 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     }
 
     if (_error != null && _items.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline, size: 48, color: AppColors.error),
-              const SizedBox(height: 16),
-              Text(
-                'Não foi possível carregar a galeria.',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+      return RefreshIndicator(
+        onRefresh: _loadFirst,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: MediaQuery.of(context).size.height - 200,
+            ),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Não foi possível carregar a galeria.',
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton.icon(
+                      onPressed: _loadFirst,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Tentar novamente'),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
-              TextButton.icon(
-                onPressed: _loadFirst,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Tentar novamente'),
-              ),
-            ],
+            ),
           ),
         ),
       );
     }
 
     if (_items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.photo_library_outlined,
-              size: 64,
-              color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+      return RefreshIndicator(
+        onRefresh: _loadFirst,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: MediaQuery.of(context).size.height - 200,
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Nenhuma foto na galeria',
-              style: AppTextStyles.bodyLarge.copyWith(
-                color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.photo_library_outlined,
+                    size: 64,
+                    color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Nenhuma foto na galeria',
+                    style: AppTextStyles.bodyLarge.copyWith(
+                      color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Puxe para baixo para ver novas edições',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       );
     }
 
-    return GridView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 2,
-        mainAxisSpacing: 2,
-        childAspectRatio: 1,
-      ),
-      itemCount: _items.length + (_hasMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == _items.length) {
-          return Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+    return RefreshIndicator(
+      onRefresh: _loadFirst,
+      child: GridView.builder(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 2,
+          mainAxisSpacing: 2,
+          childAspectRatio: 1,
+        ),
+        itemCount: _items.length + (_hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == _items.length) {
+            return Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                ),
+              ),
+            );
+          }
+
+          final item = _items[index];
+          final url = item.imageUrl;
+          if (url == null || url.isEmpty) {
+            return const SizedBox.shrink();
+          }
+
+          return InkWell(
+            onTap: () => Navigator.of(context).pushNamed(
+              '/edit-detail',
+              arguments: item.id,
+            ),
+            child: CachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Container(
+                color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+              errorWidget: (_, __, ___) => Container(
+                color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                child: Icon(Icons.broken_image_outlined, color: AppColors.textTertiary),
               ),
             ),
           );
-        }
-
-        final item = _items[index];
-        final url = item.imageUrl;
-        if (url == null || url.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        return CachedNetworkImage(
-          imageUrl: url,
-          fit: BoxFit.cover,
-          placeholder: (_, __) => Container(
-            color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          ),
-          errorWidget: (_, __, ___) => Container(
-            color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-            child: Icon(Icons.broken_image_outlined, color: AppColors.textTertiary),
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 }
