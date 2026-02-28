@@ -1,24 +1,56 @@
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
+export interface EditImageMetadata {
+  file_size?: number;
+  mime_type?: string;
+  width?: number;
+  height?: number;
+}
+
 export async function deductAndCreateEdit(
   supabase: SupabaseClient,
   userId: string,
   operationType: string,
   credits: number,
   promptText: string,
-  taskId: string | null
+  taskId: string | null,
+  options?: { imageId?: string | null; imageMetadata?: EditImageMetadata }
 ): Promise<{ editId: string }> {
+  let metadata: EditImageMetadata | undefined = options?.imageMetadata;
+
+  if (options?.imageId && !metadata) {
+    const { data: img } = await supabase
+      .from("images")
+      .select("file_size, mime_type, width, height")
+      .eq("id", options.imageId)
+      .single();
+    if (img) {
+      metadata = {
+        file_size: img.file_size ?? undefined,
+        mime_type: img.mime_type ?? undefined,
+        width: img.width ?? undefined,
+        height: img.height ?? undefined,
+      };
+    }
+  }
+
+  const insertPayload: Record<string, unknown> = {
+    user_id: userId,
+    image_id: options?.imageId ?? null,
+    prompt_text: promptText,
+    operation_type: operationType,
+    task_id: taskId,
+    status: "queued",
+    credits_used: credits,
+  };
+  if (metadata?.file_size != null) insertPayload.file_size = metadata.file_size;
+  if (metadata?.mime_type) insertPayload.mime_type = metadata.mime_type;
+  if (metadata?.width != null) insertPayload.width = metadata.width;
+  if (metadata?.height != null) insertPayload.height = metadata.height;
+
   const { data: edit, error: editErr } = await supabase
     .from("edits")
-    .insert({
-      user_id: userId,
-      image_id: null,
-      prompt_text: promptText,
-      operation_type: operationType,
-      task_id: taskId,
-      status: "queued",
-      credits_used: credits,
-    })
+    .insert(insertPayload as Record<string, unknown>)
     .select("id")
     .single();
 

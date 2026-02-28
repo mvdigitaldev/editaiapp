@@ -403,6 +403,7 @@ Deno.serve(async (req) => {
       console.warn("[editar-imagem-flux] Falha ao logar em prompt_optimization_logs:", logErr);
     }
 
+    const fileSizeBytes = Math.ceil((resizedBase64.length * 3) / 4);
     let editId: string;
     try {
       const result = await deductAndCreateEdit(
@@ -411,7 +412,15 @@ Deno.serve(async (req) => {
         "edit_image",
         7,
         improvedPrompt,
-        null
+        null,
+        {
+          imageMetadata: {
+            file_size: fileSizeBytes,
+            mime_type: "image/jpeg",
+            width: resizedWidth,
+            height: resizedHeight,
+          },
+        }
       );
       editId = result.editId;
     } catch (creditErr) {

@@ -191,11 +191,17 @@ Deno.serve(async (req) => {
 
     const { data: task } = await supabase
       .from("flux_tasks")
-      .select("edit_id")
+      .select("edit_id, image_url")
       .eq("task_id", taskId)
       .single();
     if (task?.edit_id) {
-      await supabase.from("edits").update({ status: "completed" }).eq("id", task.edit_id);
+      await supabase
+        .from("edits")
+        .update({
+          status: "completed",
+          image_url: task.image_url ?? undefined,
+        })
+        .eq("id", task.edit_id);
     }
 
     return new Response(null, { status: 200 });

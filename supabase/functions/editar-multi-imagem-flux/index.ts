@@ -388,6 +388,7 @@ Deno.serve(async (req) => {
     }
 
     const creditsMulti = 7 + (resizedImages.length - 1) * 3;
+    const firstImageSize = Math.ceil((resizedImages[0]!.length * 3) / 4);
     let editId: string;
     try {
       const result = await deductAndCreateEdit(
@@ -396,7 +397,15 @@ Deno.serve(async (req) => {
         "multi_image",
         creditsMulti,
         improvedPrompt,
-        null
+        null,
+        {
+          imageMetadata: {
+            file_size: firstImageSize,
+            mime_type: "image/jpeg",
+            width: outW,
+            height: outH,
+          },
+        }
       );
       editId = result.editId;
     } catch (creditErr) {

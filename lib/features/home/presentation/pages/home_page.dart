@@ -241,14 +241,17 @@ class _OptionCard extends StatelessWidget {
                 child: Icon(icon, size: 28, color: AppColors.primary),
               ),
               const SizedBox(height: 12),
-              Text(
-                label,
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
               ),
             ],
           ),

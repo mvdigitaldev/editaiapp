@@ -260,7 +260,14 @@ Deno.serve(async (req) => {
         "text_to_image",
         5,
         improvedPrompt,
-        null
+        null,
+        {
+          imageMetadata: {
+            mime_type: "image/jpeg",
+            width,
+            height,
+          },
+        }
       );
       editId = result.editId;
     } catch (creditErr) {

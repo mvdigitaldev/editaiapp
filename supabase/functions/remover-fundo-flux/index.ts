@@ -98,6 +98,7 @@ Deno.serve(async (req) => {
     }
 
     const taskId = crypto.randomUUID();
+    const fileSizeBytes = Math.ceil((imageBase64.length * 3) / 4);
 
     let editId: string;
     try {
@@ -107,7 +108,13 @@ Deno.serve(async (req) => {
         "remove_background",
         7,
         "remove_background",
-        taskId
+        taskId,
+        {
+          imageMetadata: {
+            file_size: fileSizeBytes,
+            mime_type: mime,
+          },
+        }
       );
       editId = result.editId;
     } catch (creditErr) {
@@ -249,7 +256,13 @@ Deno.serve(async (req) => {
       })
       .eq("task_id", taskId);
 
-    await supabase.from("edits").update({ status: "completed" }).eq("id", editId);
+    await supabase
+      .from("edits")
+      .update({
+        status: "completed",
+        image_url: urlData.publicUrl,
+      })
+      .eq("id", editId);
 
     return jsonResponse({ task_id: taskId });
   } catch (error) {
