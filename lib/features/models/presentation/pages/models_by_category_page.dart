@@ -8,6 +8,10 @@ import '../../data/models/modelo_model.dart';
 import '../providers/modelos_provider.dart';
 
 /// Página de modelos por categoria. Layout estilo Nano Banana: thumbnail + prompt + botão Editar.
+///
+/// Tamanho recomendado para thumbnail_url: ~800x450px ou 1200x675px (aspect ratio 16:9)
+/// para preencher o espaço do card sem distorção. Com BoxFit.cover, imagens maiores
+/// são redimensionadas e recortadas para preencher.
 class ModelsByCategoryPage extends ConsumerWidget {
   const ModelsByCategoryPage({super.key});
 
@@ -63,23 +67,25 @@ class ModelsByCategoryPage extends ConsumerWidget {
               ),
             );
           }
+          final viewportHeight = MediaQuery.of(context).size.height;
+          final cardHeight = viewportHeight * 0.48;
           return CustomScrollView(
             slivers: [
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 16,
-                    crossAxisSpacing: 16,
-                    childAspectRatio: 0.75,
-                  ),
+                sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final modelo = modelos[index];
-                      return _ModeloCard(
-                        modelo: modelo,
-                        isDark: isDark,
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: SizedBox(
+                          height: cardHeight,
+                          child: _ModeloCard(
+                            modelo: modelo,
+                            isDark: isDark,
+                          ),
+                        ),
                       );
                     },
                     childCount: modelos.length,
@@ -115,6 +121,7 @@ class _ModeloCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final descricao = modelo.descricao ?? modelo.promptPadrao ?? modelo.nome;
     return Card(
       clipBehavior: Clip.antiAlias,
       color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
@@ -130,52 +137,72 @@ class _ModeloCard extends StatelessWidget {
         children: [
           Expanded(
             flex: 3,
-            child: _buildThumbnail(),
+            child: _buildThumbnailWithOverlay(descricao),
           ),
-          Expanded(
-            flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Text(
-                        modelo.promptPadrao ?? modelo.nome,
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                        ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 40,
-                    width: double.infinity,
-                    child: AppButton(
-                      text: 'Editar imagem',
-                      width: double.infinity,
-                      onPressed: () {
-                        Navigator.of(context).pushNamed(
-                          '/edit-model',
-                          arguments: <String, dynamic>{
-                            'modeloId': modelo.id,
-                            'modeloNome': modelo.nome,
-                          },
-                        );
-                      },
-                      height: 40,
-                    ),
-                  ),
-                ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+            child: SizedBox(
+              height: 48,
+              width: double.infinity,
+              child: AppButton(
+                text: 'Editar imagem',
+                width: double.infinity,
+                height: 48,
+                onPressed: () {
+                  Navigator.of(context).pushNamed(
+                    '/edit-model',
+                    arguments: <String, dynamic>{
+                      'modeloId': modelo.id,
+                      'modeloNome': modelo.nome,
+                    },
+                  );
+                },
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildThumbnailWithOverlay(String descricao) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _buildThumbnail(),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.3),
+                  Colors.black.withValues(alpha: 0.75),
+                  Colors.black.withValues(alpha: 0.9),
+                ],
+                stops: const [0.0, 0.4, 0.75, 1.0],
+              ),
+            ),
+            child: Text(
+              descricao,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: Colors.white,
+                fontSize: 12,
+              ),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              softWrap: true,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
