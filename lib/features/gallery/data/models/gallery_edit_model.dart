@@ -1,3 +1,6 @@
+import '../../../../core/constants/operation_type.dart';
+import '../../../../core/utils/server_date_utils.dart';
+
 class GalleryEditModel {
   final String id;
   final String? imageUrl;
@@ -17,9 +20,12 @@ class GalleryEditModel {
     return GalleryEditModel(
       id: json['id'] as String,
       imageUrl: json['image_url'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: ServerDateUtils.parseServerDateOr(json['created_at'], DateTime.now()),
       status: json['status'] as String? ?? 'queued',
       operationType: json['operation_type'] as String?,
     );
   }
+
+  /// Label amigável do tipo de operação (nunca exibir valor cru do banco).
+  String get operationTypeLabel => OperationType.labelFrom(operationType);
 }

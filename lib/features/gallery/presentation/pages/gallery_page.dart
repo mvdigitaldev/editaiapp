@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
-import '../../data/datasources/edits_gallery_datasource.dart';
 import '../../data/models/gallery_edit_model.dart';
 import '../providers/gallery_provider.dart';
 
@@ -301,10 +300,13 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           }
 
           return InkWell(
-            onTap: () => Navigator.of(context).pushNamed(
-              '/edit-detail',
-              arguments: item.id,
-            ),
+            onTap: () {
+              Navigator.of(context)
+                  .pushNamed('/edit-detail', arguments: item.id)
+                  .then((_) {
+                if (mounted) _loadFirst();
+              });
+            },
             child: CachedNetworkImage(
               imageUrl: url,
               fit: BoxFit.cover,

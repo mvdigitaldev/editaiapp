@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:intl/intl.dart';
 import 'package:editaiapp/features/subscription/presentation/providers/credits_usage_provider.dart';
+import '../../../../core/utils/server_date_utils.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_button.dart';
@@ -27,8 +27,7 @@ class ProfilePage extends ConsumerWidget {
         user.subscriptionTier.toLowerCase() != 'free' &&
         user.subscriptionEndsAt != null) {
       final date = user.subscriptionEndsAt!;
-      final formatter = DateFormat('d MMM', 'pt_BR');
-      renewalText = 'Renova em ${formatter.format(date)}';
+      renewalText = 'Renova em ${ServerDateUtils.formatForDisplay(date, pattern: 'd MMM')}';
     }
 
     return Scaffold(

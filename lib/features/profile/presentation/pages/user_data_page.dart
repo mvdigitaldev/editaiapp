@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/utils/server_date_utils.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/validators.dart';
@@ -233,7 +233,7 @@ class _UserDataPageState extends ConsumerState<UserDataPage> {
 
   String _formatDate(DateTime? d) {
     if (d == null) return '—';
-    return DateFormat('dd/MM/yyyy').format(d);
+    return ServerDateUtils.formatForDisplay(d, pattern: 'dd/MM/yyyy');
   }
 
   @override

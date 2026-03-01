@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 
+import '../../../../core/utils/server_date_utils.dart';
+
 class PaymentModel {
   final String id;
   final double amount;
@@ -29,10 +31,8 @@ class PaymentModel {
       paymentMethod: json['payment_method'] as String,
       paymentStatus: json['payment_status'] as String,
       paymentProvider: json['payment_provider'] as String,
-      paidAt: json['paid_at'] != null
-          ? DateTime.tryParse(json['paid_at'] as String)
-          : null,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      paidAt: ServerDateUtils.parseServerDate(json['paid_at']),
+      createdAt: ServerDateUtils.parseServerDateOr(json['created_at'], DateTime.now()),
     );
   }
 
@@ -62,6 +62,6 @@ class PaymentModel {
 
   String get formattedDate {
     final date = paidAt ?? createdAt;
-    return DateFormat('dd/MM/yyyy').format(date);
+    return ServerDateUtils.formatForDisplay(date, pattern: 'dd/MM/yyyy');
   }
 }

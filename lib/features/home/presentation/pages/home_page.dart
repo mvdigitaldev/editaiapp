@@ -5,7 +5,6 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/credit_indicator.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../../gallery/data/datasources/edits_gallery_datasource.dart';
 import '../../../gallery/data/models/gallery_edit_model.dart';
 import '../../../gallery/presentation/providers/gallery_provider.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
@@ -18,45 +17,24 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
-  List<GalleryEditModel> _recentEdits = [];
-  bool _loadingRecent = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadRecentEdits();
-  }
-
-  Future<void> _loadRecentEdits() async {
-    setState(() => _loadingRecent = true);
-    try {
-      final ds = ref.read(editsGalleryDataSourceProvider);
-      final list = await ds.getEditsForGallery(offset: 0, limit: 4);
-      if (!mounted) return;
-      setState(() {
-        _recentEdits = list;
-        _loadingRecent = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _recentEdits = [];
-        _loadingRecent = false;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
+    final recentEditsAsync = ref.watch(recentEditsProvider);
 
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
+        child: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(recentEditsProvider);
+            await ref.read(recentEditsProvider.future);
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
                   // Header
@@ -202,19 +180,24 @@ class _HomePageState extends ConsumerState<HomePage> {
                   // Recent Edits Grid
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: _buildRecentEditsGrid(isDark),
+                    child: _buildRecentEditsGrid(context, isDark, recentEditsAsync),
                   ),
               const SizedBox(height: 32),
             ],
           ),
         ),
+        ),
       ),
     );
   }
 
-  Widget _buildRecentEditsGrid(bool isDark) {
-    if (_loadingRecent) {
-      return SizedBox(
+  Widget _buildRecentEditsGrid(
+    BuildContext context,
+    bool isDark,
+    AsyncValue<List<GalleryEditModel>> recentEditsAsync,
+  ) {
+    return recentEditsAsync.when(
+      loading: () => SizedBox(
         height: 180,
         child: Center(
           child: SizedBox(
@@ -226,9 +209,26 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ),
         ),
-      );
-    }
-    if (_recentEdits.isEmpty) {
+      ),
+      error: (_, __) => Container(
+        height: 180,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? AppColors.borderDark : AppColors.border,
+          ),
+        ),
+        child: Text(
+          'Nenhuma edição recente',
+          style: AppTextStyles.bodySmall.copyWith(
+            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+          ),
+        ),
+      ),
+      data: (recentEdits) {
+        if (recentEdits.isEmpty) {
       return Container(
         height: 180,
         alignment: Alignment.center,
@@ -256,9 +256,9 @@ class _HomePageState extends ConsumerState<HomePage> {
         mainAxisSpacing: 16,
         childAspectRatio: 1,
       ),
-      itemCount: _recentEdits.length,
+      itemCount: recentEdits.length,
       itemBuilder: (context, index) {
-        final edit = _recentEdits[index];
+        final edit = recentEdits[index];
         final url = edit.imageUrl;
         return _RecentEditCard(
           imageUrl: url,
@@ -269,6 +269,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             );
           },
         );
+      },
+    );
       },
     );
   }

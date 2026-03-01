@@ -1,12 +1,16 @@
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/image_save_utils.dart';
 import '../../../../core/widgets/app_button.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../../gallery/presentation/providers/gallery_provider.dart';
+import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 
-class ComparisonPage extends StatefulWidget {
+class ComparisonPage extends ConsumerStatefulWidget {
   final String? beforeImagePath;
   final String? afterImagePath;
   final String? afterImageUrl;
@@ -19,14 +23,17 @@ class ComparisonPage extends StatefulWidget {
   });
 
   @override
-  State<ComparisonPage> createState() => _ComparisonPageState();
+  ConsumerState<ComparisonPage> createState() => _ComparisonPageState();
 }
 
-class _ComparisonPageState extends State<ComparisonPage> {
+class _ComparisonPageState extends ConsumerState<ComparisonPage> {
   bool _isDownloading = false;
 
   /// Volta para a Home, removendo as telas de input da pilha (inputs ficam resetados na próxima abertura).
   void _goBackToHome() {
+    ref.invalidate(recentEditsProvider);
+    ref.invalidate(creditsUsageProvider);
+    ref.invalidate(currentMonthUsageTotalProvider);
     Navigator.of(context).popUntil((route) =>
         route.settings.name == '/' || route.settings.name == '/home' || route.isFirst);
   }

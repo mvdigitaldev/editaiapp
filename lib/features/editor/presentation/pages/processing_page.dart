@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../gallery/presentation/providers/gallery_provider.dart';
 
-class ProcessingPage extends StatefulWidget {
+class ProcessingPage extends ConsumerStatefulWidget {
   const ProcessingPage({super.key});
 
   @override
-  State<ProcessingPage> createState() => _ProcessingPageState();
+  ConsumerState<ProcessingPage> createState() => _ProcessingPageState();
 }
 
-class _ProcessingPageState extends State<ProcessingPage> {
+class _ProcessingPageState extends ConsumerState<ProcessingPage> {
   double _progress = 0.0;
   bool _hasError = false;
   String? _errorMessage;
@@ -86,6 +88,7 @@ class _ProcessingPageState extends State<ProcessingPage> {
     if (status == 'ready') {
       final imageUrl = record['image_url'] as String?;
       _cleanupChannel();
+      ref.invalidate(recentEditsProvider);
       if (_beforePathFromArgs != null) {
         // Fluxo editar-imagem: mostrar comparação (antes + resultado por URL)
         Navigator.of(context).pushReplacementNamed(
@@ -126,6 +129,7 @@ class _ProcessingPageState extends State<ProcessingPage> {
 
     // Navigate to comparison after processing
     if (!mounted) return;
+    ref.invalidate(recentEditsProvider);
     final before = args != null ? args['before'] as String? : null;
     final after = args != null ? args['after'] as String? : null;
     Navigator.of(context).pushReplacementNamed(

@@ -14,7 +14,11 @@ export async function deductAndCreateEdit(
   credits: number,
   promptText: string,
   taskId: string | null,
-  options?: { imageId?: string | null; imageMetadata?: EditImageMetadata }
+  options?: {
+    imageId?: string | null;
+    imageMetadata?: EditImageMetadata;
+    promptTextOriginal?: string | null;
+  }
 ): Promise<{ editId: string }> {
   let metadata: EditImageMetadata | undefined = options?.imageMetadata;
 
@@ -38,6 +42,7 @@ export async function deductAndCreateEdit(
     user_id: userId,
     image_id: options?.imageId ?? null,
     prompt_text: promptText,
+    prompt_text_original: options?.promptTextOriginal ?? promptText,
     operation_type: operationType,
     task_id: taskId,
     status: "queued",

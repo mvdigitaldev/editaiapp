@@ -195,11 +195,21 @@ Deno.serve(async (req) => {
       .eq("task_id", taskId)
       .single();
     if (task?.edit_id) {
+      const { data: edit } = await supabase
+        .from("edits")
+        .select("created_at")
+        .eq("id", task.edit_id)
+        .single();
+      const aiProcessingTimeMs =
+        edit?.created_at
+          ? Math.max(0, Math.round(Date.now() - new Date(edit.created_at).getTime()))
+          : undefined;
       await supabase
         .from("edits")
         .update({
           status: "completed",
           image_url: task.image_url ?? undefined,
+          ...(aiProcessingTimeMs != null && { ai_processing_time_ms: aiProcessingTimeMs }),
         })
         .eq("id", task.edit_id);
     }

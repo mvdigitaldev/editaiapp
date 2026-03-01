@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/server_date_utils.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../data/datasources/legal_documents_datasource.dart';
 import '../../data/models/legal_document_model.dart';
@@ -143,7 +143,7 @@ class _LegalDocumentPageState extends ConsumerState<LegalDocumentPage> {
           const SizedBox(height: 32),
           Center(
             child: Text(
-              'Última atualização: ${DateFormat('dd/MM/yyyy').format(doc.updatedAt)}',
+              'Última atualização: ${ServerDateUtils.formatForDisplay(doc.updatedAt, pattern: 'dd/MM/yyyy')}',
               style: AppTextStyles.labelSmall.copyWith(
                 color: isDark
                     ? AppColors.textTertiary

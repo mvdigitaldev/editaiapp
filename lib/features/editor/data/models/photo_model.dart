@@ -1,3 +1,4 @@
+import '../../../../core/utils/server_date_utils.dart';
 import '../../domain/entities/photo.dart';
 
 class PhotoModel extends Photo {
@@ -26,8 +27,8 @@ class PhotoModel extends Photo {
       height: json['height'] as int?,
       mimeType: json['mime_type'] as String?,
       metadata: json['metadata'] as Map<String, dynamic>?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: ServerDateUtils.parseServerDateOr(json['created_at'], DateTime.now()),
+      updatedAt: ServerDateUtils.parseServerDateOr(json['updated_at'], DateTime.now()),
     );
   }
 

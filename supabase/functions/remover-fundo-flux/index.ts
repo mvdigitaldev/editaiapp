@@ -86,13 +86,15 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    let userId: string | null = null;
     const authHeader = req.headers.get("Authorization");
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.replace("Bearer ", "");
-      const { data: { user } } = await supabase.auth.getUser(token);
-      userId = user?.id ?? null;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
     }
+    const authClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user } } = await authClient.auth.getUser();
+    const userId = user?.id ?? null;
     if (!userId) {
       return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
     }
@@ -114,6 +116,7 @@ Deno.serve(async (req) => {
             file_size: fileSizeBytes,
             mime_type: mime,
           },
+          promptTextOriginal: "remove_background",
         }
       );
       editId = result.editId;
@@ -141,6 +144,7 @@ Deno.serve(async (req) => {
       );
     }
 
+    const startMs = Date.now();
     const falRes = await fetch(FAL_API_URL, {
       method: "POST",
       headers: {
@@ -156,12 +160,14 @@ Deno.serve(async (req) => {
     const falData = (await falRes.json()) as FalBirefnetResponse;
 
     if (!falRes.ok) {
-      const errMsg = typeof falData.detail === "string"
-        ? falData.detail
-        : falRes.status === 401
-        ? "Token fal.ai inválido. Verifique FAL_KEY nas secrets."
-        : `Erro na API fal.ai: ${falRes.status}`;
-      console.error("[remover-fundo-flux] fal.ai error:", falRes.status, JSON.stringify(falData));
+      const falDetail = typeof falData?.detail === "string" ? falData.detail : JSON.stringify(falData);
+      const errMsg =
+        falRes.status === 401
+          ? "Token fal.ai inválido. Verifique FAL_KEY nas secrets do Supabase."
+          : falRes.status === 403
+          ? `fal.ai: ${falDetail || "Verifique créditos em fal.ai/dashboard e scopes da chave em fal.ai/dashboard/keys."}`
+          : falDetail || `Erro na API fal.ai: ${falRes.status}`;
+      console.error("[remover-fundo-flux] fal.ai error:", falRes.status, "body:", falDetail);
       await refundCredits(supabase, userId, 7, editId);
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       await supabase
@@ -179,7 +185,6 @@ Deno.serve(async (req) => {
     }
 
     const outputUrl = falData?.image?.url;
-
     if (!outputUrl || typeof outputUrl !== "string") {
       console.error("[remover-fundo-flux] Output inesperado:", JSON.stringify(falData));
       const errMsg = "Resultado inválido da API fal.ai";
@@ -256,11 +261,13 @@ Deno.serve(async (req) => {
       })
       .eq("task_id", taskId);
 
+    const aiProcessingTimeMs = Math.max(0, Date.now() - startMs);
     await supabase
       .from("edits")
       .update({
         status: "completed",
         image_url: urlData.publicUrl,
+        ai_processing_time_ms: aiProcessingTimeMs,
       })
       .eq("id", editId);
 

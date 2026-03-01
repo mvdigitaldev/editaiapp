@@ -1,4 +1,5 @@
-import 'package:intl/intl.dart';
+import '../../../../core/constants/operation_type.dart';
+import '../../../../core/utils/server_date_utils.dart';
 
 class EditDetailModel {
   final String id;
@@ -58,8 +59,8 @@ class EditDetailModel {
       status: json['status'] as String? ?? 'queued',
       aiProcessingTimeMs: json['ai_processing_time_ms'] as int?,
       creditsUsed: json['credits_used'] as int? ?? 0,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: ServerDateUtils.parseServerDateOr(json['created_at'], DateTime.now()),
+      updatedAt: ServerDateUtils.parseServerDateOr(json['updated_at'], DateTime.now()),
       operationType: json['operation_type'] as String?,
       taskId: json['task_id'] as String?,
       imageUrl: json['image_url'] as String?,
@@ -71,10 +72,10 @@ class EditDetailModel {
   }
 
   String get formattedCreatedAt =>
-      DateFormat('d MMM yyyy, HH:mm', 'pt_BR').format(createdAt);
+      ServerDateUtils.formatForDisplay(createdAt, pattern: 'd MMM yyyy, HH:mm');
 
   String get formattedUpdatedAt =>
-      DateFormat('d MMM yyyy, HH:mm', 'pt_BR').format(updatedAt);
+      ServerDateUtils.formatForDisplay(updatedAt, pattern: 'd MMM yyyy, HH:mm');
 
   String get formattedFileSize {
     if (fileSize == null || fileSize! <= 0) return '—';
@@ -154,6 +155,9 @@ class EditDetailModel {
   }
 
   String get promptDisplay => promptText ?? promptTextOriginal ?? '—';
+
+  /// Label amigável do tipo de operação (nunca exibir valor cru do banco).
+  String get operationTypeLabel => OperationType.labelFrom(operationType);
 
   String get processingTimeText {
     if (aiProcessingTimeMs == null || aiProcessingTimeMs! <= 0) return '—';

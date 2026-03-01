@@ -16,7 +16,6 @@ import 'features/auth/presentation/pages/register_page.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/editor/presentation/pages/editor_page.dart';
 import 'features/gallery/presentation/pages/gallery_page.dart';
-import 'features/home/presentation/pages/home_page.dart';
 import 'features/editor/presentation/pages/pre_evaluation_page.dart';
 import 'features/editor/presentation/pages/ai_prompt_editor_page.dart';
 import 'features/editor/presentation/pages/comparison_page.dart';
@@ -38,6 +37,8 @@ import 'features/profile/presentation/pages/legal_document_page.dart';
 import 'features/profile/presentation/pages/help_center_page.dart';
 import 'features/dashboard/presentation/pages/credit_history_page.dart';
 import 'features/gallery/presentation/pages/edit_detail_page.dart';
+import 'features/models/presentation/pages/edit_model_page.dart';
+import 'features/models/presentation/pages/models_by_category_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -165,6 +166,8 @@ class MyApp extends StatelessWidget {
         '/edit-image': (context) => const EditImagePage(),
         '/create-composition': (context) => const CreateCompositionPage(),
         '/remove-background': (context) => const RemoveBackgroundPage(),
+        '/edit-model': (context) => const EditModelPage(),
+        '/models-by-category': (context) => const ModelsByCategoryPage(),
         '/text-to-image-result': (context) => const TextToImageResultPage(),
         '/processing': (context) => const ProcessingPage(),
         '/profile': (context) => const ProfilePage(),

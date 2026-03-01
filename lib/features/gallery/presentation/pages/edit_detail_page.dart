@@ -293,7 +293,20 @@ class _EditDetailPageState extends ConsumerState<EditDetailPage> {
             ),
           ),
           const SizedBox(height: 12),
-          _detailRow('Prompt original', edit.promptTextOriginal ?? '—', isDark),
+          Text(
+            'Prompt original',
+            style: AppTextStyles.labelMedium.copyWith(
+              color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            edit.promptTextOriginal ?? '—',
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: isDark ? AppColors.textLight : AppColors.textPrimary,
+            ),
+          ),
         ],
       ),
     );
@@ -323,7 +336,7 @@ class _EditDetailPageState extends ConsumerState<EditDetailPage> {
           const SizedBox(height: 8),
           _detailRow(
             'Tipo de operação',
-            edit.operationType ?? '—',
+            edit.operationTypeLabel,
             isDark,
           ),
         ],
@@ -350,8 +363,6 @@ class _EditDetailPageState extends ConsumerState<EditDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _detailRow('Dimensões', edit.dimensionsText, isDark),
-          const SizedBox(height: 8),
-          _detailRow('Tamanho do arquivo', edit.formattedFileSize, isDark),
           const SizedBox(height: 8),
           _detailRow('Tipo MIME', edit.mimeType ?? '—', isDark),
           const SizedBox(height: 8),

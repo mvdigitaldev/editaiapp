@@ -1,4 +1,4 @@
-import 'package:intl/intl.dart';
+import '../../../../core/utils/server_date_utils.dart';
 
 class CreditTransactionModel {
   final String id;
@@ -27,7 +27,7 @@ class CreditTransactionModel {
       amount: json['amount'] as int,
       description: json['description'] as String?,
       referenceId: json['reference_id'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: ServerDateUtils.parseServerDateOr(json['created_at'], DateTime.now()),
     );
   }
 
@@ -35,14 +35,14 @@ class CreditTransactionModel {
   int get creditsUsed => amount < 0 ? amount.abs() : amount;
 
   String get formattedDate {
-    return DateFormat('d MMM yyyy', 'pt_BR').format(createdAt);
+    return ServerDateUtils.formatForDisplay(createdAt, pattern: 'd MMM yyyy');
   }
 
   String get formattedTime {
-    return DateFormat('HH:mm', 'pt_BR').format(createdAt);
+    return ServerDateUtils.formatForDisplay(createdAt, pattern: 'HH:mm');
   }
 
   String get formattedDateTime {
-    return DateFormat('d MMM yyyy, HH:mm', 'pt_BR').format(createdAt);
+    return ServerDateUtils.formatForDisplay(createdAt, pattern: 'd MMM yyyy, HH:mm');
   }
 }

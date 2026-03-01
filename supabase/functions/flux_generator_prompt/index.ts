@@ -23,10 +23,14 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
-    const { data: { user } } =
-      await supabase.auth.getUser(authHeader?.replace("Bearer ", ""));
-
-    const user_id = user?.id || null;
+    let user_id: string | null = null;
+    if (authHeader?.startsWith("Bearer ")) {
+      const authClient = createClient(SUPABASE_URL!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await authClient.auth.getUser();
+      user_id = user?.id ?? null;
+    }
 
     // =========================
     // 1️⃣ TRANSLATE TO ENGLISH

@@ -1,23 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:editaiapp/features/subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../data/datasources/credit_transactions_datasource.dart';
-
-final _creditTransactionsDataSourceProvider =
-    Provider<CreditTransactionsDataSource>((ref) {
-  return CreditTransactionsDataSourceImpl(Supabase.instance.client);
-});
-
-final _currentMonthUsageTotalProvider = FutureProvider<int>((ref) async {
-  final ds = ref.watch(_creditTransactionsDataSourceProvider);
-  final now = DateTime.now();
-  return ds.getMonthlyUsageTotal(now.year, now.month);
-});
+import '../providers/dashboard_provider.dart';
 
 class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
@@ -28,15 +16,25 @@ class DashboardPage extends ConsumerWidget {
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
-    final currentMonthTotalAsync = ref.watch(_currentMonthUsageTotalProvider);
+    final currentMonthTotalAsync = ref.watch(currentMonthUsageTotalProvider);
 
     return SafeArea(
       child: Scaffold(
         backgroundColor:
             isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          child: Column(
+        body: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(creditsUsageProvider);
+            ref.invalidate(currentMonthUsageTotalProvider);
+            await Future.wait([
+              ref.read(creditsUsageProvider.future),
+              ref.read(currentMonthUsageTotalProvider.future),
+            ]);
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -266,6 +264,7 @@ class DashboardPage extends ConsumerWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

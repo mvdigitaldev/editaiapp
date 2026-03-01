@@ -215,13 +215,15 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    let userId: string | null = null;
     const authHeader = req.headers.get("Authorization");
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.replace("Bearer ", "");
-      const { data: { user } } = await supabase.auth.getUser(token);
-      userId = user?.id ?? null;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
     }
+    const authClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user } } = await authClient.auth.getUser();
+    const userId = user?.id ?? null;
     if (!userId) {
       return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
     }
@@ -267,6 +269,7 @@ Deno.serve(async (req) => {
             width,
             height,
           },
+          promptTextOriginal: user_prompt.trim(),
         }
       );
       editId = result.editId;

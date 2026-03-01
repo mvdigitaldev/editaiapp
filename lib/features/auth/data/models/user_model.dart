@@ -1,3 +1,4 @@
+import '../../../../core/utils/server_date_utils.dart';
 import '../../domain/entities/user.dart';
 
 class UserModel extends User {
@@ -14,12 +15,7 @@ class UserModel extends User {
     super.subscriptionStartedAt,
   });
 
-  static DateTime? _parseDateTime(dynamic v) {
-    if (v == null) return null;
-    if (v is DateTime) return v;
-    if (v is String) return DateTime.tryParse(v);
-    return null;
-  }
+  static DateTime? _parseDateTime(dynamic v) => ServerDateUtils.parseServerDate(v);
 
   static int? _parseInt(dynamic v) {
     if (v == null) return null;

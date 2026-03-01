@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/server_date_utils.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/plan_card.dart';
@@ -36,7 +36,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
 
   String _formatDate(DateTime? date) {
     if (date == null) return '--';
-    return DateFormat('dd/MM/yyyy').format(date);
+    return ServerDateUtils.formatForDisplay(date, pattern: 'dd/MM/yyyy');
   }
 
   @override

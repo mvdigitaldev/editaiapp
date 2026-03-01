@@ -28,19 +28,13 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
     _currentIndex = widget.initialIndex;
   }
 
-  void _goToTab(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final pages = [
       const DashboardPage(),
       const GalleryPage(showBackButton: false, showBottomNav: false),
       const HomePage(),
-      ModelsPage(onOpenEditor: () => _goToTab(AppBottomNav.indexEditor)),
+      const ModelsPage(),
       const ProfilePage(),
     ];
 

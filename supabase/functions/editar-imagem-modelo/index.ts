@@ -11,7 +11,8 @@ const BFL_API_URL = "https://api.bfl.ai/v1/flux-2-pro";
 const OPENAI_API_URL = "https://api.openai.com/v1";
 const MAX_MEGAPIXELS = 1.5;
 const JPEG_QUALITY = 90;
-const MAX_BASE64_BYTES = 10 * 1024 * 1024; // ~10 MB (recomendação do plano)
+const MAX_BASE64_BYTES = 10 * 1024 * 1024;
+const CREDITS_EDIT_MODEL = 7;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +21,7 @@ const CORS_HEADERS = {
 };
 
 interface RequestBody {
-  user_prompt: string;
+  modelo_id: string;
   image_base64: string;
 }
 
@@ -104,27 +105,6 @@ function normalizeBase64(input: string): string {
   return dataUrlMatch ? dataUrlMatch[1] : trimmed;
 }
 
-async function openaiChat(model: string, system: string, user: string): Promise<string> {
-  const res = await fetch(`${OPENAI_API_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`OpenAI error: ${res.status}`);
-  const data = await res.json();
-  return data.choices[0]?.message?.content?.trim() ?? "";
-}
-
 async function openaiVision(
   imageBase64: string,
   prompt: string,
@@ -162,114 +142,6 @@ async function generateImageContext(imageBase64: string, openaiKey: string): Pro
   return openaiVision(imageBase64, prompt, openaiKey);
 }
 
-async function optimizePrompt(
-  userPrompt: string,
-  imageContext: string | undefined,
-  supabase: ReturnType<typeof createClient>,
-  openaiKey: string
-): Promise<{ improvedPrompt: string; intent: string; avgSimilarity: number; matchedIds: string[] }> {
-  const translated = await openaiChat(
-    "gpt-4o-mini",
-    "Translate the user request to English. Output only the translated text.",
-    userPrompt
-  );
-
-  const intent = await openaiChat(
-    "gpt-4o-mini",
-    `Classify the editing intent into ONE of the following categories:
-- subject_removal
-- lighting_adjustment
-- color_grading
-- typography
-- composition
-- general_edit
-
-Output only the category name.`,
-    translated
-  );
-
-  const expandedQuery = `
-User editing request:
-${translated}
-
-Image context:
-${imageContext || "Unknown image context."}
-
-Intent category: ${intent}
-
-Focus on relevant FLUX official documentation, especially:
-- replacement strategy for negative prompts
-- structured prompting
-- subject + action + style + context
-`;
-
-  const embRes = await fetch(`${OPENAI_API_URL}/embeddings`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${openaiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      input: expandedQuery,
-      model: "text-embedding-3-small",
-    }),
-  });
-  if (!embRes.ok) throw new Error("Embedding generation failed");
-  const embData = await embRes.json();
-  const queryEmbedding = embData.data?.[0]?.embedding;
-  if (!queryEmbedding) throw new Error("Embedding generation failed");
-
-  const { data: matchedDocs, error: rpcError } = await supabase.rpc("match_flux_docs", {
-    query_embedding: queryEmbedding,
-    match_threshold: 0.35,
-    match_count: 8,
-  });
-
-  if (rpcError) throw new Error(`RPC Error: ${rpcError.message}`);
-
-  const contextString =
-    matchedDocs?.length > 0
-      ? matchedDocs.map((d: { content: string }) => d.content).join("\n\n---\n\n").slice(0, 4000)
-      : "";
-
-  const avgSimilarity =
-    matchedDocs?.length > 0
-      ? matchedDocs.reduce((acc: number, d: { similarity: number }) => acc + d.similarity, 0) / matchedDocs.length
-      : 0;
-
-  const matchedIds = matchedDocs?.map((d: { id: string }) => String(d.id)) ?? [];
-
-  const improvedPrompt = await openaiChat(
-    "gpt-4o-mini",
-    `You are a professional FLUX image editing prompt optimizer.
-
-STRICT RULES:
-- OUTPUT ONLY the final improved English prompt.
-- This is IMAGE EDITING, not image generation.
-- PRESERVE the original scene and environment.
-- DO NOT invent new locations.
-- ONLY modify what the user requested.
-- NEVER use negative prompts.
-- Use positive visual replacement strategy.
-- Follow: Subject + Action + Style + Context.`,
-    `
-Original editing request:
-${translated}
-
-Image context:
-${imageContext || "Preserve the existing scene."}
-
-Detected intent:
-${intent}
-
-Relevant FLUX documentation:
-${contextString}
-`
-  );
-
-  return { improvedPrompt, intent, avgSimilarity, matchedIds };
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -281,11 +153,11 @@ Deno.serve(async (req) => {
 
   try {
     const body = (await req.json()) as Partial<RequestBody>;
-    const { user_prompt, image_base64 } = body;
+    const { modelo_id, image_base64 } = body;
 
-    if (!user_prompt || typeof user_prompt !== "string" || user_prompt.trim().length === 0) {
+    if (!modelo_id || typeof modelo_id !== "string" || modelo_id.trim().length === 0) {
       return jsonResponse(
-        { success: false, error: "Campo 'user_prompt' é obrigatório e não pode estar vazio" },
+        { success: false, error: "Campo 'modelo_id' é obrigatório e não pode estar vazio" },
         422
       );
     }
@@ -300,14 +172,14 @@ Deno.serve(async (req) => {
     const bflApiKey = Deno.env.get("BFL_API_KEY");
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
     if (!bflApiKey) {
-      console.error("[editar-imagem-flux] BFL_API_KEY não configurada");
+      console.error("[editar-imagem-modelo] BFL_API_KEY não configurada");
       return jsonResponse(
         { success: false, error: "Configuração do serviço indisponível" },
         500
       );
     }
     if (!openaiKey) {
-      console.error("[editar-imagem-flux] OPENAI_API_KEY não configurada");
+      console.error("[editar-imagem-modelo] OPENAI_API_KEY não configurada");
       return jsonResponse(
         { success: false, error: "Configuração do serviço indisponível" },
         500
@@ -330,23 +202,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    await ensureMagickInit();
-    let resizedBase64: string;
-    let resizedWidth: number;
-    let resizedHeight: number;
-    try {
-      const resized = resizeToMaxMp(imageBase64);
-      resizedBase64 = resized.base64;
-      resizedWidth = resized.width;
-      resizedHeight = resized.height;
-    } catch (resizeErr) {
-      console.error("[editar-imagem-flux] Resize error:", resizeErr);
-      return jsonResponse(
-        { success: false, error: "Falha ao processar imagem. Verifique se o formato é válido (JPEG/PNG)." },
-        422
-      );
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -364,6 +219,37 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
     }
 
+    const { data: modelo, error: modeloErr } = await supabase
+      .from("modelos")
+      .select("id, prompt_padrao")
+      .eq("id", modelo_id.trim())
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (modeloErr || !modelo) {
+      return jsonResponse(
+        { success: false, error: "Modelo não encontrado ou inativo" },
+        404
+      );
+    }
+
+    await ensureMagickInit();
+    let resizedBase64: string;
+    let resizedWidth: number;
+    let resizedHeight: number;
+    try {
+      const resized = resizeToMaxMp(imageBase64);
+      resizedBase64 = resized.base64;
+      resizedWidth = resized.width;
+      resizedHeight = resized.height;
+    } catch (resizeErr) {
+      console.error("[editar-imagem-modelo] Resize error:", resizeErr);
+      return jsonResponse(
+        { success: false, error: "Falha ao processar imagem. Verifique se o formato é válido (JPEG/PNG)." },
+        422
+      );
+    }
+
     let imageContext: string;
     try {
       imageContext = await generateImageContext(resizedBase64, openaiKey);
@@ -371,39 +257,15 @@ Deno.serve(async (req) => {
         imageContext = "Unknown image context.";
       }
     } catch (visionErr) {
-      console.error("[editar-imagem-flux] Vision error:", visionErr);
+      console.error("[editar-imagem-modelo] Vision error:", visionErr);
       return jsonResponse(
         { success: false, error: "Falha ao analisar a imagem. Verifique se o formato é válido (JPEG/PNG)." },
         502
       );
     }
 
-    const { improvedPrompt, intent, avgSimilarity, matchedIds } = await optimizePrompt(
-      user_prompt.trim(),
-      imageContext,
-      supabase,
-      openaiKey
-    );
-
-    try {
-      await supabase.from("prompt_optimization_logs").insert({
-        user_id: userId,
-        original_prompt: user_prompt.trim(),
-        improved_prompt: improvedPrompt,
-        avg_similarity: avgSimilarity,
-        matched_chunk_ids: matchedIds,
-        metadata: {
-          model: "gpt-4o-mini",
-          source: "editar-imagem-flux",
-          rag_match_count: matchedIds.length,
-          intent,
-          image_context_used: true,
-          image_context_auto_generated: true,
-        },
-      });
-    } catch (logErr) {
-      console.warn("[editar-imagem-flux] Falha ao logar em prompt_optimization_logs:", logErr);
-    }
+    const promptPadrao = (modelo.prompt_padrao as string)?.trim() ?? "";
+    const promptFinal = `${promptPadrao}\n\nImage context: ${imageContext}`;
 
     const fileSizeBytes = Math.ceil((resizedBase64.length * 3) / 4);
     let editId: string;
@@ -411,9 +273,9 @@ Deno.serve(async (req) => {
       const result = await deductAndCreateEdit(
         supabase,
         userId,
-        "edit_image",
-        7,
-        improvedPrompt,
+        "edit_model",
+        CREDITS_EDIT_MODEL,
+        promptFinal,
         null,
         {
           imageMetadata: {
@@ -422,7 +284,7 @@ Deno.serve(async (req) => {
             width: resizedWidth,
             height: resizedHeight,
           },
-          promptTextOriginal: user_prompt.trim(),
+          promptTextOriginal: promptPadrao,
         }
       );
       editId = result.editId;
@@ -436,7 +298,7 @@ Deno.serve(async (req) => {
 
     const webhookUrl = `${supabaseUrl}/functions/v1/flux-webhook`;
     const bflBody = {
-      prompt: improvedPrompt,
+      prompt: promptFinal,
       input_image: resizedBase64,
       width: resizedWidth,
       height: resizedHeight,
@@ -461,8 +323,8 @@ Deno.serve(async (req) => {
       else if (initRes.status === 402) errMsg = "Créditos insuficientes na conta BFL";
       else if (initRes.status === 422) errMsg = "Dados inválidos: " + (errText || "verifique prompt e imagem");
       else if (initRes.status === 429) errMsg = "Rate limit excedido, tente novamente em breve";
-      console.error("[editar-imagem-flux] BFL init error:", initRes.status, errText);
-      await refundCredits(supabase, userId, 7, editId);
+      console.error("[editar-imagem-modelo] BFL init error:", initRes.status, errText);
+      await refundCredits(supabase, userId, CREDITS_EDIT_MODEL, editId);
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       return jsonResponse({ success: false, error: errMsg }, initRes.status >= 500 ? 502 : initRes.status);
     }
@@ -471,8 +333,8 @@ Deno.serve(async (req) => {
     const taskId = initData.id;
 
     if (!taskId) {
-      console.error("[editar-imagem-flux] Resposta BFL sem id:", initData);
-      await refundCredits(supabase, userId, 7, editId);
+      console.error("[editar-imagem-modelo] Resposta BFL sem id:", initData);
+      await refundCredits(supabase, userId, CREDITS_EDIT_MODEL, editId);
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       return jsonResponse({ success: false, error: "Resposta inválida da API" }, 502);
     }
@@ -487,7 +349,7 @@ Deno.serve(async (req) => {
     });
 
     if (insertError) {
-      console.error("[editar-imagem-flux] Erro ao inserir flux_tasks:", insertError);
+      console.error("[editar-imagem-modelo] Erro ao inserir flux_tasks:", insertError);
       return jsonResponse(
         { success: false, error: "Falha ao registrar tarefa" },
         500
@@ -496,7 +358,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ task_id: taskId });
   } catch (error) {
-    console.error("[editar-imagem-flux] Erro:", error);
+    console.error("[editar-imagem-modelo] Erro:", error);
     return jsonResponse(
       {
         success: false,
