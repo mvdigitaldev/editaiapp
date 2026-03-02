@@ -191,25 +191,40 @@ Deno.serve(async (req) => {
 
     const { data: task } = await supabase
       .from("flux_tasks")
-      .select("edit_id, image_url")
+      .select("edit_id, image_url, user_id")
       .eq("task_id", taskId)
       .single();
     if (task?.edit_id) {
       const { data: edit } = await supabase
         .from("edits")
-        .select("created_at")
+        .select("created_at, expires_at")
         .eq("id", task.edit_id)
         .single();
       const aiProcessingTimeMs =
         edit?.created_at
           ? Math.max(0, Math.round(Date.now() - new Date(edit.created_at).getTime()))
           : undefined;
+
+      let expiresAt: string | undefined;
+      if (edit?.expires_at == null && task?.user_id) {
+        const { data: limits } = await supabase
+          .rpc("get_plan_photo_limits", { p_user_id: task.user_id })
+          .single();
+        const expirationDays = limits?.expiration_days ?? 15;
+        const expDate = edit?.created_at
+          ? new Date(edit.created_at)
+          : new Date();
+        expDate.setDate(expDate.getDate() + expirationDays);
+        expiresAt = expDate.toISOString();
+      }
+
       await supabase
         .from("edits")
         .update({
           status: "completed",
           image_url: task.image_url ?? undefined,
           ...(aiProcessingTimeMs != null && { ai_processing_time_ms: aiProcessingTimeMs }),
+          ...(expiresAt != null && { expires_at: expiresAt }),
         })
         .eq("id", task.edit_id);
     }

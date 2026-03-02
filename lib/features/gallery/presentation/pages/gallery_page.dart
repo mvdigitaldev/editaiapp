@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../data/models/gallery_edit_model.dart';
+import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 import '../providers/gallery_provider.dart';
 
 class GalleryPage extends ConsumerStatefulWidget {
@@ -34,6 +36,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   bool _hasMore = true;
   String? _error;
   late ScrollController _scrollController;
+
+  bool _isSelectionMode = false;
+  final Set<String> _selectedIds = {};
+  bool _isDeleting = false;
 
   @override
   void initState() {
@@ -106,6 +112,89 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     }
   }
 
+  void _toggleSelectionMode() {
+    setState(() {
+      _isSelectionMode = !_isSelectionMode;
+      if (!_isSelectionMode) _selectedIds.clear();
+    });
+  }
+
+  void _toggleItemSelection(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  Future<void> _handleDelete() async {
+    if (_selectedIds.isEmpty || _isDeleting) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir fotos'),
+        content: Text(
+          'Excluir ${_selectedIds.length} foto(s)? Esta ação não pode ser desfeita.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeleting = true);
+
+    try {
+      final ds = ref.read(editsDeleteDataSourceProvider);
+      final ids = _selectedIds.toList();
+      await ds.deleteEdits(ids);
+
+      if (!mounted) return;
+
+      ref.invalidate(planLimitsProvider);
+      ref.invalidate(recentEditsProvider);
+
+      setState(() {
+        _selectedIds.clear();
+        _isSelectionMode = false;
+        _isDeleting = false;
+      });
+
+      _loadFirst();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${ids.length} foto(s) excluída(s)'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isDeleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao excluir: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -145,11 +234,45 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                     ],
                   ),
                   const Spacer(),
-                  const SizedBox(width: 48),
+                  if (_items.isNotEmpty)
+                    TextButton(
+                      onPressed: _toggleSelectionMode,
+                      child: Text(
+                        _isSelectionMode ? 'Concluir' : 'Selecionar',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: isDark ? AppColors.primary : AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox(width: 48),
                 ],
               ),
             ),
             Expanded(child: _buildBody(isDark)),
+            if (_isSelectionMode && _selectedIds.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+                  border: Border(
+                    top: BorderSide(
+                      color: isDark ? AppColors.borderDark : AppColors.border,
+                    ),
+                  ),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: AppButton(
+                    text: 'Excluir ${_selectedIds.length}',
+                    onPressed: _isDeleting ? null : _handleDelete,
+                    icon: Icons.delete_outline,
+                    width: double.infinity,
+                    isLoading: _isDeleting,
+                  ),
+                ),
+              ),
             if (widget.showBottomNav)
               AppBottomNav(
                 currentIndex: 1,
@@ -299,25 +422,58 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             return const SizedBox.shrink();
           }
 
+          final isSelected = _selectedIds.contains(item.id);
+
           return InkWell(
             onTap: () {
-              Navigator.of(context)
-                  .pushNamed('/edit-detail', arguments: item.id)
-                  .then((_) {
-                if (mounted) _loadFirst();
-              });
+              if (_isSelectionMode) {
+                _toggleItemSelection(item.id);
+              } else {
+                Navigator.of(context)
+                    .pushNamed('/edit-detail', arguments: item.id)
+                    .then((_) {
+                  if (mounted) _loadFirst();
+                });
+              }
             },
-            child: CachedNetworkImage(
-              imageUrl: url,
-              fit: BoxFit.cover,
-              placeholder: (_, __) => Container(
-                color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              ),
-              errorWidget: (_, __, ___) => Container(
-                color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                child: Icon(Icons.broken_image_outlined, color: AppColors.textTertiary),
-              ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CachedNetworkImage(
+                  imageUrl: url,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                    color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+                  errorWidget: (_, __, ___) => Container(
+                    color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                    child: Icon(Icons.broken_image_outlined, color: AppColors.textTertiary),
+                  ),
+                ),
+                if (_isSelectionMode)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppColors.primary
+                            : (isDark ? Colors.black54 : Colors.white54),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: isSelected
+                          ? const Icon(Icons.check, size: 16, color: Colors.white)
+                          : null,
+                    ),
+                  ),
+              ],
             ),
           );
         },

@@ -7,6 +7,7 @@ import '../../../../core/widgets/app_button.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../gallery/presentation/providers/gallery_provider.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
+import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 
 class TextToImageResultPage extends ConsumerStatefulWidget {
   const TextToImageResultPage({super.key});
@@ -33,6 +34,7 @@ class _TextToImageResultPageState extends ConsumerState<TextToImageResultPage> {
   void _goBackToHome() {
     ref.invalidate(recentEditsProvider);
     ref.invalidate(creditsUsageProvider);
+    ref.invalidate(planLimitsProvider);
     ref.invalidate(currentMonthUsageTotalProvider);
     Navigator.of(context).popUntil((route) =>
         route.settings.name == '/' || route.settings.name == '/home' || route.isFirst);

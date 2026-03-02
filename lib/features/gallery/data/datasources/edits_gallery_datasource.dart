@@ -22,11 +22,13 @@ class EditsGalleryDataSourceImpl implements EditsGalleryDataSource {
     int offset = 0,
     int limit = 20,
   }) async {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
     final response = await _supabase
         .from('edits')
         .select('id, image_url, created_at, status, operation_type')
         .not('image_url', 'is', null)
         .eq('status', 'completed')
+        .or('expires_at.is.null,expires_at.gt.$nowIso')
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
 

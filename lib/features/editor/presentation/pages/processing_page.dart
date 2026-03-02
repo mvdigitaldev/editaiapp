@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../gallery/presentation/providers/gallery_provider.dart';
+import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 
 class ProcessingPage extends ConsumerStatefulWidget {
   const ProcessingPage({super.key});
@@ -89,6 +90,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage> {
       final imageUrl = record['image_url'] as String?;
       _cleanupChannel();
       ref.invalidate(recentEditsProvider);
+      ref.invalidate(planLimitsProvider);
       if (_beforePathFromArgs != null) {
         // Fluxo editar-imagem: mostrar comparação (antes + resultado por URL)
         Navigator.of(context).pushReplacementNamed(
@@ -130,6 +132,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage> {
     // Navigate to comparison after processing
     if (!mounted) return;
     ref.invalidate(recentEditsProvider);
+      ref.invalidate(planLimitsProvider);
     final before = args != null ? args['before'] as String? : null;
     final after = args != null ? args['after'] as String? : null;
     Navigator.of(context).pushReplacementNamed(

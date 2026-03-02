@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { getExpirationDays } from "./plan_limits.ts";
 
 export interface EditImageMetadata {
   file_size?: number;
@@ -38,6 +39,10 @@ export async function deductAndCreateEdit(
     }
   }
 
+  const expirationDays = await getExpirationDays(supabase, userId);
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + expirationDays);
+
   const insertPayload: Record<string, unknown> = {
     user_id: userId,
     image_id: options?.imageId ?? null,
@@ -47,6 +52,7 @@ export async function deductAndCreateEdit(
     task_id: taskId,
     status: "queued",
     credits_used: credits,
+    expires_at: expiresAt.toISOString(),
   };
   if (metadata?.file_size != null) insertPayload.file_size = metadata.file_size;
   if (metadata?.mime_type) insertPayload.mime_type = metadata.mime_type;
