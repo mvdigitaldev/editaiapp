@@ -1,7 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { deductAndCreateEdit, refundCredits } from "./credits.ts";
-import { checkPhotoLimit } from "./plan_limits.ts";
 
 const FAL_API_URL = "https://fal.run/fal-ai/birefnet";
 const BUCKET_NAME = "flux-imagens";
@@ -98,20 +97,6 @@ Deno.serve(async (req) => {
     const userId = user?.id ?? null;
     if (!userId) {
       return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
-    }
-
-    const photoLimit = await checkPhotoLimit(supabase, userId);
-    if (!photoLimit.allowed) {
-      return jsonResponse(
-        {
-          success: false,
-          error: "Limite de fotos do plano atingido. Exclua fotos antigas ou faça upgrade.",
-          code: "photo_limit_reached",
-          current: photoLimit.current,
-          max: photoLimit.max,
-        },
-        403
-      );
     }
 
     const taskId = crypto.randomUUID();

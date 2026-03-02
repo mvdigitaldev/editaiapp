@@ -33,7 +33,7 @@ final planLimitsProvider = FutureProvider<PlanPhotoLimits>((ref) async {
       return PlanPhotoLimits(
         maxPhotos: maxPhotos,
         storedPhotosCount: storedCount,
-        canAddMore: storedCount < maxPhotos,
+        canAddMore: true, // Controle de armazenamento removido - todas as fotos são exibidas até expiração
       );
     }
   } catch (_) {

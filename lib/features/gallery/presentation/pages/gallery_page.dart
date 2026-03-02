@@ -198,55 +198,73 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final planLimitsAsync = ref.watch(planLimitsProvider);
+
+    final subtitleText = planLimitsAsync.when(
+      data: (limits) => '${limits.storedPhotosCount} foto${limits.storedPhotosCount != 1 ? 's' : ''} · Arraste para atualizar',
+      loading: () => 'Arraste para atualizar',
+      error: (_, __) => 'Arraste para atualizar',
+    );
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (widget.showBackButton)
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: () => Navigator.of(context).pop(),
-                    )
-                  else
-                    const SizedBox(width: 48),
-                  const Spacer(),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Galeria',
-                        style: AppTextStyles.headingMedium.copyWith(
-                          color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                  // Esquerda: voltar + Galeria + subtítulo
+                  Expanded(
+                    child: Row(
+                      children: [
+                        if (widget.showBackButton)
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Galeria',
+                                style: AppTextStyles.headingMedium.copyWith(
+                                  color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                subtitleText,
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Arraste para baixo para atualizar',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  const Spacer(),
+                  // Direita: Selecionar/Concluir
                   if (_items.isNotEmpty)
                     TextButton(
                       onPressed: _toggleSelectionMode,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                       child: Text(
                         _isSelectionMode ? 'Concluir' : 'Selecionar',
                         style: AppTextStyles.bodyMedium.copyWith(
-                          color: isDark ? AppColors.primary : AppColors.primary,
+                          color: AppColors.primary,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                    )
-                  else
-                    const SizedBox(width: 48),
+                    ),
                 ],
               ),
             ),

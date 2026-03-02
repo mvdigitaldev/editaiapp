@@ -73,55 +73,59 @@ Deno.serve(async (req) => {
     if (!authHeader?.startsWith("Bearer ")) {
       return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
     }
+
     const authClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: { user } } = await authClient.auth.getUser();
     const userId = user?.id ?? null;
     if (!userId) {
-      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
+      return jsonResponse({ success: false, error: "Token inválido ou expirado" }, 401);
     }
 
-    let deletedCount = 0;
+    // 1. Buscar edits que pertencem ao usuário (para extrair paths do storage)
+    const { data: editsToDelete, error: fetchErr } = await supabase
+      .from("edits")
+      .select("id, image_url")
+      .in("id", validIds)
+      .eq("user_id", userId);
 
-    for (const editId of validIds) {
+    if (fetchErr) {
+      console.error("[delete-edits] Erro ao buscar edits:", fetchErr);
+      return jsonResponse({ success: false, error: "Erro ao buscar fotos" }, 500);
+    }
+
+    const edits = (editsToDelete ?? []) as Array<{ id: string; image_url: string | null }>;
+    const idsToDelete = edits.map((e) => e.id);
+
+    if (idsToDelete.length === 0) {
+      return jsonResponse({ success: true, deleted_count: 0 });
+    }
+
+    // 2. Remover arquivos do storage em batch
+    const storagePaths: string[] = [];
+    for (const edit of edits) {
+      const imageUrl = edit.image_url;
+      if (imageUrl && imageUrl.includes(BUCKET_NAME)) {
+        const path = extractStoragePath(imageUrl);
+        if (path) storagePaths.push(path);
+      }
+    }
+    if (storagePaths.length > 0) {
       try {
-        const { data: edit, error: fetchErr } = await supabase
-          .from("edits")
-          .select("user_id, image_url")
-          .eq("id", editId)
-          .single();
-
-        if (fetchErr || !edit) {
-          continue;
-        }
-
-        if (edit.user_id !== userId) {
-          continue;
-        }
-
-        const imageUrl = edit.image_url as string | null;
-        if (imageUrl && imageUrl.includes(BUCKET_NAME)) {
-          const path = extractStoragePath(imageUrl);
-          if (path) {
-            try {
-              await supabase.storage.from(BUCKET_NAME).remove([path]);
-            } catch (_) {
-              // Ignorar erro (arquivo já deletado ou inexistente)
-            }
-          }
-        }
-
-        const { error: deleteErr } = await supabase.from("edits").delete().eq("id", editId);
-
-        if (!deleteErr) {
-          deletedCount++;
-        }
-      } catch (_) {
-        // Continuar com os demais
+        await supabase.storage.from(BUCKET_NAME).remove(storagePaths);
+      } catch (storageErr) {
+        console.warn("[delete-edits] Erro ao remover do storage (ignorado):", storageErr);
       }
     }
 
+    // 3. DELETE em batch (um a um para evitar problemas com .in() + .select())
+    let deletedCount = 0;
+    for (const editId of idsToDelete) {
+      const { error: deleteErr } = await supabase.from("edits").delete().eq("id", editId);
+      if (!deleteErr) deletedCount++;
+      else console.warn("[delete-edits] Erro ao deletar edit", editId, deleteErr);
+    }
     return jsonResponse({ success: true, deleted_count: deletedCount });
   } catch (error) {
     console.error("[delete-edits] Erro:", error);

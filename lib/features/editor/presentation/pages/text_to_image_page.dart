@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/dio_client.dart';
-import '../../../../core/widgets/photo_limit_reached_modal.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -33,12 +32,6 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
         const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
       );
       Navigator.of(context).pushNamed('/credits-shop');
-      return;
-    }
-
-    final limits = ref.read(planLimitsProvider).valueOrNull;
-    if (limits != null && !limits.canAddMore) {
-      await PhotoLimitReachedModal.show(context);
       return;
     }
 
@@ -107,16 +100,11 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
       setState(() => _isLoading = false);
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
-        final data = e.response?.data;
-        final code = data is Map ? data['code'] : null;
         if (statusCode == 402) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
           );
           Navigator.of(context).pushNamed('/credits-shop');
-        } else if (statusCode == 403 && code == 'photo_limit_reached') {
-          await PhotoLimitReachedModal.show(context);
-          ref.invalidate(planLimitsProvider);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -239,38 +227,29 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
               child: Consumer(
                 builder: (context, ref, _) {
                   final creditsAsync = ref.watch(creditsUsageProvider);
-                  final limitsAsync = ref.watch(planLimitsProvider);
                   final balance = creditsAsync.valueOrNull?.balance ?? 0;
-                  final limits = limitsAsync.valueOrNull;
                   final isLoadingCredits = creditsAsync.isLoading;
-                  final isLoadingLimits = limitsAsync.isLoading;
                   final hasEnoughCredits = isLoadingCredits || balance >= 5;
-                  final canAddPhotos = isLoadingLimits || (limits?.canAddMore ?? true);
-                  final hasEnough = hasEnoughCredits && canAddPhotos;
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       GestureDetector(
                         onTap: () async {
-                          if (!hasEnough && !_isLoading) {
-                            if (!canAddPhotos) {
-                              await PhotoLimitReachedModal.show(context);
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Créditos insuficientes. Compre mais para continuar.'),
-                                ),
-                              );
-                              Navigator.of(context).pushNamed('/credits-shop');
-                            }
+                          if (!hasEnoughCredits && !_isLoading) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Créditos insuficientes. Compre mais para continuar.'),
+                              ),
+                            );
+                            Navigator.of(context).pushNamed('/credits-shop');
                           }
                         },
                         behavior: HitTestBehavior.opaque,
                         child: AbsorbPointer(
-                          absorbing: !hasEnough,
+                          absorbing: !hasEnoughCredits,
                           child: AppButton(
                             text: 'Gerar',
-                            onPressed: hasEnough ? _handleGenerate : null,
+                            onPressed: hasEnoughCredits ? _handleGenerate : null,
                             icon: Icons.auto_awesome,
                             isLoading: _isLoading,
                             width: double.infinity,
@@ -281,16 +260,6 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
                         const SizedBox(height: 8),
                         Text(
                           'Você precisa de 5 créditos. Toque no botão para comprar.',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                      if (!isLoadingLimits && limits != null && !limits.canAddMore) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Limite de fotos do plano atingido. Exclua fotos antigas ou faça upgrade.',
                           style: AppTextStyles.bodySmall.copyWith(
                             color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
                           ),
