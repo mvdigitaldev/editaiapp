@@ -1,11 +1,11 @@
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 /**
- * Retorna os dias de expiração do plano do usuário.
+ * Returns photo expiration days from the current user plan.
  */
 export async function getExpirationDays(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
 ): Promise<number> {
   const { data } = await supabase
     .rpc("get_plan_photo_limits", { p_user_id: userId })

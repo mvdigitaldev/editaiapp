@@ -1,6 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { deductAndCreateEdit, refundCredits } from "./credits.ts";
+import {
+  consumeReservedCredits,
+  createEditAndReserveCredits,
+  releaseReservedCredits,
+} from "../_shared/credits.ts";
 
 const FAL_API_URL = "https://fal.run/fal-ai/birefnet";
 const BUCKET_NAME = "flux-imagens";
@@ -43,7 +47,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse({ success: false, error: "Método não permitido" }, 405);
+    return jsonResponse({ success: false, error: "MÃ©todo nÃ£o permitido" }, 405);
   }
 
   try {
@@ -52,16 +56,16 @@ Deno.serve(async (req) => {
 
     if (!image_base64 || typeof image_base64 !== "string" || image_base64.trim().length === 0) {
       return jsonResponse(
-        { success: false, error: "Campo 'image_base64' é obrigatório e não pode estar vazio" },
+        { success: false, error: "Campo 'image_base64' Ã© obrigatÃ³rio e nÃ£o pode estar vazio" },
         422
       );
     }
 
     const falKey = Deno.env.get("FAL_KEY");
     if (!falKey) {
-      console.error("[remover-fundo-flux] FAL_KEY não configurada");
+      console.error("[remover-fundo-flux] FAL_KEY nÃ£o configurada");
       return jsonResponse(
-        { success: false, error: "Configuração do serviço indisponível" },
+        { success: false, error: "ConfiguraÃ§Ã£o do serviÃ§o indisponÃ­vel" },
         500
       );
     }
@@ -69,7 +73,7 @@ Deno.serve(async (req) => {
     const { base64: imageBase64, mime } = normalizeBase64(image_base64);
     if (imageBase64.length < 100) {
       return jsonResponse(
-        { success: false, error: "Imagem inválida ou base64 corrompido" },
+        { success: false, error: "Imagem invÃ¡lida ou base64 corrompido" },
         422
       );
     }
@@ -77,7 +81,7 @@ Deno.serve(async (req) => {
     const base64Bytes = Math.ceil((imageBase64.length * 3) / 4);
     if (base64Bytes > MAX_BASE64_BYTES) {
       return jsonResponse(
-        { success: false, error: "Imagem muito grande. Máximo: 10 MB." },
+        { success: false, error: "Imagem muito grande. MÃ¡ximo: 10 MB." },
         422
       );
     }
@@ -88,7 +92,7 @@ Deno.serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
+      return jsonResponse({ success: false, error: "AutenticaÃ§Ã£o obrigatÃ³ria" }, 401);
     }
     const authClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
@@ -96,15 +100,16 @@ Deno.serve(async (req) => {
     const { data: { user } } = await authClient.auth.getUser();
     const userId = user?.id ?? null;
     if (!userId) {
-      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
+      return jsonResponse({ success: false, error: "AutenticaÃ§Ã£o obrigatÃ³ria" }, 401);
     }
 
     const taskId = crypto.randomUUID();
     const fileSizeBytes = Math.ceil((imageBase64.length * 3) / 4);
 
     let editId: string;
+    let reservationId = "";
     try {
-      const result = await deductAndCreateEdit(
+      const result = await createEditAndReserveCredits(
         supabase,
         userId,
         "remove_background",
@@ -120,10 +125,11 @@ Deno.serve(async (req) => {
         }
       );
       editId = result.editId;
+      reservationId = result.reservationId;
     } catch (creditErr) {
       const err = creditErr as Error & { status?: number };
       if (err.status === 402) {
-        return jsonResponse({ success: false, error: "Créditos insuficientes" }, 402);
+        return jsonResponse({ success: false, error: "CrÃ©ditos insuficientes" }, 402);
       }
       throw creditErr;
     }
@@ -138,6 +144,8 @@ Deno.serve(async (req) => {
 
     if (insertError) {
       console.error("[remover-fundo-flux] Erro ao inserir flux_tasks:", insertError);
+      await releaseReservedCredits(supabase, reservationId, "flux_task_insert_error");
+      await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       return jsonResponse(
         { success: false, error: "Falha ao registrar tarefa" },
         500
@@ -163,12 +171,12 @@ Deno.serve(async (req) => {
       const falDetail = typeof falData?.detail === "string" ? falData.detail : JSON.stringify(falData);
       const errMsg =
         falRes.status === 401
-          ? "Token fal.ai inválido. Verifique FAL_KEY nas secrets do Supabase."
+          ? "Token fal.ai invÃ¡lido. Verifique FAL_KEY nas secrets do Supabase."
           : falRes.status === 403
-          ? `fal.ai: ${falDetail || "Verifique créditos em fal.ai/dashboard e scopes da chave em fal.ai/dashboard/keys."}`
+          ? `fal.ai: ${falDetail || "Verifique crÃ©ditos em fal.ai/dashboard e scopes da chave em fal.ai/dashboard/keys."}`
           : falDetail || `Erro na API fal.ai: ${falRes.status}`;
       console.error("[remover-fundo-flux] fal.ai error:", falRes.status, "body:", falDetail);
-      await refundCredits(supabase, userId, 7, editId);
+      await releaseReservedCredits(supabase, reservationId, "fal_api_error");
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       await supabase
         .from("flux_tasks")
@@ -187,8 +195,8 @@ Deno.serve(async (req) => {
     const outputUrl = falData?.image?.url;
     if (!outputUrl || typeof outputUrl !== "string") {
       console.error("[remover-fundo-flux] Output inesperado:", JSON.stringify(falData));
-      const errMsg = "Resultado inválido da API fal.ai";
-      await refundCredits(supabase, userId, 7, editId);
+      const errMsg = "Resultado invÃ¡lido da API fal.ai";
+      await releaseReservedCredits(supabase, reservationId, "invalid_fal_output");
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       await supabase
         .from("flux_tasks")
@@ -207,7 +215,7 @@ Deno.serve(async (req) => {
     if (!imgRes.ok) {
       const errMsg = "Falha ao obter imagem gerada";
       console.error("[remover-fundo-flux] Erro ao baixar PNG:", imgRes.status);
-      await refundCredits(supabase, userId, 7, editId);
+      await releaseReservedCredits(supabase, reservationId, "download_generated_error");
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       await supabase
         .from("flux_tasks")
@@ -234,7 +242,7 @@ Deno.serve(async (req) => {
     if (uploadError) {
       const uploadErrMsg = uploadError.message || JSON.stringify(uploadError);
       console.error("[remover-fundo-flux] Erro upload:", uploadError);
-      await refundCredits(supabase, userId, 7, editId);
+      await releaseReservedCredits(supabase, reservationId, "storage_upload_error");
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       await supabase
         .from("flux_tasks")
@@ -270,6 +278,26 @@ Deno.serve(async (req) => {
         ai_processing_time_ms: aiProcessingTimeMs,
       })
       .eq("id", editId);
+
+    try {
+      await consumeReservedCredits(supabase, reservationId, editId, "usage");
+    } catch (consumeErr) {
+      console.error("[remover-fundo-flux] Erro ao consumir reserva:", consumeErr);
+      await releaseReservedCredits(supabase, reservationId, "consume_failed");
+      await supabase
+        .from("flux_tasks")
+        .update({
+          status: "error",
+          error_message: "Falha ao consumir crÃ©ditos",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("task_id", taskId);
+      await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
+      return jsonResponse(
+        { success: false, error: "Falha ao consumir crÃ©ditos" },
+        500,
+      );
+    }
 
     return jsonResponse({ task_id: taskId });
   } catch (error) {

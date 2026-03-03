@@ -1,6 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { deductAndCreateEdit, refundCredits } from "./credits.ts";
+import {
+  createEditAndReserveCredits,
+  releaseReservedCredits,
+} from "../_shared/credits.ts";
 import {
   ImageMagick,
   initializeImageMagick,
@@ -53,7 +56,7 @@ function resizeToMaxMp(
     const w = img.width;
     const h = img.height;
     if (w <= 0 || h <= 0) {
-      throw new Error("Imagem sem dimensões válidas");
+      throw new Error("Imagem sem dimensÃµes vÃ¡lidas");
     }
     const total = w * h;
     const maxPixels = maxMp * 1_000_000;
@@ -82,7 +85,7 @@ function resizeToMaxMp(
   });
 
   if (outWidth < 64 || outHeight < 64 || !outData || outData.length === 0) {
-    throw new Error("Falha ao processar imagem. Verifique se o formato é válido (JPEG/PNG).");
+    throw new Error("Falha ao processar imagem. Verifique se o formato Ã© vÃ¡lido (JPEG/PNG).");
   }
 
   let outStr = "";
@@ -248,7 +251,7 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse({ success: false, error: "Método não permitido" }, 405);
+    return jsonResponse({ success: false, error: "MÃ©todo nÃ£o permitido" }, 405);
   }
 
   try {
@@ -257,7 +260,7 @@ Deno.serve(async (req) => {
 
     if (!user_prompt || typeof user_prompt !== "string" || user_prompt.trim().length === 0) {
       return jsonResponse(
-        { success: false, error: "Campo 'user_prompt' é obrigatório e não pode estar vazio" },
+        { success: false, error: "Campo 'user_prompt' Ã© obrigatÃ³rio e nÃ£o pode estar vazio" },
         422
       );
     }
@@ -271,7 +274,7 @@ Deno.serve(async (req) => {
 
     if (typeof width !== "number" || typeof height !== "number") {
       return jsonResponse(
-        { success: false, error: "Campos 'width' e 'height' são obrigatórios e devem ser números" },
+        { success: false, error: "Campos 'width' e 'height' sÃ£o obrigatÃ³rios e devem ser nÃºmeros" },
         422
       );
     }
@@ -287,7 +290,7 @@ Deno.serve(async (req) => {
     const outH = Math.floor(height) & ~15;
     if (outW < 64 || outH < 64) {
       return jsonResponse(
-        { success: false, error: "width e height devem ser múltiplos de 16 e >= 64" },
+        { success: false, error: "width e height devem ser mÃºltiplos de 16 e >= 64" },
         422
       );
     }
@@ -295,16 +298,16 @@ Deno.serve(async (req) => {
     const bflApiKey = Deno.env.get("BFL_API_KEY");
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
     if (!bflApiKey) {
-      console.error("[editar-multi-imagem-flux] BFL_API_KEY não configurada");
+      console.error("[editar-multi-imagem-flux] BFL_API_KEY nÃ£o configurada");
       return jsonResponse(
-        { success: false, error: "Configuração do serviço indisponível" },
+        { success: false, error: "ConfiguraÃ§Ã£o do serviÃ§o indisponÃ­vel" },
         500
       );
     }
     if (!openaiKey) {
-      console.error("[editar-multi-imagem-flux] OPENAI_API_KEY não configurada");
+      console.error("[editar-multi-imagem-flux] OPENAI_API_KEY nÃ£o configurada");
       return jsonResponse(
-        { success: false, error: "Configuração do serviço indisponível" },
+        { success: false, error: "ConfiguraÃ§Ã£o do serviÃ§o indisponÃ­vel" },
         500
       );
     }
@@ -314,7 +317,7 @@ Deno.serve(async (req) => {
       const img = images[i];
       if (typeof img !== "string" || img.trim().length < 100) {
         return jsonResponse(
-          { success: false, error: `Imagem ${i + 1} inválida ou base64 corrompido` },
+          { success: false, error: `Imagem ${i + 1} invÃ¡lida ou base64 corrompido` },
           422
         );
       }
@@ -322,7 +325,7 @@ Deno.serve(async (req) => {
       const base64Bytes = Math.ceil((normalized.length * 3) / 4);
       if (base64Bytes > MAX_BASE64_BYTES) {
         return jsonResponse(
-          { success: false, error: `Imagem ${i + 1} muito grande. Máximo recomendado: ~10 MB.` },
+          { success: false, error: `Imagem ${i + 1} muito grande. MÃ¡ximo recomendado: ~10 MB.` },
           422
         );
       }
@@ -341,7 +344,7 @@ Deno.serve(async (req) => {
     } catch (resizeErr) {
       console.error("[editar-multi-imagem-flux] Resize error:", resizeErr);
       return jsonResponse(
-        { success: false, error: "Falha ao processar imagem. Verifique se o formato é válido (JPEG/PNG)." },
+        { success: false, error: "Falha ao processar imagem. Verifique se o formato Ã© vÃ¡lido (JPEG/PNG)." },
         422
       );
     }
@@ -352,7 +355,7 @@ Deno.serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
+      return jsonResponse({ success: false, error: "AutenticaÃ§Ã£o obrigatÃ³ria" }, 401);
     }
     const authClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
@@ -360,7 +363,7 @@ Deno.serve(async (req) => {
     const { data: { user } } = await authClient.auth.getUser();
     const userId = user?.id ?? null;
     if (!userId) {
-      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
+      return jsonResponse({ success: false, error: "AutenticaÃ§Ã£o obrigatÃ³ria" }, 401);
     }
 
     const { improvedPrompt, intent, avgSimilarity, matchedIds } = await optimizePromptMultiRef(
@@ -392,8 +395,9 @@ Deno.serve(async (req) => {
     const creditsMulti = 7 + (resizedImages.length - 1) * 3;
     const firstImageSize = Math.ceil((resizedImages[0]!.length * 3) / 4);
     let editId: string;
+    let reservationId = "";
     try {
-      const result = await deductAndCreateEdit(
+      const result = await createEditAndReserveCredits(
         supabase,
         userId,
         "multi_image",
@@ -411,10 +415,11 @@ Deno.serve(async (req) => {
         }
       );
       editId = result.editId;
+      reservationId = result.reservationId;
     } catch (creditErr) {
       const err = creditErr as Error & { status?: number };
       if (err.status === 402) {
-        return jsonResponse({ success: false, error: "Créditos insuficientes" }, 402);
+        return jsonResponse({ success: false, error: "CrÃ©ditos insuficientes" }, 402);
       }
       throw creditErr;
     }
@@ -444,13 +449,13 @@ Deno.serve(async (req) => {
 
     if (!initRes.ok) {
       const errText = await initRes.text();
-      let errMsg = "Erro ao iniciar edição na BFL";
-      if (initRes.status === 401) errMsg = "API key BFL inválida";
-      else if (initRes.status === 402) errMsg = "Créditos insuficientes na conta BFL";
-      else if (initRes.status === 422) errMsg = "Dados inválidos: " + (errText || "verifique prompt e imagens");
+      let errMsg = "Erro ao iniciar ediÃ§Ã£o na BFL";
+      if (initRes.status === 401) errMsg = "API key BFL invÃ¡lida";
+      else if (initRes.status === 402) errMsg = "CrÃ©ditos insuficientes na conta BFL";
+      else if (initRes.status === 422) errMsg = "Dados invÃ¡lidos: " + (errText || "verifique prompt e imagens");
       else if (initRes.status === 429) errMsg = "Rate limit excedido, tente novamente em breve";
       console.error("[editar-multi-imagem-flux] BFL init error:", initRes.status, errText);
-      await refundCredits(supabase, userId, creditsMulti, editId);
+      await releaseReservedCredits(supabase, reservationId, "bfl_init_error");
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       return jsonResponse({ success: false, error: errMsg }, initRes.status >= 500 ? 502 : initRes.status);
     }
@@ -460,9 +465,9 @@ Deno.serve(async (req) => {
 
     if (!taskId) {
       console.error("[editar-multi-imagem-flux] Resposta BFL sem id:", initData);
-      await refundCredits(supabase, userId, creditsMulti, editId);
+      await releaseReservedCredits(supabase, reservationId, "missing_task_id");
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
-      return jsonResponse({ success: false, error: "Resposta inválida da API" }, 502);
+      return jsonResponse({ success: false, error: "Resposta invÃ¡lida da API" }, 502);
     }
 
     await supabase.from("edits").update({ task_id: taskId }).eq("id", editId);
@@ -476,12 +481,13 @@ Deno.serve(async (req) => {
 
     if (insertError) {
       console.error("[editar-multi-imagem-flux] Erro ao inserir flux_tasks:", insertError);
+      await releaseReservedCredits(supabase, reservationId, "flux_task_insert_error");
+      await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       return jsonResponse(
         { success: false, error: "Falha ao registrar tarefa" },
         500
       );
     }
-
     return jsonResponse({ task_id: taskId });
   } catch (error) {
     console.error("[editar-multi-imagem-flux] Erro:", error);
