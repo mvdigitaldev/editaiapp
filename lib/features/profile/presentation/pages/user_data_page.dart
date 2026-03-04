@@ -320,6 +320,7 @@ class _UserDataPageState extends ConsumerState<UserDataPage> {
                       ),
                       const SizedBox(height: 20),
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Expanded(
                             child: AppTextField(
@@ -330,7 +331,7 @@ class _UserDataPageState extends ConsumerState<UserDataPage> {
                           ),
                           const SizedBox(width: 12),
                           SizedBox(
-                            height: 48,
+                            height: 56,
                             child: ElevatedButton(
                               onPressed: _isSavingProfile ? null : _saveProfile,
                               style: ElevatedButton.styleFrom(

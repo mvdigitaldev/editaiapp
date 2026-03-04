@@ -69,3 +69,29 @@
 Execute a migration `supabase/migrations/20250226100000_create_device_tokens.sql` (via `supabase db push` ou copiando o SQL no Supabase Dashboard > SQL Editor) para criar a tabela `device_tokens` e a função RPC `save_device_token`.
 
 Para enviar notificações (opcional): crie uma Edge Function que use a Firebase Admin SDK (secret `FIREBASE_SERVICE_ACCOUNT_JSON`) e leia os tokens da tabela `device_tokens`.
+
+---
+
+## Notificação ao ganhar créditos
+
+Quando o usuário recebe créditos (insert em `credit_transactions` com `amount > 0`), o app envia uma push notification.
+
+### Backend (Supabase)
+
+1. **Edge Function `notify-credit-earned`**
+   - Deploy: `supabase functions deploy notify-credit-earned`
+   - Variáveis de ambiente (Supabase Dashboard > Edge Functions > notify-credit-earned > Settings):
+     - `FIREBASE_SERVICE_ACCOUNT_JSON`: JSON completo da conta de serviço do Firebase (Project settings > Service accounts > Generate new private key). Cole o conteúdo do arquivo JSON como string.
+     - `NOTIFY_CREDITS_INVOCATION_SECRET`: um segredo compartilhado (ex.: string aleatória longa). O **mesmo valor** deve ser guardado no Vault (passo abaixo). A função usa `SUPABASE_SERVICE_ROLE_KEY` das secrets do Supabase; não é necessário configurá-la manualmente.
+
+2. **Extensão pg_net, trigger e Vault**
+   - Execute as migrations `20260324120000_notify_credit_earned_trigger.sql` e `20260325120000_notify_credit_earned_use_vault.sql`.
+   - No Dashboard: Database > Extensions > habilite **pg_net** (e **Vault**, se ainda não estiver).
+   - No **Vault** (Dashboard > Database > Vault): crie um secret com **name** `notify_credits_invocation_secret` e **valor** igual ao que você definiu em `NOTIFY_CREDITS_INVOCATION_SECRET` na Edge Function.
+   - Em `app_settings` (via SQL ou Dashboard), configure apenas a URL:
+     - `notify_credit_earned_url`: `https://SEU_PROJECT_REF.supabase.co/functions/v1/notify-credit-earned`
+   - **Não** guarde a Service Role Key na tabela; o trigger usa o segredo do Vault e a Edge Function usa a `SUPABASE_SERVICE_ROLE_KEY` das suas secrets.
+
+### App (Flutter)
+
+- Ao tocar na notificação de créditos, o app abre a tela **Créditos Extra** (`/credits-shop`) via deep link. Nenhuma alteração extra é necessária no código.

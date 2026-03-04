@@ -9,6 +9,7 @@ class User {
   final DateTime? trialEndsAt;
   final DateTime? subscriptionEndsAt;
   final DateTime? subscriptionStartedAt;
+  final String? referralCode;
 
   User({
     required this.id,
@@ -21,6 +22,7 @@ class User {
     this.trialEndsAt,
     this.subscriptionEndsAt,
     this.subscriptionStartedAt,
+    this.referralCode,
   });
 
   User copyWith({
@@ -34,6 +36,7 @@ class User {
     DateTime? trialEndsAt,
     DateTime? subscriptionEndsAt,
     DateTime? subscriptionStartedAt,
+    String? referralCode,
   }) {
     return User(
       id: id ?? this.id,
@@ -46,6 +49,7 @@ class User {
       trialEndsAt: trialEndsAt ?? this.trialEndsAt,
       subscriptionEndsAt: subscriptionEndsAt ?? this.subscriptionEndsAt,
       subscriptionStartedAt: subscriptionStartedAt ?? this.subscriptionStartedAt,
+      referralCode: referralCode ?? this.referralCode,
     );
   }
 }

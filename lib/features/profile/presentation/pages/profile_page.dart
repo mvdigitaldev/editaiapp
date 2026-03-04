@@ -394,7 +394,7 @@ class ProfilePage extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Ganhe 10 créditos grátis',
+                            'Ganhe créditos grátis',
                             style: AppTextStyles.headingSmall.copyWith(
                               color: AppColors.textLight,
                             ),

@@ -192,9 +192,9 @@ class _ModeloCard extends StatelessWidget {
             ),
             child: Text(
               descricao,
-              style: AppTextStyles.bodySmall.copyWith(
+              style: AppTextStyles.bodyMedium.copyWith(
                 color: Colors.white,
-                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,

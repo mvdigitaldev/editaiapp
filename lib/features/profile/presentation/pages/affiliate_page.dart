@@ -1,15 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/stat_card.dart';
 import '../../../../core/widgets/share_button.dart';
-import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../data/datasources/app_settings_datasource.dart';
+import '../../data/datasources/referrals_datasource.dart';
+import '../../data/models/referral_models.dart';
+
+final _appSettingsProvider = Provider<AppSettingsDataSource>((ref) {
+  return AppSettingsDataSourceImpl(Supabase.instance.client);
+});
+
+final _referralsDataSourceProvider = Provider<ReferralsDataSource>((ref) {
+  return ReferralsDataSourceImpl(Supabase.instance.client);
+});
 
 class AffiliatePage extends ConsumerStatefulWidget {
   const AffiliatePage({super.key});
@@ -19,11 +30,62 @@ class AffiliatePage extends ConsumerStatefulWidget {
 }
 
 class _AffiliatePageState extends ConsumerState<AffiliatePage> {
-  final String _referralLink = 'editai.app/ref/UX24_MARCOS';
-  int _currentNavIndex = 2;
+  String? _referralLink;
+  ReferralSummary _summary = ReferralSummary.empty;
+  bool _isLoadingSummary = false;
+  String? _summaryError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final authState = ref.read(authStateProvider);
+    final user = authState.user;
+    if (user == null) return;
+
+    setState(() {
+      _isLoadingSummary = true;
+      _summaryError = null;
+    });
+
+    try {
+      final settings = ref.read(_appSettingsProvider);
+      final referralsDs = ref.read(_referralsDataSourceProvider);
+
+      final results = await Future.wait([
+        settings.getValue('referral_url'),
+        referralsDs.getSummary(user.id),
+      ]);
+
+      final baseUrl = (results[0] as String?) ?? '';
+      final summary = results[1] as ReferralSummary;
+
+      final referralCode = user.referralCode;
+      final builtLink = (baseUrl.isNotEmpty && referralCode != null)
+          ? '$baseUrl$referralCode'
+          : null;
+
+      if (!mounted) return;
+      setState(() {
+        _referralLink = builtLink;
+        _summary = summary;
+        _isLoadingSummary = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _summaryError = e.toString();
+        _isLoadingSummary = false;
+      });
+    }
+  }
 
   void _copyLink() {
-    Clipboard.setData(ClipboardData(text: _referralLink));
+    if (_referralLink == null) return;
+    Clipboard.setData(ClipboardData(text: _referralLink!));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Link copiado!'),
@@ -33,6 +95,7 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
   }
 
   Future<void> _shareViaWhatsApp() async {
+    if (_referralLink == null) return;
     final message = 'Confira o Editai! $_referralLink';
     final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}');
     if (await canLaunchUrl(uri)) {
@@ -40,15 +103,13 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
     }
   }
 
-  Future<void> _shareViaTelegram() async {
-    final message = 'Confira o Editai! $_referralLink';
-    final uri = Uri.parse('https://t.me/share/url?url=$_referralLink&text=${Uri.encodeComponent(message)}');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    }
+  void _shareViaFacebook() {
+    if (_referralLink == null) return;
+    Share.share('Confira o Editai! $_referralLink');
   }
 
-  void _shareGeneric() {
+  void _shareViaInstagram() {
+    if (_referralLink == null) return;
     Share.share('Confira o Editai! $_referralLink');
   }
 
@@ -229,49 +290,55 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 16,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? AppColors.backgroundDark
-                                        : AppColors.backgroundLight,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isDark
-                                          ? AppColors.borderDark
-                                          : AppColors.border,
+                          IntrinsicHeight(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 16,
                                     ),
-                                  ),
-                                  child: Text(
-                                    _referralLink,
-                                    style: AppTextStyles.bodySmall.copyWith(
+                                    decoration: BoxDecoration(
                                       color: isDark
-                                          ? AppColors.textLight
-                                          : AppColors.textPrimary,
+                                          ? AppColors.backgroundDark
+                                          : AppColors.backgroundLight,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? AppColors.borderDark
+                                            : AppColors.border,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      _referralLink ?? 'Link de indicação indisponível',
+                                      style: AppTextStyles.bodySmall.copyWith(
+                                        color: isDark
+                                            ? AppColors.textLight
+                                            : AppColors.textPrimary,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                onPressed: _copyLink,
-                                icon: const Icon(Icons.content_copy, size: 18),
-                                label: const Text('Copiar'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 16,
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 96,
+                                  child: SizedBox.expand(
+                                    child: ElevatedButton.icon(
+                                      onPressed: _referralLink == null ? null : _copyLink,
+                                      icon: const Icon(Icons.content_copy, size: 18),
+                                      label: const Text('Copiar'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -284,8 +351,12 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
                           child: StatCard(
                             icon: Icons.person_add,
                             label: 'AMIGOS',
-                            value: '12',
-                            subtitle: '3 ativos este mês',
+                            value: _isLoadingSummary
+                                ? '...'
+                                : _summary.friendsCount.toString(),
+                            subtitle: _summaryError != null
+                                ? 'Erro ao carregar'
+                                : 'Total indicados',
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -293,8 +364,12 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
                           child: StatCard(
                             icon: Icons.bolt,
                             label: 'CRÉDITOS',
-                            value: '120',
-                            subtitle: 'Disponíveis p/ uso',
+                            value: _isLoadingSummary
+                                ? '...'
+                                : _summary.totalRewardCredits.toString(),
+                            subtitle: _summaryError != null
+                                ? 'Erro ao carregar'
+                                : 'Ganhos com indicações',
                             subtitleColor: AppColors.primary,
                           ),
                         ),
@@ -322,21 +397,16 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
                           onTap: _shareViaWhatsApp,
                         ),
                         ShareButton(
+                          icon: Icons.facebook,
+                          label: 'Facebook',
+                          iconColor: const Color(0xFF1877F2),
+                          onTap: _shareViaFacebook,
+                        ),
+                        ShareButton(
                           icon: Icons.photo_camera,
-                          label: 'Stories',
+                          label: 'Instagram',
                           iconColor: const Color(0xFFE1306C),
-                          onTap: _shareGeneric,
-                        ),
-                        ShareButton(
-                          icon: Icons.send,
-                          label: 'Telegram',
-                          iconColor: const Color(0xFF0088cc),
-                          onTap: _shareViaTelegram,
-                        ),
-                        ShareButton(
-                          icon: Icons.more_horiz,
-                          label: 'Mais',
-                          onTap: _shareGeneric,
+                          onTap: _shareViaInstagram,
                         ),
                       ],
                     ),
@@ -344,7 +414,7 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
                     // Details Link
                     TextButton(
                       onPressed: () {
-                        // TODO: Navigate to referral details
+                        Navigator.of(context).pushNamed('/referral-details');
                       },
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -377,77 +447,13 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 100), // Space for bottom nav
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
             ),
-            // Bottom Navigation
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? AppColors.backgroundDark.withOpacity(0.9)
-                    : AppColors.surfaceLight.withOpacity(0.9),
-                border: Border(
-                  top: BorderSide(
-                    color: isDark ? AppColors.borderDark : AppColors.border,
-                  ),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _SimpleNavItem(
-                    icon: Icons.home,
-                    isSelected: false,
-                    onTap: () => Navigator.of(context).pushNamed('/home'),
-                  ),
-                  _SimpleNavItem(
-                    icon: Icons.auto_fix_high,
-                    isSelected: false,
-                    onTap: () {},
-                  ),
-                  _SimpleNavItem(
-                    icon: Icons.share,
-                    isSelected: true,
-                    onTap: () {},
-                  ),
-                  _SimpleNavItem(
-                    icon: Icons.person,
-                    isSelected: false,
-                    onTap: () => Navigator.of(context).pushNamed('/profile'),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SimpleNavItem extends StatelessWidget {
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _SimpleNavItem({
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Icon(
-        icon,
-        color: isSelected ? AppColors.primary : AppColors.textSecondary,
-        size: 24,
       ),
     );
   }

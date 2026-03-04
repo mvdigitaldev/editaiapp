@@ -261,7 +261,7 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
           _buildSummaryCard(isDark),
           const SizedBox(height: 24),
           Text(
-            'Movimentacoes no mes',
+            'Movimentações no mês',
             style: AppTextStyles.headingSmall.copyWith(
               color: isDark ? AppColors.textLight : AppColors.textPrimary,
             ),
@@ -352,7 +352,7 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$netSign${_summary.netTotal.abs()} creditos no saldo do mes',
+                  '$netSign${_summary.netTotal.abs()} no saldo do mes',
                   style: AppTextStyles.headingSmall.copyWith(color: netColor),
                 ),
                 const SizedBox(height: 4),

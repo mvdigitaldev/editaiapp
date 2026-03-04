@@ -13,6 +13,7 @@ class UserModel extends User {
     super.trialEndsAt,
     super.subscriptionEndsAt,
     super.subscriptionStartedAt,
+    super.referralCode,
   });
 
   static DateTime? _parseDateTime(dynamic v) => ServerDateUtils.parseServerDate(v);
@@ -37,6 +38,7 @@ class UserModel extends User {
       trialEndsAt: _parseDateTime(json['trial_ends_at']),
       subscriptionEndsAt: _parseDateTime(json['subscription_ends_at']),
       subscriptionStartedAt: _parseDateTime(json['subscription_started_at']),
+      referralCode: json['referral_code'] as String?,
     );
   }
 
@@ -52,6 +54,7 @@ class UserModel extends User {
       if (trialEndsAt != null) 'trial_ends_at': trialEndsAt!.toIso8601String(),
       if (subscriptionEndsAt != null) 'subscription_ends_at': subscriptionEndsAt!.toIso8601String(),
       if (subscriptionStartedAt != null) 'subscription_started_at': subscriptionStartedAt!.toIso8601String(),
+      if (referralCode != null) 'referral_code': referralCode,
     };
   }
 
@@ -67,6 +70,7 @@ class UserModel extends User {
       trialEndsAt: trialEndsAt,
       subscriptionEndsAt: subscriptionEndsAt,
       subscriptionStartedAt: subscriptionStartedAt,
+      referralCode: referralCode,
     );
   }
 }

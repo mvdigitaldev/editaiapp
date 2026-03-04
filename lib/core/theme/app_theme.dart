@@ -295,6 +295,12 @@ class AppTheme {
           ),
         ),
       ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: Colors.white,
+        contentTextStyle: AppTextStyles.bodyMedium.copyWith(
+          color: AppColors.textPrimary,
+        ),
+      ),
       cardTheme: CardThemeData(
         color: AppColors.surfaceDark,
         elevation: 0,

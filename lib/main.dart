@@ -36,6 +36,7 @@ import 'features/subscription/presentation/pages/checkout_webview_page.dart';
 import 'features/profile/presentation/pages/payment_history_page.dart';
 import 'features/profile/presentation/pages/legal_document_page.dart';
 import 'features/profile/presentation/pages/help_center_page.dart';
+import 'features/profile/presentation/pages/referral_details_page.dart';
 import 'features/dashboard/presentation/pages/credit_history_page.dart';
 import 'features/gallery/presentation/pages/edit_detail_page.dart';
 import 'features/models/presentation/pages/edit_model_page.dart';
@@ -136,6 +137,15 @@ class MyApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp(
+      builder: (context, child) {
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+          },
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       navigatorKey: navigatorKey,
       title: AppConfig.appName,
       theme: AppTheme.lightTheme,
@@ -194,6 +204,7 @@ class MyApp extends ConsumerWidget {
           final editId = ModalRoute.of(context)!.settings.arguments as String?;
           return EditDetailPage(editId: editId ?? '');
         },
+        '/referral-details': (context) => const ReferralDetailsPage(),
       },
     );
   }

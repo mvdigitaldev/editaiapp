@@ -114,36 +114,49 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // 4 opções principais (grid 2x2)
+                  // 4 opções principais (cards horizontais)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      childAspectRatio: 1.1,
+                    child: Column(
                       children: [
-                        _OptionCard(
+                        _HeroActionCard(
+                          index: 0,
                           icon: Icons.text_fields,
-                          label: 'Texto para imagem',
-                          onTap: () => Navigator.of(context).pushNamed('/text-to-image'),
+                          title: 'Texto para imagem',
+                          description:
+                              'Gere imagens originais a partir de descrições.',
+                          onTap: () =>
+                              Navigator.of(context).pushNamed('/text-to-image'),
                         ),
-                        _OptionCard(
+                        const SizedBox(height: 12),
+                        _HeroActionCard(
+                          index: 1,
                           icon: Icons.edit,
-                          label: 'Editar imagem',
-                          onTap: () => Navigator.of(context).pushNamed('/edit-image'),
+                          title: 'Editar imagem',
+                          description:
+                              'Ajuste cores, iluminação e detalhes com IA.',
+                          onTap: () =>
+                              Navigator.of(context).pushNamed('/edit-image'),
                         ),
-                        _OptionCard(
+                        const SizedBox(height: 12),
+                        _HeroActionCard(
+                          index: 2,
                           icon: Icons.collections,
-                          label: 'Criar composição',
-                          onTap: () => Navigator.of(context).pushNamed('/create-composition'),
+                          title: 'Criar composição',
+                          description:
+                              'Combine vários elementos em uma cena única.',
+                          onTap: () => Navigator.of(context)
+                              .pushNamed('/create-composition'),
                         ),
-                        _OptionCard(
+                        const SizedBox(height: 12),
+                        _HeroActionCard(
+                          index: 3,
                           icon: Icons.wallpaper,
-                          label: 'Remover fundo',
-                          onTap: () => Navigator.of(context).pushNamed('/remove-background'),
+                          title: 'Remover fundo',
+                          description:
+                              'Remova o fundo em segundos, com precisão.',
+                          onTap: () => Navigator.of(context)
+                              .pushNamed('/remove-background'),
                         ),
                       ],
                     ),
@@ -295,42 +308,199 @@ class _OptionCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isDark ? AppColors.borderDark : AppColors.border,
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Row(
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.primary.withOpacity(0.18),
+                      AppColors.primary.withOpacity(0.05),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 28, color: AppColors.primary),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                child: Icon(
+                  icon,
+                  size: 26,
+                  color: AppColors.primary,
                 ),
               ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: AppTextStyles.bodyLarge.copyWith(
+                        color:
+                            isDark ? AppColors.textLight : AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Toque para começar',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: isDark
+                            ? AppColors.textTertiary
+                            : AppColors.textSecondary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color:
+                    isDark ? AppColors.textTertiary : AppColors.textSecondary,
+              ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroActionCard extends StatelessWidget {
+  final int index;
+  final IconData icon;
+  final String title;
+  final String description;
+  final VoidCallback onTap;
+
+  const _HeroActionCard({
+    required this.index,
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 350 + index * 70),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, (1 - value) * 16),
+            child: child,
+          ),
+        );
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark ? AppColors.borderDark : AppColors.border,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(isDark ? 0.25 : 0.06),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.primary.withOpacity(0.22),
+                        AppColors.primary.withOpacity(0.06),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 26,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: AppTextStyles.headingSmall.copyWith(
+                          color: isDark
+                              ? AppColors.textLight
+                              : AppColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: isDark
+                              ? AppColors.textTertiary
+                              : AppColors.textSecondary,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color:
+                      isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                ),
+              ],
+            ),
           ),
         ),
       ),
