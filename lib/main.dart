@@ -11,6 +11,7 @@ import 'core/services/notification_service.dart';
 import 'firebase_options.dart';
 import 'core/storage/local_storage.dart' as app_storage;
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_mode_provider.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/pages/register_page.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
@@ -126,18 +127,20 @@ void main() async {
   }
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key, this.navigatorKey});
   final GlobalKey<NavigatorState>? navigatorKey;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
+
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: AppConfig.appName,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       initialRoute: '/',
       routes: {
         '/': (context) => const AuthWrapper(),
@@ -155,7 +158,8 @@ class MyApp extends StatelessWidget {
           return AIPromptEditorPage(imagePath: args as String?);
         },
         '/comparison': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
           return ComparisonPage(
             beforeImagePath: args?['before'] as String?,
             afterImagePath: args?['after'] as String?,

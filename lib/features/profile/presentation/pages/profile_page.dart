@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:editaiapp/features/subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../../core/utils/server_date_utils.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/theme/theme_mode_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart'
     as auth_providers;
@@ -17,7 +16,11 @@ class ProfilePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentBrightness = Theme.of(context).brightness;
+    final isDark = currentBrightness == Brightness.dark;
+    final themeToggleLabel = isDark ? 'Modo claro' : 'Modo escuro';
+    final themeToggleSemanticLabel =
+        isDark ? 'Ativar modo claro' : 'Ativar modo escuro';
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
@@ -27,7 +30,8 @@ class ProfilePage extends ConsumerWidget {
         user.subscriptionTier.toLowerCase() != 'free' &&
         user.subscriptionEndsAt != null) {
       final date = user.subscriptionEndsAt!;
-      renewalText = 'Renova em ${ServerDateUtils.formatForDisplay(date, pattern: 'd MMM')}';
+      renewalText =
+          'Renova em ${ServerDateUtils.formatForDisplay(date, pattern: 'd MMM')}';
     }
 
     return Scaffold(
@@ -40,8 +44,7 @@ class ProfilePage extends ConsumerWidget {
               child: Text(
                 'Perfil',
                 style: AppTextStyles.headingMedium.copyWith(
-                  color:
-                      isDark ? AppColors.textLight : AppColors.textPrimary,
+                  color: isDark ? AppColors.textLight : AppColors.textPrimary,
                 ),
               ),
             ),
@@ -175,8 +178,7 @@ class ProfilePage extends ConsumerWidget {
                           const SizedBox(height: 16),
                           creditsUsageAsync.when(
                             loading: () => Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 16),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
                               child: Center(
                                 child: SizedBox(
                                   width: 18,
@@ -191,8 +193,7 @@ class ProfilePage extends ConsumerWidget {
                               ),
                             ),
                             error: (error, _) => Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 4),
+                              padding: const EdgeInsets.symmetric(vertical: 4),
                               child: Text(
                                 'Não foi possível carregar o uso de créditos.',
                                 style: AppTextStyles.bodySmall.copyWith(
@@ -213,8 +214,7 @@ class ProfilePage extends ConsumerWidget {
                                     children: [
                                       Text(
                                         'Créditos de IA',
-                                        style:
-                                            AppTextStyles.bodySmall.copyWith(
+                                        style: AppTextStyles.bodySmall.copyWith(
                                           color: isDark
                                               ? AppColors.textLight
                                               : AppColors.textPrimary,
@@ -222,8 +222,8 @@ class ProfilePage extends ConsumerWidget {
                                       ),
                                       Text(
                                         '$balance',
-                                        style: AppTextStyles.headingSmall
-                                            .copyWith(
+                                        style:
+                                            AppTextStyles.headingSmall.copyWith(
                                           color: isDark
                                               ? AppColors.textLight
                                               : AppColors.textPrimary,
@@ -236,8 +236,7 @@ class ProfilePage extends ConsumerWidget {
                                     balance > 0
                                         ? 'Você tem $balance créditos disponíveis.'
                                         : 'Recarregue créditos para usar as ferramentas de IA.',
-                                    style:
-                                        AppTextStyles.bodySmall.copyWith(
+                                    style: AppTextStyles.bodySmall.copyWith(
                                       color: isDark
                                           ? AppColors.textTertiary
                                           : AppColors.textSecondary,
@@ -317,11 +316,36 @@ class ProfilePage extends ConsumerWidget {
                                 ? AppColors.borderDark
                                 : AppColors.border,
                           ),
+                          Semantics(
+                            button: true,
+                            label: themeToggleSemanticLabel,
+                            hint: 'Toque para alternar o tema do aplicativo',
+                            child: _ProfileOption(
+                              icon: isDark
+                                  ? Icons.light_mode_outlined
+                                  : Icons.dark_mode_outlined,
+                              label: themeToggleLabel,
+                              showChevron: false,
+                              onTap: () {
+                                ref
+                                    .read(themeModeProvider.notifier)
+                                    .toggleByCurrentBrightness(
+                                        currentBrightness);
+                              },
+                            ),
+                          ),
+                          Divider(
+                            height: 1,
+                            color: isDark
+                                ? AppColors.borderDark
+                                : AppColors.border,
+                          ),
                           _ProfileOption(
                             icon: Icons.receipt_long,
                             label: 'Histórico de Pagamentos',
                             onTap: () {
-                              Navigator.of(context).pushNamed('/payment-history');
+                              Navigator.of(context)
+                                  .pushNamed('/payment-history');
                             },
                           ),
                           Divider(
@@ -484,12 +508,14 @@ class ProfilePage extends ConsumerWidget {
                                     actions: [
                                       TextButton(
                                         onPressed: () =>
-                                            Navigator.of(dialogContext).pop(false),
+                                            Navigator.of(dialogContext)
+                                                .pop(false),
                                         child: const Text('Cancelar'),
                                       ),
                                       TextButton(
                                         onPressed: () =>
-                                            Navigator.of(dialogContext).pop(true),
+                                            Navigator.of(dialogContext)
+                                                .pop(true),
                                         child: const Text('Sair'),
                                       ),
                                     ],
@@ -559,12 +585,14 @@ class _ProfileOption extends StatelessWidget {
   final IconData icon;
   final String label;
   final Widget? trailing;
+  final bool showChevron;
   final VoidCallback onTap;
 
   const _ProfileOption({
     required this.icon,
     required this.label,
     this.trailing,
+    this.showChevron = true,
     required this.onTap,
   });
 
@@ -597,6 +625,8 @@ class _ProfileOption extends StatelessWidget {
             ),
             if (trailing != null)
               trailing!
+            else if (!showChevron)
+              const SizedBox.shrink()
             else
               Icon(
                 Icons.chevron_right,

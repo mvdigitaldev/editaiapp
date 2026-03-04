@@ -1,30 +1,69 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:editaiapp/main.dart';
+import 'package:editaiapp/features/auth/presentation/pages/register_page.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('register page opens privacy policy document', (tester) async {
+    String? openedSlug;
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: const RegisterPage(),
+          onGenerateRoute: (settings) {
+            if (settings.name == '/legal-document') {
+              openedSlug = settings.arguments as String?;
+              return MaterialPageRoute<void>(
+                builder: (_) => const Scaffold(
+                  body: Text('Documento legal'),
+                ),
+              );
+            }
+            return null;
+          },
+        ),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    final privacyButton = find.text('Política de Privacidade');
+    await tester.ensureVisible(privacyButton);
+    await tester.tap(privacyButton);
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(openedSlug, 'privacy-policy');
+    expect(find.text('Documento legal'), findsOneWidget);
+  });
+
+  testWidgets('register page opens terms of use document', (tester) async {
+    String? openedSlug;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: const RegisterPage(),
+          onGenerateRoute: (settings) {
+            if (settings.name == '/legal-document') {
+              openedSlug = settings.arguments as String?;
+              return MaterialPageRoute<void>(
+                builder: (_) => const Scaffold(
+                  body: Text('Documento legal'),
+                ),
+              );
+            }
+            return null;
+          },
+        ),
+      ),
+    );
+
+    final termsButton = find.text('Termos de Uso');
+    await tester.ensureVisible(termsButton);
+    await tester.tap(termsButton);
+    await tester.pumpAndSettle();
+
+    expect(openedSlug, 'terms-of-use');
+    expect(find.text('Documento legal'), findsOneWidget);
   });
 }
