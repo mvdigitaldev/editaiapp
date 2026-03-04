@@ -1,4 +1,5 @@
 import '../../../../core/constants/operation_type.dart';
+import '../../../../core/utils/app_time_utils.dart';
 import '../../../../core/utils/server_date_utils.dart';
 
 class GalleryEditModel {
@@ -20,7 +21,8 @@ class GalleryEditModel {
     return GalleryEditModel(
       id: json['id'] as String,
       imageUrl: json['image_url'] as String?,
-      createdAt: ServerDateUtils.parseServerDateOr(json['created_at'], DateTime.now()),
+      createdAt: ServerDateUtils.parseServerDateOr(
+          json['created_at'], AppTimeUtils.nowUtc()),
       status: json['status'] as String? ?? 'queued',
       operationType: json['operation_type'] as String?,
     );

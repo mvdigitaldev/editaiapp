@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 
+import '../../../../core/utils/app_time_utils.dart';
 import '../../../../core/utils/server_date_utils.dart';
 
 class PaymentModel {
@@ -32,7 +33,8 @@ class PaymentModel {
       paymentStatus: json['payment_status'] as String,
       paymentProvider: json['payment_provider'] as String,
       paidAt: ServerDateUtils.parseServerDate(json['paid_at']),
-      createdAt: ServerDateUtils.parseServerDateOr(json['created_at'], DateTime.now()),
+      createdAt: ServerDateUtils.parseServerDateOr(
+          json['created_at'], AppTimeUtils.nowUtc()),
     );
   }
 

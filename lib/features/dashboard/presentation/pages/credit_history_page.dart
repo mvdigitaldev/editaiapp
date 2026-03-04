@@ -5,9 +5,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/app_time_utils.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../data/datasources/credit_transactions_datasource.dart';
 import '../../data/models/credit_transaction_model.dart';
+import '../../data/models/monthly_credit_summary_model.dart';
 
 final _creditTransactionsDataSourceProvider =
     Provider<CreditTransactionsDataSource>((ref) {
@@ -26,7 +28,7 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
 
   late int _selectedYear;
   late int _selectedMonth;
-  int _total = 0;
+  MonthlyCreditSummaryModel _summary = MonthlyCreditSummaryModel.empty;
   final List<CreditTransactionModel> _transactions = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
@@ -36,24 +38,21 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
+    final now = AppTimeUtils.nowBrazil();
     _selectedYear = now.year;
     _selectedMonth = now.month;
     _loadMonth();
   }
 
   bool get _canGoNext {
-    final now = DateTime.now();
+    final now = AppTimeUtils.nowBrazil();
     return _selectedYear < now.year ||
         (_selectedYear == now.year && _selectedMonth < now.month);
   }
 
   bool get _canGoPrevious {
-    final now = DateTime.now();
-    final earliestYear = now.year - 1;
-    final earliestMonth = now.month;
-    return _selectedYear > earliestYear ||
-        (_selectedYear == earliestYear && _selectedMonth > earliestMonth);
+    return _selectedYear > 2020 ||
+        (_selectedYear == 2020 && _selectedMonth > 1);
   }
 
   void _goNext() {
@@ -86,14 +85,16 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _summary = MonthlyCreditSummaryModel.empty;
       _transactions.clear();
       _hasMore = true;
     });
 
     try {
       final ds = ref.read(_creditTransactionsDataSourceProvider);
-      final total = await ds.getMonthlyUsageTotal(_selectedYear, _selectedMonth);
-      final list = await ds.getUsageTransactionsForMonth(
+      final summary =
+          await ds.getMonthlyCreditSummary(_selectedYear, _selectedMonth);
+      final list = await ds.getTransactionsForMonth(
         _selectedYear,
         _selectedMonth,
         offset: 0,
@@ -101,7 +102,7 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
       );
       if (!mounted) return;
       setState(() {
-        _total = total;
+        _summary = summary;
         _transactions.addAll(list);
         _hasMore = list.length == _pageSize;
         _isLoading = false;
@@ -122,7 +123,7 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
 
     try {
       final ds = ref.read(_creditTransactionsDataSourceProvider);
-      final list = await ds.getUsageTransactionsForMonth(
+      final list = await ds.getTransactionsForMonth(
         _selectedYear,
         _selectedMonth,
         offset: _transactions.length,
@@ -168,17 +169,14 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios_new),
                     onPressed: () => Navigator.of(context).pop(),
-                    color: isDark
-                        ? AppColors.textLight
-                        : AppColors.textPrimary,
+                    color: isDark ? AppColors.textLight : AppColors.textPrimary,
                   ),
                   const Spacer(),
                   Text(
-                    'Histórico de créditos',
+                    'Historico de creditos',
                     style: AppTextStyles.headingMedium.copyWith(
-                      color: isDark
-                          ? AppColors.textLight
-                          : AppColors.textPrimary,
+                      color:
+                          isDark ? AppColors.textLight : AppColors.textPrimary,
                     ),
                   ),
                   const Spacer(),
@@ -211,9 +209,8 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
             Text(
               'Carregando...',
               style: AppTextStyles.bodySmall.copyWith(
-                color: isDark
-                    ? AppColors.textTertiary
-                    : AppColors.textSecondary,
+                color:
+                    isDark ? AppColors.textTertiary : AppColors.textSecondary,
               ),
             ),
           ],
@@ -235,12 +232,11 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Não foi possível carregar o histórico.',
+                'Nao foi possivel carregar o historico.',
                 textAlign: TextAlign.center,
                 style: AppTextStyles.bodySmall.copyWith(
-                  color: isDark
-                      ? AppColors.textTertiary
-                      : AppColors.textSecondary,
+                  color:
+                      isDark ? AppColors.textTertiary : AppColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 16),
@@ -262,10 +258,10 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
         children: [
           _buildMonthSelector(isDark),
           const SizedBox(height: 20),
-          _buildTotalCard(isDark),
+          _buildSummaryCard(isDark),
           const SizedBox(height: 24),
           Text(
-            'Uso no mês',
+            'Movimentacoes no mes',
             style: AppTextStyles.headingSmall.copyWith(
               color: isDark ? AppColors.textLight : AppColors.textPrimary,
             ),
@@ -314,7 +310,14 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
     );
   }
 
-  Widget _buildTotalCard(bool isDark) {
+  Widget _buildSummaryCard(bool isDark) {
+    final netColor = _summary.netTotal > 0
+        ? AppColors.success
+        : _summary.netTotal < 0
+            ? AppColors.error
+            : (isDark ? AppColors.textLight : AppColors.textPrimary);
+    final netSign = _summary.netTotal >= 0 ? '+' : '-';
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -349,14 +352,21 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$_total créditos gastos',
-                  style: AppTextStyles.headingMedium.copyWith(
-                    color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                  '$netSign${_summary.netTotal.abs()} creditos no saldo do mes',
+                  style: AppTextStyles.headingSmall.copyWith(color: netColor),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Entradas +${_summary.totalIn} | Saidas -${_summary.totalOut}',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: isDark
+                        ? AppColors.textTertiary
+                        : AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'em $_monthLabel',
+                  'Uso em edicoes: ${_summary.usageOut} creditos',
                   style: AppTextStyles.bodySmall.copyWith(
                     color: isDark
                         ? AppColors.textTertiary
@@ -381,18 +391,15 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
             Icon(
               Icons.history_outlined,
               size: 56,
-              color: isDark
-                  ? AppColors.textTertiary
-                  : AppColors.textSecondary,
+              color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
             ),
             const SizedBox(height: 16),
             Text(
-              'Nenhum uso de créditos em $_monthLabel',
+              'Nenhuma movimentacao em $_monthLabel',
               textAlign: TextAlign.center,
               style: AppTextStyles.bodyMedium.copyWith(
-                color: isDark
-                    ? AppColors.textTertiary
-                    : AppColors.textSecondary,
+                color:
+                    isDark ? AppColors.textTertiary : AppColors.textSecondary,
               ),
             ),
           ],
@@ -452,7 +459,10 @@ class _CreditTransactionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final used = transaction.creditsUsed;
+    final isEntry = transaction.isCreditEntry;
+    final amountColor = isEntry ? AppColors.success : AppColors.error;
+    final icon =
+        isEntry ? Icons.add_circle_outline : Icons.remove_circle_outline;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -478,12 +488,12 @@ class _CreditTransactionCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.12),
+              color: amountColor.withOpacity(0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
-              Icons.edit_outlined,
-              color: AppColors.primary,
+              icon,
+              color: amountColor,
               size: 22,
             ),
           ),
@@ -493,13 +503,9 @@ class _CreditTransactionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  transaction.description?.isNotEmpty == true
-                      ? transaction.description!
-                      : 'Uso em edição',
+                  transaction.displayDescription,
                   style: AppTextStyles.bodyMedium.copyWith(
-                    color: isDark
-                        ? AppColors.textLight
-                        : AppColors.textPrimary,
+                    color: isDark ? AppColors.textLight : AppColors.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -512,13 +518,23 @@ class _CreditTransactionCard extends StatelessWidget {
                         : AppColors.textSecondary,
                   ),
                 ),
+                if (isEntry && transaction.expiresAt != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Expira em ${transaction.formattedExpiresAt}',
+                    style: AppTextStyles.labelSmall.copyWith(
+                      color: AppColors.warning,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
           Text(
-            used == 1 ? '1 crédito' : '$used créditos',
+            transaction.displayAmountSigned,
             style: AppTextStyles.labelMedium.copyWith(
-              color: AppColors.primary,
+              color: amountColor,
               fontWeight: FontWeight.bold,
             ),
           ),

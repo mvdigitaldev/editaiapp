@@ -1,3 +1,4 @@
+import '../../../../core/utils/app_time_utils.dart';
 import '../../../../core/utils/server_date_utils.dart';
 
 class LegalDocumentModel {
@@ -21,7 +22,8 @@ class LegalDocumentModel {
       slug: json['slug'] as String,
       title: json['title'] as String,
       content: json['content'] as String,
-      updatedAt: ServerDateUtils.parseServerDateOr(json['updated_at'], DateTime.now()),
+      updatedAt: ServerDateUtils.parseServerDateOr(
+          json['updated_at'], AppTimeUtils.nowUtc()),
     );
   }
 }

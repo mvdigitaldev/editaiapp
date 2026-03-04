@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../firebase_options.dart';
 
 @pragma('vm:entry-point')
@@ -21,7 +23,7 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  FirebaseMessaging? _firebaseMessaging;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
@@ -33,7 +35,15 @@ class NotificationService {
   final Set<String> _processedMessages = {};
 
   static const String _channelId = 'editaiapp_notifications';
-  static const String _channelName = 'Editai Notificações';
+  static const String _channelName = 'Editai Notificacoes';
+
+  FirebaseMessaging get _messaging {
+    final messaging = _firebaseMessaging;
+    if (messaging == null) {
+      throw StateError('FirebaseMessaging not initialized');
+    }
+    return messaging;
+  }
 
   void setNavigatorKey(GlobalKey<NavigatorState>? key) {
     _navigatorKey = key;
@@ -50,6 +60,7 @@ class NotificationService {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       }
+      _firebaseMessaging ??= FirebaseMessaging.instance;
 
       await _initializeLocalNotifications();
       await _requestPermissions();
@@ -62,12 +73,12 @@ class NotificationService {
         await _getAndSaveToken();
       } catch (_) {
         try {
-          final token = await _firebaseMessaging.getToken();
+          final token = await _firebaseMessaging?.getToken();
           if (token != null && token.isNotEmpty) _currentToken = token;
         } catch (_) {}
       }
 
-      _firebaseMessaging.onTokenRefresh.listen(_saveTokenToSupabase);
+      _messaging.onTokenRefresh.listen(_saveTokenToSupabase);
       _initialized = true;
       debugPrint('[Editai] NotificationService inicializado');
     } catch (e, st) {
@@ -77,7 +88,8 @@ class NotificationService {
   }
 
   Future<void> _initializeLocalNotifications() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -95,32 +107,32 @@ class NotificationService {
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(const AndroidNotificationChannel(
-        _channelId,
-        _channelName,
-        description: 'Notificações do app Editai',
-        importance: Importance.high,
-      ));
+            _channelId,
+            _channelName,
+            description: 'Notificacoes do app Editai',
+            importance: Importance.high,
+          ));
     }
   }
 
   Future<void> _requestPermissions() async {
     try {
       if (Platform.isIOS) {
-        await _firebaseMessaging.requestPermission(
+        await _messaging.requestPermission(
           alert: true,
           badge: true,
           sound: true,
           provisional: false,
         );
       } else if (Platform.isAndroid) {
-        final androidPlugin = _localNotifications
-            .resolvePlatformSpecificImplementation<
+        final androidPlugin =
+            _localNotifications.resolvePlatformSpecificImplementation<
                 AndroidFlutterLocalNotificationsPlugin>();
         await androidPlugin?.requestNotificationsPermission();
-        await _firebaseMessaging.requestPermission();
+        await _messaging.requestPermission();
       }
     } catch (e) {
-      debugPrint('[Editai] Erro permissões: $e');
+      debugPrint('[Editai] Erro permissoes: $e');
     }
   }
 
@@ -131,7 +143,7 @@ class NotificationService {
         FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     _backgroundSubscription =
         FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundMessage);
-    final initialMessage = await _firebaseMessaging.getInitialMessage();
+    final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) _handleBackgroundMessage(initialMessage);
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
@@ -139,7 +151,7 @@ class NotificationService {
   Future<void> _getAndSaveToken() async {
     if (Firebase.apps.isEmpty) return;
     if (Platform.isIOS) await _waitForAPNSToken();
-    final token = await _firebaseMessaging.getToken();
+    final token = await _messaging.getToken();
     if (token != null && token.isNotEmpty) {
       _currentToken = token;
       await _saveTokenToSupabase(token);
@@ -210,7 +222,7 @@ class NotificationService {
       android: AndroidNotificationDetails(
         _channelId,
         _channelName,
-        channelDescription: 'Notificações do app Editai',
+        channelDescription: 'Notificacoes do app Editai',
         importance: Importance.high,
         priority: Priority.high,
       ),
@@ -270,15 +282,15 @@ class NotificationService {
     const delayMs = 500;
     for (var i = 0; i < maxAttempts; i++) {
       try {
-        final apnsToken = await _firebaseMessaging.getAPNSToken();
+        final apnsToken = await _messaging.getAPNSToken();
         if (apnsToken != null && apnsToken.isNotEmpty) {
           await Future.delayed(const Duration(milliseconds: 500));
           return;
         }
       } catch (_) {}
       if (i < maxAttempts - 1) {
-        await Future.delayed(Duration(
-            milliseconds: i < 10 ? delayMs : delayMs * 2));
+        await Future.delayed(
+            Duration(milliseconds: i < 10 ? delayMs : delayMs * 2));
       }
     }
   }
@@ -290,17 +302,19 @@ class NotificationService {
           options: DefaultFirebaseOptions.currentPlatform,
         );
       }
+      _firebaseMessaging ??= FirebaseMessaging.instance;
+
       if (Platform.isIOS) await _waitForAPNSToken();
       String? token;
       try {
-        token = await _firebaseMessaging.getToken();
+        token = await _messaging.getToken();
       } catch (e) {
         if (e.toString().contains('apns-token-not-set')) {
           await Future.delayed(const Duration(seconds: 2));
-          final apnsToken = await _firebaseMessaging.getAPNSToken();
+          final apnsToken = await _messaging.getAPNSToken();
           if (apnsToken != null) {
             await Future.delayed(const Duration(milliseconds: 500));
-            token = await _firebaseMessaging.getToken();
+            token = await _messaging.getToken();
           } else {
             rethrow;
           }
@@ -317,8 +331,9 @@ class NotificationService {
       debugPrint('[Editai] Erro refreshToken: $e');
       await Future.delayed(const Duration(seconds: 5));
       try {
+        if (_firebaseMessaging == null) return;
         if (Platform.isIOS) await _waitForAPNSToken();
-        final token = await _firebaseMessaging.getToken();
+        final token = await _messaging.getToken();
         if (token != null && token.isNotEmpty) {
           _currentToken = token;
           await Future.delayed(const Duration(milliseconds: 1000));

@@ -1,4 +1,5 @@
 import '../../../../core/constants/operation_type.dart';
+import '../../../../core/utils/app_time_utils.dart';
 import '../../../../core/utils/server_date_utils.dart';
 
 class EditDetailModel {
@@ -59,8 +60,10 @@ class EditDetailModel {
       status: json['status'] as String? ?? 'queued',
       aiProcessingTimeMs: json['ai_processing_time_ms'] as int?,
       creditsUsed: json['credits_used'] as int? ?? 0,
-      createdAt: ServerDateUtils.parseServerDateOr(json['created_at'], DateTime.now()),
-      updatedAt: ServerDateUtils.parseServerDateOr(json['updated_at'], DateTime.now()),
+      createdAt: ServerDateUtils.parseServerDateOr(
+          json['created_at'], AppTimeUtils.nowUtc()),
+      updatedAt: ServerDateUtils.parseServerDateOr(
+          json['updated_at'], AppTimeUtils.nowUtc()),
       operationType: json['operation_type'] as String?,
       taskId: json['task_id'] as String?,
       imageUrl: json['image_url'] as String?,
@@ -80,7 +83,8 @@ class EditDetailModel {
   String get formattedFileSize {
     if (fileSize == null || fileSize! <= 0) return '—';
     if (fileSize! < 1024) return '$fileSize B';
-    if (fileSize! < 1024 * 1024) return '${(fileSize! / 1024).toStringAsFixed(1)} KB';
+    if (fileSize! < 1024 * 1024)
+      return '${(fileSize! / 1024).toStringAsFixed(1)} KB';
     return '${(fileSize! / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 

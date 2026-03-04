@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/utils/app_time_utils.dart';
 import '../models/edit_detail_model.dart';
 import '../models/gallery_edit_model.dart';
 
@@ -22,7 +23,7 @@ class EditsGalleryDataSourceImpl implements EditsGalleryDataSource {
     int offset = 0,
     int limit = 20,
   }) async {
-    final nowIso = DateTime.now().toUtc().toIso8601String();
+    final nowIso = AppTimeUtils.nowUtc().toIso8601String();
     final response = await _supabase
         .from('edits')
         .select('id, image_url, created_at, status, operation_type')

@@ -1,3 +1,4 @@
+import '../../../../core/utils/app_time_utils.dart';
 import '../../../../core/utils/server_date_utils.dart';
 import '../../domain/entities/photo_edit.dart';
 
@@ -27,7 +28,8 @@ class PhotoEditModel extends PhotoEdit {
       status: json['status'] as String,
       errorMessage: json['error_message'] as String?,
       aiJobId: json['ai_job_id'] as String?,
-      createdAt: ServerDateUtils.parseServerDateOr(json['created_at'], DateTime.now()),
+      createdAt: ServerDateUtils.parseServerDateOr(
+          json['created_at'], AppTimeUtils.nowUtc()),
       completedAt: ServerDateUtils.parseServerDate(json['completed_at']),
     );
   }
