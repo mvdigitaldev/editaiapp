@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -96,21 +95,23 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
 
   Future<void> _shareViaWhatsApp() async {
     if (_referralLink == null) return;
-    final message = 'Confira o Editai! $_referralLink';
+    const prefix = 'Crie sua conta no Editai e edite fotos com IA: ';
+    final message = '$prefix$_referralLink';
     final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     }
   }
 
-  void _shareViaFacebook() {
+  Future<void> _shareViaFacebook() async {
     if (_referralLink == null) return;
-    Share.share('Confira o Editai! $_referralLink');
-  }
-
-  void _shareViaInstagram() {
-    if (_referralLink == null) return;
-    Share.share('Confira o Editai! $_referralLink');
+    final encodedUrl = Uri.encodeComponent(_referralLink!);
+    final uri = Uri.parse(
+      'https://www.facebook.com/sharer/sharer.php?u=$encodedUrl',
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   @override
@@ -388,7 +389,7 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
                     ),
                     const SizedBox(height: 16),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         ShareButton(
                           icon: Icons.chat,
@@ -401,12 +402,6 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
                           label: 'Facebook',
                           iconColor: const Color(0xFF1877F2),
                           onTap: _shareViaFacebook,
-                        ),
-                        ShareButton(
-                          icon: Icons.photo_camera,
-                          label: 'Instagram',
-                          iconColor: const Color(0xFFE1306C),
-                          onTap: _shareViaInstagram,
                         ),
                       ],
                     ),

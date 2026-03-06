@@ -16,6 +16,7 @@ class EditDetailModel {
   final int creditsUsed;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime? expiresAt;
   final String? operationType;
   final String? taskId;
   final String? imageUrl;
@@ -38,6 +39,7 @@ class EditDetailModel {
     required this.creditsUsed,
     required this.createdAt,
     required this.updatedAt,
+    this.expiresAt,
     this.operationType,
     this.taskId,
     this.imageUrl,
@@ -64,6 +66,7 @@ class EditDetailModel {
           json['created_at'], AppTimeUtils.nowUtc()),
       updatedAt: ServerDateUtils.parseServerDateOr(
           json['updated_at'], AppTimeUtils.nowUtc()),
+      expiresAt: ServerDateUtils.parseServerDate(json['expires_at']),
       operationType: json['operation_type'] as String?,
       taskId: json['task_id'] as String?,
       imageUrl: json['image_url'] as String?,
@@ -76,6 +79,10 @@ class EditDetailModel {
 
   String get formattedCreatedAt =>
       ServerDateUtils.formatForDisplay(createdAt, pattern: 'd MMM yyyy, HH:mm');
+
+  String get formattedExpiresAt => expiresAt != null
+      ? ServerDateUtils.formatForDisplay(expiresAt!, pattern: 'd MMM yyyy, HH:mm')
+      : '—';
 
   String get formattedUpdatedAt =>
       ServerDateUtils.formatForDisplay(updatedAt, pattern: 'd MMM yyyy, HH:mm');

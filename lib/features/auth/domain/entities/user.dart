@@ -10,6 +10,9 @@ class User {
   final DateTime? subscriptionEndsAt;
   final DateTime? subscriptionStartedAt;
   final String? referralCode;
+  final int? photoExpirationDays;
+  final int? creditExpirationDays;
+  final int? creditReferral;
 
   User({
     required this.id,
@@ -23,6 +26,9 @@ class User {
     this.subscriptionEndsAt,
     this.subscriptionStartedAt,
     this.referralCode,
+    this.photoExpirationDays,
+    this.creditExpirationDays,
+    this.creditReferral,
   });
 
   User copyWith({
@@ -37,6 +43,9 @@ class User {
     DateTime? subscriptionEndsAt,
     DateTime? subscriptionStartedAt,
     String? referralCode,
+    int? photoExpirationDays,
+    int? creditExpirationDays,
+    int? creditReferral,
   }) {
     return User(
       id: id ?? this.id,
@@ -50,6 +59,9 @@ class User {
       subscriptionEndsAt: subscriptionEndsAt ?? this.subscriptionEndsAt,
       subscriptionStartedAt: subscriptionStartedAt ?? this.subscriptionStartedAt,
       referralCode: referralCode ?? this.referralCode,
+      photoExpirationDays: photoExpirationDays ?? this.photoExpirationDays,
+      creditExpirationDays: creditExpirationDays ?? this.creditExpirationDays,
+      creditReferral: creditReferral ?? this.creditReferral,
     );
   }
 }

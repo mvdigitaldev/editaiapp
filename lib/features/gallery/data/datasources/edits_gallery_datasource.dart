@@ -39,7 +39,7 @@ class EditsGalleryDataSourceImpl implements EditsGalleryDataSource {
   }
 
   static const _editDetailColumns =
-      'id,user_id,image_id,prompt_text,prompt_text_original,edit_category,edit_goal,desired_style,status,ai_processing_time_ms,credits_used,created_at,updated_at,operation_type,task_id,image_url,file_size,mime_type,width,height';
+      'id,user_id,image_id,prompt_text,prompt_text_original,edit_category,edit_goal,desired_style,status,ai_processing_time_ms,credits_used,created_at,updated_at,expires_at,operation_type,task_id,image_url,file_size,mime_type,width,height';
 
   @override
   Future<EditDetailModel?> getEditById(String id) async {

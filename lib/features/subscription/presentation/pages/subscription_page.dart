@@ -109,104 +109,129 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
                     if (hasPaidPlan) ...[
                       const SizedBox(height: 24),
                       _CurrentPlanCard(
-                        planName: user!.subscriptionTier,
+                        planName: user.subscriptionTier,
                         startedAt: _formatDate(user.subscriptionStartedAt),
                         expiresAt: _formatDate(user.subscriptionEndsAt),
+                        photoExpirationDays: user.photoExpirationDays,
+                        creditExpirationDays: user.creditExpirationDays,
+                        creditReferral: user.creditReferral,
                         isDark: isDark,
                       ),
                     ],
                     const SizedBox(height: 24),
-                    // Tabs de duração
-                    Container(
-                      height: 48,
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? AppColors.surfaceDark
-                            : AppColors.backgroundLight,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          _DurationTab(
-                            label: 'Mensal',
-                            isSelected: _selectedDuration == 1,
-                            isDark: isDark,
-                            onTap: () {
-                              setState(() {
-                                _selectedDuration = 1;
-                                _selectedPlan = null;
-                              });
-                            },
-                          ),
-                          _DurationTab(
-                            label: 'Trimestral',
-                            isSelected: _selectedDuration == 3,
-                            isDark: isDark,
-                            onTap: () {
-                              setState(() {
-                                _selectedDuration = 3;
-                                _selectedPlan = null;
-                              });
-                            },
-                          ),
-                          _DurationTab(
-                            label: 'Semestral',
-                            isSelected: _selectedDuration == 6,
-                            isDark: isDark,
-                            onTap: () {
-                              setState(() {
-                                _selectedDuration = 6;
-                                _selectedPlan = null;
-                              });
-                            },
-                          ),
-                        ],
+                    Text(
+                      'Planos disponíveis para você',
+                      style: AppTextStyles.headingSmall.copyWith(
+                        color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Escolha o período e o plano que melhor se encaixa no seu ritmo.',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: isDark
+                            ? AppColors.textTertiary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     plansAsync.when(
                       data: (plans) {
-                        final filtered = plans
-                            .where(
-                              (p) => p.durationMonths == _selectedDuration,
-                            )
-                            .toList();
+                        final availableDurations = plans
+                            .map((p) => p.durationMonths ?? 1)
+                            .where((d) => d > 0)
+                            .toSet()
+                            .toList()
+                          ..sort();
 
-                        if (filtered.isEmpty) {
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 24),
-                            child: Center(
-                              child: Text(
-                                'Nenhum plano disponível para este período.',
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  color: isDark
-                                      ? AppColors.textTertiary
-                                      : AppColors.textSecondary,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
+                        final showTabs = availableDurations.length >= 2;
+                        final effectiveDuration = showTabs
+                            ? (availableDurations.contains(_selectedDuration)
+                                ? _selectedDuration
+                                : availableDurations.first)
+                            : null;
+
+                        final filtered = showTabs
+                            ? plans
+                                .where(
+                                  (p) =>
+                                      (p.durationMonths ?? 1) ==
+                                      effectiveDuration,
+                                )
+                                .toList()
+                            : plans;
 
                         return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            for (final plan in filtered) ...[
-                              PlanCard(
-                                tier: plan.durationText.toUpperCase(),
-                                name: plan.name,
-                                price: plan.formattedPrice,
-                                isHighlighted: _selectedPlan?.id == plan.id,
-                                features: plan.features,
-                                onTap: () {
-                                  setState(() {
-                                    _selectedPlan = plan;
-                                  });
-                                },
-                              ),
-                              const SizedBox(height: 16),
+                            if (showTabs) ...[
+                              Container(
+                                height: 48,
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? AppColors.surfaceDark
+                                      : AppColors.backgroundLight,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    for (final duration in availableDurations)
+                                      _DurationTab(
+                                        label: PlanModel.tabLabelForDuration(
+                                            duration),
+                                        isSelected:
+                                            effectiveDuration == duration,
+                                        isDark: isDark,
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedDuration = duration;
+                                            _selectedPlan = null;
+                                          });
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              const SizedBox(height: 24),
                             ],
-                            const SizedBox(height: 100),
+                            if (filtered.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 24),
+                                child: Center(
+                                  child: Text(
+                                    'Nenhum plano disponível para este período.',
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      color: isDark
+                                          ? AppColors.textTertiary
+                                          : AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else
+                              Column(
+                                children: [
+                                  for (final plan in filtered) ...[
+                                    PlanCard(
+                                      tier: plan.durationText.toUpperCase(),
+                                      name: plan.name,
+                                      price: plan.formattedPrice,
+                                      isHighlighted:
+                                          _selectedPlan?.id == plan.id,
+                                      features: plan.features,
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedPlan = plan;
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(height: 16),
+                                  ],
+                                  const SizedBox(height: 100),
+                                ],
+                              ),
                           ],
                         );
                       },
@@ -390,12 +415,18 @@ class _CurrentPlanCard extends StatelessWidget {
   final String planName;
   final String startedAt;
   final String expiresAt;
+  final int? photoExpirationDays;
+  final int? creditExpirationDays;
+  final int? creditReferral;
   final bool isDark;
 
   const _CurrentPlanCard({
     required this.planName,
     required this.startedAt,
     required this.expiresAt,
+    this.photoExpirationDays,
+    this.creditExpirationDays,
+    this.creditReferral,
     required this.isDark,
   });
 
@@ -459,8 +490,123 @@ class _CurrentPlanCard extends StatelessWidget {
               ),
             ],
           ),
+          if (photoExpirationDays != null ||
+              creditExpirationDays != null ||
+              creditReferral != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withOpacity(0.05)
+                    : Colors.black.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.06)
+                      : Colors.black.withOpacity(0.04),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  if (photoExpirationDays != null)
+                    _PlanDetailRow(
+                      icon: Icons.photo_library_outlined,
+                      label: 'Foto expira em',
+                      value: '$photoExpirationDays dias',
+                      isDark: isDark,
+                      showDivider: creditExpirationDays != null ||
+                          creditReferral != null,
+                    ),
+                  if (creditExpirationDays != null)
+                    _PlanDetailRow(
+                      icon: Icons.schedule_outlined,
+                      label: 'Créditos expiram em',
+                      value: '$creditExpirationDays dias',
+                      isDark: isDark,
+                      showDivider: creditReferral != null,
+                    ),
+                  if (creditReferral != null)
+                    _PlanDetailRow(
+                      icon: Icons.card_giftcard_outlined,
+                      label: 'Recompensa por indicação',
+                      value: creditReferral == 0
+                          ? 'Sem bônus'
+                          : '$creditReferral créditos',
+                      isDark: isDark,
+                      showDivider: false,
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _PlanDetailRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool isDark;
+  final bool showDivider;
+
+  const _PlanDetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.isDark,
+    this.showDivider = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: AppColors.primary.withOpacity(0.9),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: isDark
+                        ? AppColors.textTertiary
+                        : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                value,
+                style: AppTextStyles.labelMedium.copyWith(
+                  color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (showDivider)
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark
+                ? Colors.white.withOpacity(0.05)
+                : Colors.black.withOpacity(0.05),
+          ),
+      ],
     );
   }
 }

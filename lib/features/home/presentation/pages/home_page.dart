@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../../core/widgets/typewriter_with_delete_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -104,11 +105,36 @@ class _HomePageState extends ConsumerState<HomePage> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          'Seu estúdio de edição com IA',
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                          ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Seu estúdio de ',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                              ),
+                            ),
+                            SizedBox(
+                              width: 220,
+                              child: TypewriterWithDeleteText(
+                                phrases: const [
+                                  'edição com IA',
+                                  'criação com IA',
+                                  'transformação com IA',
+                                  'produção com IA',
+                                  'inovação com IA',
+                                ],
+                                textStyle: AppTextStyles.bodyMedium.copyWith(
+                                  color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                                ),
+                                typingSpeed: const Duration(milliseconds: 100),
+                                deletingSpeed: const Duration(milliseconds: 80),
+                                pauseAfterTyping: const Duration(milliseconds: 1500),
+                                pauseAfterDeleting: const Duration(milliseconds: 500),
+                                cursor: '|',
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

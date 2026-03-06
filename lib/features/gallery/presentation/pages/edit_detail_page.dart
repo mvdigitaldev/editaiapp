@@ -352,6 +352,8 @@ class _EditDetailPageState extends ConsumerState<EditDetailPage> {
           _detailRow('Créditos usados', '${edit.creditsUsed}', isDark),
           const SizedBox(height: 8),
           _detailRow('Criado em', edit.formattedCreatedAt, isDark),
+          const SizedBox(height: 8),
+          _detailRow('Expira em', edit.formattedExpiresAt, isDark),
         ],
       ),
     );

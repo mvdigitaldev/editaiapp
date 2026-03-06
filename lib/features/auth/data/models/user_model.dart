@@ -14,6 +14,9 @@ class UserModel extends User {
     super.subscriptionEndsAt,
     super.subscriptionStartedAt,
     super.referralCode,
+    super.photoExpirationDays,
+    super.creditExpirationDays,
+    super.creditReferral,
   });
 
   static DateTime? _parseDateTime(dynamic v) => ServerDateUtils.parseServerDate(v);
@@ -39,6 +42,9 @@ class UserModel extends User {
       subscriptionEndsAt: _parseDateTime(json['subscription_ends_at']),
       subscriptionStartedAt: _parseDateTime(json['subscription_started_at']),
       referralCode: json['referral_code'] as String?,
+      photoExpirationDays: _parseInt(json['photo_expiration_days']),
+      creditExpirationDays: _parseInt(json['credit_expiration_days']),
+      creditReferral: _parseInt(json['credit_referral']),
     );
   }
 
@@ -55,6 +61,9 @@ class UserModel extends User {
       if (subscriptionEndsAt != null) 'subscription_ends_at': subscriptionEndsAt!.toIso8601String(),
       if (subscriptionStartedAt != null) 'subscription_started_at': subscriptionStartedAt!.toIso8601String(),
       if (referralCode != null) 'referral_code': referralCode,
+      if (photoExpirationDays != null) 'photo_expiration_days': photoExpirationDays,
+      if (creditExpirationDays != null) 'credit_expiration_days': creditExpirationDays,
+      if (creditReferral != null) 'credit_referral': creditReferral,
     };
   }
 
@@ -71,6 +80,9 @@ class UserModel extends User {
       subscriptionEndsAt: subscriptionEndsAt,
       subscriptionStartedAt: subscriptionStartedAt,
       referralCode: referralCode,
+      photoExpirationDays: photoExpirationDays,
+      creditExpirationDays: creditExpirationDays,
+      creditReferral: creditReferral,
     );
   }
 }

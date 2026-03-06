@@ -95,3 +95,27 @@ Quando o usuário recebe créditos (insert em `credit_transactions` com `amount 
 ### App (Flutter)
 
 - Ao tocar na notificação de créditos, o app abre a tela **Créditos Extra** (`/credits-shop`) via deep link. Nenhuma alteração extra é necessária no código.
+
+---
+
+## Notificação ao atualizar plano
+
+Quando o plano do usuário é alterado (`current_plan_id` na tabela `users` é atualizado), o app envia uma push notification informando o novo plano.
+
+### Backend (Supabase)
+
+1. **Edge Function `notify-plan-updated`**
+   - Deploy: `supabase functions deploy notify-plan-updated`
+   - Variáveis de ambiente (Supabase Dashboard > Edge Functions > notify-plan-updated > Settings):
+     - `FIREBASE_SERVICE_ACCOUNT_JSON`: mesmo JSON da conta de serviço usado em `notify-credit-earned`
+     - `NOTIFY_PLAN_UPDATED_INVOCATION_SECRET`: segredo compartilhado (ex.: string aleatória longa). O **mesmo valor** deve ser guardado no Vault (passo abaixo). A função usa `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_URL` das secrets do Supabase.
+
+2. **Trigger e Vault**
+   - Execute a migration `20260328120000_notify_plan_updated_trigger.sql`.
+   - No **Vault** (Dashboard > Database > Vault): crie um secret com **name** `notify_plan_updated_invocation_secret` e **valor** igual ao que você definiu em `NOTIFY_PLAN_UPDATED_INVOCATION_SECRET` na Edge Function.
+   - Em `app_settings` (via SQL ou Dashboard), configure a URL:
+     - `notify_plan_updated_url`: `https://SEU_PROJECT_REF.supabase.co/functions/v1/notify-plan-updated`
+
+### App (Flutter)
+
+- Ao tocar na notificação de plano atualizado, o app abre a tela **Assinatura** (`/subscription`) via deep link. Nenhuma alteração extra é necessária no código.

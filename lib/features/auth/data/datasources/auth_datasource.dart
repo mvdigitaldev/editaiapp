@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/error/failures.dart';
+import '../../../../core/services/notification_service.dart';
 import '../models/user_model.dart';
 
 abstract class AuthDataSource {
@@ -80,6 +82,11 @@ class AuthDataSourceImpl implements AuthDataSource {
   @override
   Future<void> signOut() async {
     try {
+      if (!kIsWeb) {
+        try {
+          await NotificationService().removeToken();
+        } catch (_) {}
+      }
       await _supabase.auth.signOut();
     } catch (e) {
       throw AuthFailure(message: e.toString());

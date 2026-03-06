@@ -58,44 +58,63 @@ class CreditsShopPage extends ConsumerWidget {
             ),
             const SizedBox(height: 4),
             Expanded(
-              child: packsAsync.when(
-                loading: () => Center(
-                  child: CircularProgressIndicator(
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(AppColors.primary),
-                  ),
-                ),
-                error: (error, _) => Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline,
-                            size: 48, color: AppColors.error),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Não foi possível carregar os pacotes.',
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: isDark
-                                ? AppColors.textTertiary
-                                : AppColors.textSecondary,
-                          ),
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(_activeCreditPacksProvider);
+                  await ref.read(_activeCreditPacksProvider.future);
+                  await ref.read(authStateProvider.notifier).checkAuth();
+                },
+                child: packsAsync.when(
+                  loading: () => SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.5,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(AppColors.primary),
                         ),
-                        const SizedBox(height: 16),
-                        TextButton.icon(
-                          onPressed: () =>
-                              ref.invalidate(_activeCreditPacksProvider),
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Tentar novamente'),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
+                  error: (error, _) => SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.5,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.error_outline,
+                                  size: 48, color: AppColors.error),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Não foi possível carregar os pacotes.',
+                                textAlign: TextAlign.center,
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: isDark
+                                      ? AppColors.textTertiary
+                                      : AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextButton.icon(
+                                onPressed: () =>
+                                    ref.invalidate(_activeCreditPacksProvider),
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Tentar novamente'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  data: (packs) =>
+                      _buildContent(context, isDark, packs, creditsBalance),
                 ),
-                data: (packs) =>
-                    _buildContent(context, isDark, packs, creditsBalance),
               ),
             ),
           ],
@@ -108,6 +127,7 @@ class CreditsShopPage extends ConsumerWidget {
       BuildContext context, bool isDark, List<CreditPackModel> packs,
       int creditsBalance) {
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [

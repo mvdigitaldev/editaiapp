@@ -31,9 +31,7 @@ class PlanCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: isHighlighted
-              ? (isDark ? AppColors.surfaceDark : AppColors.surfaceLight)
-              : (isDark ? AppColors.surfaceDark.withOpacity(0.5) : AppColors.surfaceLight.withOpacity(0.5)),
+          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isHighlighted
@@ -99,24 +97,12 @@ class PlanCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          price,
-                          style: AppTextStyles.headingMedium.copyWith(
-                            color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        Text(
-                          '/mês',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      price,
+                      style: AppTextStyles.headingMedium.copyWith(
+                        color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ],
                 ),

@@ -25,6 +25,13 @@ class PlanModel extends Equatable {
 
   bool get isFree => price == null || price == 0;
 
+  static String tabLabelForDuration(int months) {
+    if (months <= 1) return 'Mensal';
+    if (months == 3) return 'Trimestral';
+    if (months == 6) return 'Semestral';
+    return '$months meses';
+  }
+
   String get durationText {
     if (durationMonths == null || durationMonths == 0 || durationMonths == 1) {
       return 'Mensal';
