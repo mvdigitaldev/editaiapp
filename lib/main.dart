@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/config/app_config.dart';
+import 'core/services/ad_service.dart';
 import 'core/services/notification_service.dart';
+import 'core/widgets/ad_banner_widget.dart';
+import 'features/profile/data/datasources/app_settings_datasource.dart';
 import 'firebase_options.dart';
 import 'core/storage/local_storage.dart' as app_storage;
 import 'core/theme/app_theme.dart';
@@ -105,10 +109,25 @@ void main() async {
     debugPrint('[Editai] Erro ao inicializar LocalStorage: $e');
   }
 
+  // AdMob: inicializar apenas em mobile
+  AdService? adServiceInstance;
+  if (!kIsWeb) {
+    try {
+      await MobileAds.instance.initialize();
+      adServiceInstance = AdService(AppSettingsDataSourceImpl(Supabase.instance.client));
+      unawaited(adServiceInstance.preloadInterstitial());
+    } catch (e) {
+      debugPrint('[Editai] AdMob init: $e');
+    }
+  }
+
   // Push notifications: não bloquear abertura do app — inicializar em background
   final navigatorKey = GlobalKey<NavigatorState>();
   runApp(
     ProviderScope(
+      overrides: adServiceInstance != null
+          ? [adServiceProvider.overrideWithValue(adServiceInstance)]
+          : [],
       child: MyApp(navigatorKey: navigatorKey),
     ),
   );

@@ -55,6 +55,7 @@ dependencies:
   equatable: any
   webview_flutter: any
   saver_gallery: ^4.1.0
+  google_mobile_ads: ^5.1.0
 
 dev_dependencies:
   flutter_test:

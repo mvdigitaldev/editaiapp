@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:editaiapp/features/subscription/presentation/providers/credits_usage_provider.dart';
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/utils/server_date_utils.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -24,6 +25,7 @@ class ProfilePage extends ConsumerWidget {
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
+    final enablePlansAsync = ref.watch(enablePlansProvider);
 
     String? renewalText;
     if (user != null &&
@@ -247,25 +249,32 @@ class ProfilePage extends ConsumerWidget {
                             },
                           ),
                           const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton(
-                              onPressed: () {
-                                Navigator.of(context)
-                                    .pushNamed('/credits-shop');
-                              },
-                              style: OutlinedButton.styleFrom(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
-                              ),
-                              child: Text(
-                                'Recarregar Créditos',
-                                style: AppTextStyles.labelMedium.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
+                          enablePlansAsync.when(
+                            loading: () => const SizedBox.shrink(),
+                            error: (_, __) => const SizedBox.shrink(),
+                            data: (enabled) => enabled
+                                ? SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton(
+                                      onPressed: () {
+                                        Navigator.of(context)
+                                            .pushNamed('/credits-shop');
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 12),
+                                      ),
+                                      child: Text(
+                                        'Recarregar Créditos',
+                                        style: AppTextStyles.labelMedium
+                                            .copyWith(
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
                           ),
                         ],
                       ),
@@ -290,19 +299,22 @@ class ProfilePage extends ConsumerWidget {
                       padding: EdgeInsets.zero,
                       child: Column(
                         children: [
-                          _ProfileOption(
-                            icon: Icons.workspace_premium,
-                            label: 'Meu plano',
-                            onTap: () {
-                              Navigator.of(context).pushNamed('/subscription');
-                            },
-                          ),
-                          Divider(
-                            height: 1,
-                            color: isDark
-                                ? AppColors.borderDark
-                                : AppColors.border,
-                          ),
+                          if (enablePlansAsync.valueOrNull == true) ...[
+                            _ProfileOption(
+                              icon: Icons.workspace_premium,
+                              label: 'Meu plano',
+                              onTap: () {
+                                Navigator.of(context)
+                                    .pushNamed('/subscription');
+                              },
+                            ),
+                            Divider(
+                              height: 1,
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : AppColors.border,
+                            ),
+                          ],
                           _ProfileOption(
                             icon: Icons.person,
                             label: 'Meus Dados',
@@ -340,20 +352,22 @@ class ProfilePage extends ConsumerWidget {
                                 ? AppColors.borderDark
                                 : AppColors.border,
                           ),
-                          _ProfileOption(
-                            icon: Icons.receipt_long,
-                            label: 'Histórico de Pagamentos',
-                            onTap: () {
-                              Navigator.of(context)
-                                  .pushNamed('/payment-history');
-                            },
-                          ),
-                          Divider(
-                            height: 1,
-                            color: isDark
-                                ? AppColors.borderDark
-                                : AppColors.border,
-                          ),
+                          if (enablePlansAsync.valueOrNull == true) ...[
+                            _ProfileOption(
+                              icon: Icons.receipt_long,
+                              label: 'Histórico de Pagamentos',
+                              onTap: () {
+                                Navigator.of(context)
+                                    .pushNamed('/payment-history');
+                              },
+                            ),
+                            Divider(
+                              height: 1,
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : AppColors.border,
+                            ),
+                          ],
                           _ProfileOption(
                             icon: Icons.card_giftcard,
                             label: 'Indique e Ganhe',

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:editaiapp/features/subscription/presentation/providers/credits_usage_provider.dart';
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_card.dart';
@@ -17,6 +18,7 @@ class DashboardPage extends ConsumerWidget {
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
     final currentMonthTotalAsync = ref.watch(currentMonthUsageTotalProvider);
+    final enablePlansAsync = ref.watch(enablePlansProvider);
 
     return SafeArea(
       child: Scaffold(
@@ -166,24 +168,31 @@ class DashboardPage extends ConsumerWidget {
                       },
                     ),
                     const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () {
-                          Navigator.of(context).pushNamed('/credits-shop');
-                        },
-                        style: OutlinedButton.styleFrom(
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        child: Text(
-                          'Recarregar Créditos',
-                          style: AppTextStyles.labelMedium.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                    enablePlansAsync.when(
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
+                      data: (enabled) => enabled
+                          ? SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  Navigator.of(context)
+                                      .pushNamed('/credits-shop');
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                                child: Text(
+                                  'Recarregar Créditos',
+                                  style: AppTextStyles.labelMedium.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
                     ),
                   ],
                 ),
