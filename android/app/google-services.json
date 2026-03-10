@@ -1,0 +1,28 @@
+{
+  "project_info": {
+    "project_number": "476385587125",
+    "project_id": "editai-3d616",
+    "storage_bucket": "editai-3d616.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:476385587125:android:fe80538a63bd5dffbc73fc",
+        "android_client_info": {
+          "package_name": "com.example.editaiapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWshaSBfgD-o52fUpSNoTY-TkXZ4uqBjc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ]
+}
