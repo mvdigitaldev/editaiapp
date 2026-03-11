@@ -1,4 +1,4 @@
-package com.example.editaiapp
+package com.editai.app
 
 import io.flutter.embedding.android.FlutterActivity
 
