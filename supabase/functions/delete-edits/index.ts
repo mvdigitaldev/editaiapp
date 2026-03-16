@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
     // 1. Buscar edits que pertencem ao usuário (para extrair paths do storage)
     const { data: editsToDelete, error: fetchErr } = await supabase
       .from("edits")
-      .select("id, image_url")
+      .select("id, image_url, original_image_url")
       .in("id", validIds)
       .eq("user_id", userId);
 
@@ -95,19 +95,24 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: false, error: "Erro ao buscar fotos" }, 500);
     }
 
-    const edits = (editsToDelete ?? []) as Array<{ id: string; image_url: string | null }>;
+    const edits = (editsToDelete ?? []) as Array<{ id: string; image_url: string | null; original_image_url?: string | null }>;
     const idsToDelete = edits.map((e) => e.id);
 
     if (idsToDelete.length === 0) {
       return jsonResponse({ success: true, deleted_count: 0 });
     }
 
-    // 2. Remover arquivos do storage em batch
+    // 2. Remover arquivos do storage em batch (editada e original)
     const storagePaths: string[] = [];
     for (const edit of edits) {
       const imageUrl = edit.image_url;
+      const originalImageUrl = edit.original_image_url;
       if (imageUrl && imageUrl.includes(BUCKET_NAME)) {
         const path = extractStoragePath(imageUrl);
+        if (path) storagePaths.push(path);
+      }
+      if (originalImageUrl && originalImageUrl.includes(BUCKET_NAME)) {
+        const path = extractStoragePath(originalImageUrl);
         if (path) storagePaths.push(path);
       }
     }

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lottie/lottie.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -13,32 +16,162 @@ class ProcessingPage extends ConsumerStatefulWidget {
   ConsumerState<ProcessingPage> createState() => _ProcessingPageState();
 }
 
-class _ProcessingPageState extends ConsumerState<ProcessingPage> {
+class _ProcessingPageState extends ConsumerState<ProcessingPage>
+    with WidgetsBindingObserver {
   double _progress = 0.0;
   bool _hasError = false;
   String? _errorMessage;
   RealtimeChannel? _channel;
+  Timer? _pollTimer;
   String? _beforePathFromArgs;
+  String? _editId;
+  String? _taskId;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initProcessing();
     });
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_hasError) {
+      _recheckStatus();
+    }
+  }
+
   Future<void> _initProcessing() async {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final String? taskId = args != null ? args['taskId'] as String? : null;
+    _taskId = args != null ? args['taskId'] as String? : null;
+    _editId = args != null ? args['editId'] as String? : null;
     _beforePathFromArgs = args != null ? args['beforePath'] as String? : null;
 
-    if (taskId == null || taskId.isEmpty) {
-      // Modo legacy: simulação local
-      await _simulateProcessing(args);
+    if (_editId != null && _editId!.isNotEmpty) {
+      await _startEditProcessing(_editId!);
+    } else if (_taskId != null && _taskId!.isNotEmpty) {
+      await _startFluxProcessing(_taskId!);
     } else {
-      // Modo Flux: Supabase Realtime + fallback
-      await _startFluxProcessing(taskId);
+      await _simulateProcessing(args);
+    }
+  }
+
+  void _startPolling() {
+    _cancelPolling();
+    _recheckStatus();
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!mounted || _hasError) return;
+      _recheckStatus();
+    });
+  }
+
+  void _cancelPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  Future<void> _recheckStatus() async {
+    if (!mounted || _hasError) return;
+
+    if (_editId != null && _editId!.isNotEmpty) {
+      try {
+        final res = await Supabase.instance.client
+            .from('edits')
+            .select()
+            .eq('id', _editId!)
+            .maybeSingle();
+
+        if (res != null && res is Map<String, dynamic>) {
+          _handleEditRecord(res);
+        }
+      } catch (_) {}
+    } else if (_taskId != null && _taskId!.isNotEmpty) {
+      try {
+        final res = await Supabase.instance.client
+            .from('flux_tasks')
+            .select()
+            .eq('task_id', _taskId!)
+            .maybeSingle();
+
+        if (res != null && res is Map<String, dynamic>) {
+          _handleTaskRecord(res);
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _startEditProcessing(String editId) async {
+    final supabase = Supabase.instance.client;
+
+    _channel = supabase
+        .channel('edit-$editId')
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'edits',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'id',
+          value: editId,
+        ),
+        callback: (payload) {
+          final record = payload.newRecord;
+          if (record is Map<String, dynamic>) {
+            _handleEditRecord(record);
+          }
+        },
+      )
+      ..subscribe();
+
+    _startPolling();
+
+    try {
+      final res = await supabase
+          .from('edits')
+          .select()
+          .eq('id', editId)
+          .maybeSingle();
+
+      if (res != null && res is Map<String, dynamic>) {
+        _handleEditRecord(res);
+      }
+    } catch (_) {}
+  }
+
+  void _handleEditRecord(Map<String, dynamic> record) {
+    if (!mounted) return;
+    final status = record['status'] as String?;
+    if (status == null) return;
+
+    if (status == 'completed') {
+      final imageUrl = record['image_url'] as String?;
+      _cleanupChannel();
+      ref.invalidate(recentEditsProvider);
+      ref.invalidate(planLimitsProvider);
+      if (_beforePathFromArgs != null) {
+        Navigator.of(context).pushReplacementNamed(
+          '/comparison',
+          arguments: <String, dynamic>{
+            'editId': record['id'],
+            'before': _beforePathFromArgs,
+            'after': null,
+            'afterUrl': imageUrl,
+          },
+        );
+      } else {
+        Navigator.of(context).pushReplacementNamed(
+          '/text-to-image-result',
+          arguments: imageUrl,
+        );
+      }
+    } else if (status == 'failed') {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Ocorreu um erro ao gerar a imagem.';
+      });
+      _cleanupChannel();
     }
   }
 
@@ -64,6 +197,8 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage> {
         },
       )
       ..subscribe();
+
+    _startPolling();
 
     // Fallback obrigatório após inscrição
     try {
@@ -96,6 +231,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage> {
         Navigator.of(context).pushReplacementNamed(
           '/comparison',
           arguments: <String, dynamic>{
+            'editId': record['edit_id'],
             'before': _beforePathFromArgs,
             'after': null,
             'afterUrl': imageUrl,
@@ -145,6 +281,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage> {
   }
 
   void _cleanupChannel() {
+    _cancelPolling();
     if (_channel != null) {
       _channel!.unsubscribe();
       _channel = null;
@@ -153,6 +290,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cleanupChannel();
     super.dispose();
   }
@@ -169,18 +307,27 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Animated icon
-                Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.auto_awesome,
-                    size: 60,
-                    color: AppColors.primary,
+                // Lottie animation
+                SizedBox(
+                  width: 180,
+                  height: 180,
+                  child: Lottie.asset(
+                    'assets/animations/cloud_robotics_abstract.json',
+                    fit: BoxFit.contain,
+                    repeat: true,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome,
+                        size: 60,
+                        color: AppColors.primary,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -226,17 +373,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 48),
-                  // Loading animation
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                    ),
-                  ),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 32),
                   // Cancel button
                   TextButton(
                     onPressed: () {

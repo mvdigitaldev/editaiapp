@@ -4,17 +4,10 @@ import {
   createEditAndReserveCredits,
   releaseReservedCredits,
 } from "../_shared/credits.ts";
-import {
-  ImageMagick,
-  initializeImageMagick,
-  MagickFormat,
-} from "npm:@imagemagick/magick-wasm@0.0.30";
-
 const BFL_API_URL = "https://api.bfl.ai/v1/flux-2-pro";
 const OPENAI_API_URL = "https://api.openai.com/v1";
-const MAX_MEGAPIXELS = 1.5;
-const JPEG_QUALITY = 90;
-const MAX_BASE64_BYTES = 10 * 1024 * 1024;
+const EDIT_INPUTS_BUCKET = "edit-inputs";
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const CREDITS_EDIT_MODEL = 7;
 
 const CORS_HEADERS = {
@@ -25,10 +18,10 @@ const CORS_HEADERS = {
 
 interface RequestBody {
   modelo_id: string;
-  image_base64: string;
+  storage_path: string;
+  width?: number;
+  height?: number;
 }
-
-let magickInitialized = false;
 
 function getBearerToken(req: Request): string | null {
   const rawHeader =
@@ -65,65 +58,6 @@ async function resolveAuthenticatedUserId(
   return user?.id ?? null;
 }
 
-async function ensureMagickInit() {
-  if (magickInitialized) return;
-  const wasmPath = new URL("magick.wasm", import.meta.resolve("npm:@imagemagick/magick-wasm@0.0.30"));
-  const wasmBytes = await Deno.readFile(wasmPath);
-  await initializeImageMagick(wasmBytes);
-  magickInitialized = true;
-}
-
-function resizeToMaxMp(imageBase64: string): { base64: string; width: number; height: number } {
-  const binary = atob(imageBase64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-  let outWidth = 0;
-  let outHeight = 0;
-  let outData: Uint8Array = new Uint8Array(0);
-
-  ImageMagick.read(bytes, (img) => {
-    const w = img.width;
-    const h = img.height;
-    if (w <= 0 || h <= 0) {
-      throw new Error("Imagem sem dimensÃµes vÃ¡lidas");
-    }
-    const total = w * h;
-    const maxPixels = MAX_MEGAPIXELS * 1_000_000;
-
-    let newW = w;
-    let newH = h;
-
-    if (total > maxPixels) {
-      const scale = Math.sqrt(maxPixels / total);
-      newW = Math.max(64, Math.floor(w * scale) & ~15);
-      newH = Math.max(64, Math.floor(h * scale) & ~15);
-      img.resize(newW, newH);
-    }
-
-    if (newW < 64 || newH < 64) {
-      const scaleUp = Math.max(64 / newW, 64 / newH);
-      newW = Math.max(64, Math.floor(newW * scaleUp) & ~15);
-      newH = Math.max(64, Math.floor(newH * scaleUp) & ~15);
-      img.resize(newW, newH);
-    }
-
-    outWidth = newW;
-    outHeight = newH;
-    img.quality = JPEG_QUALITY;
-    outData = img.write(MagickFormat.Jpeg, (data: Uint8Array) => data);
-  });
-
-  if (outWidth < 64 || outHeight < 64 || !outData || outData.length === 0) {
-    throw new Error("Falha ao processar imagem. Verifique se o formato Ã© vÃ¡lido (JPEG/PNG).");
-  }
-
-  let outStr = "";
-  for (let i = 0; i < outData.length; i++) outStr += String.fromCharCode(outData[i]);
-  const outBase64 = btoa(outStr);
-  return { base64: outBase64, width: outWidth, height: outHeight };
-}
-
 interface AsyncWebhookResponse {
   id: string;
   status?: string;
@@ -135,12 +69,6 @@ function jsonResponse(data: object, status = 200) {
     status,
     headers: { "Content-Type": "application/json", ...CORS_HEADERS },
   });
-}
-
-function normalizeBase64(input: string): string {
-  const trimmed = input.trim();
-  const dataUrlMatch = trimmed.match(/^data:image\/[a-zA-Z]+;base64,(.+)$/);
-  return dataUrlMatch ? dataUrlMatch[1] : trimmed;
 }
 
 async function openaiVision(
@@ -191,51 +119,18 @@ Deno.serve(async (req) => {
 
   try {
     const body = (await req.json()) as Partial<RequestBody>;
-    const { modelo_id, image_base64 } = body;
+    const { modelo_id, storage_path, width, height } = body;
 
     if (!modelo_id || typeof modelo_id !== "string" || modelo_id.trim().length === 0) {
       return jsonResponse(
-        { success: false, error: "Campo 'modelo_id' Ã© obrigatÃ³rio e nÃ£o pode estar vazio" },
+        { success: false, error: "Campo 'modelo_id' é obrigatório e não pode estar vazio" },
         422
       );
     }
 
-    if (!image_base64 || typeof image_base64 !== "string" || image_base64.trim().length === 0) {
+    if (!storage_path || typeof storage_path !== "string" || storage_path.trim().length === 0) {
       return jsonResponse(
-        { success: false, error: "Campo 'image_base64' Ã© obrigatÃ³rio e nÃ£o pode estar vazio" },
-        422
-      );
-    }
-
-    const bflApiKey = Deno.env.get("BFL_API_KEY");
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!bflApiKey) {
-      console.error("[editar-imagem-modelo] BFL_API_KEY nÃ£o configurada");
-      return jsonResponse(
-        { success: false, error: "ConfiguraÃ§Ã£o do serviÃ§o indisponÃ­vel" },
-        500
-      );
-    }
-    if (!openaiKey) {
-      console.error("[editar-imagem-modelo] OPENAI_API_KEY nÃ£o configurada");
-      return jsonResponse(
-        { success: false, error: "ConfiguraÃ§Ã£o do serviÃ§o indisponÃ­vel" },
-        500
-      );
-    }
-
-    const imageBase64 = normalizeBase64(image_base64);
-    if (imageBase64.length < 100) {
-      return jsonResponse(
-        { success: false, error: "Imagem invÃ¡lida ou base64 corrompido" },
-        422
-      );
-    }
-
-    const base64Bytes = Math.ceil((imageBase64.length * 3) / 4);
-    if (base64Bytes > MAX_BASE64_BYTES) {
-      return jsonResponse(
-        { success: false, error: "Imagem muito grande. MÃ¡ximo recomendado: ~10 MB." },
+        { success: false, error: "Campo 'storage_path' é obrigatório" },
         422
       );
     }
@@ -246,8 +141,43 @@ Deno.serve(async (req) => {
 
     const userId = await resolveAuthenticatedUserId(req, supabase, supabaseUrl);
     if (!userId) {
-      console.error("[editar-imagem-modelo] Falha ao autenticar usuario");
-      return jsonResponse({ success: false, error: "Autenticacao obrigatoria" }, 401);
+      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
+    }
+
+    if (!storage_path.startsWith(`${userId}/`)) {
+      return jsonResponse({ success: false, error: "Path inválido: não pertence ao usuário" }, 403);
+    }
+
+    const { data: bytes, error: downloadErr } = await supabase.storage
+      .from(EDIT_INPUTS_BUCKET)
+      .download(storage_path);
+
+    if (downloadErr || !bytes) {
+      console.error("[editar-imagem-modelo] Erro ao baixar:", storage_path, downloadErr);
+      return jsonResponse({ success: false, error: "Imagem não encontrada ou inacessível" }, 422);
+    }
+
+    if (bytes.size > MAX_IMAGE_BYTES) {
+      return jsonResponse({ success: false, error: "Imagem muito grande. Máximo: 2 MB." }, 422);
+    }
+
+    const arr = new Uint8Array(bytes.size);
+    arr.set(new Uint8Array(await bytes.arrayBuffer()));
+    let outStr = "";
+    for (let j = 0; j < arr.length; j++) outStr += String.fromCharCode(arr[j]);
+    const resizedBase64 = btoa(outStr);
+
+    let resizedWidth = typeof width === "number" ? Math.floor(width) & ~15 : 1024;
+    let resizedHeight = typeof height === "number" ? Math.floor(height) & ~15 : 1024;
+    if (resizedWidth < 64 || resizedHeight < 64) {
+      resizedWidth = 1024;
+      resizedHeight = 1024;
+    }
+
+    const bflApiKey = Deno.env.get("BFL_API_KEY");
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!bflApiKey || !openaiKey) {
+      return jsonResponse({ success: false, error: "Configuração do serviço indisponível" }, 500);
     }
 
     const { data: modelo, error: modeloErr } = await supabase
@@ -259,25 +189,8 @@ Deno.serve(async (req) => {
 
     if (modeloErr || !modelo) {
       return jsonResponse(
-        { success: false, error: "Modelo nÃ£o encontrado ou inativo" },
+        { success: false, error: "Modelo não encontrado ou inativo" },
         404
-      );
-    }
-
-    await ensureMagickInit();
-    let resizedBase64: string;
-    let resizedWidth: number;
-    let resizedHeight: number;
-    try {
-      const resized = resizeToMaxMp(imageBase64);
-      resizedBase64 = resized.base64;
-      resizedWidth = resized.width;
-      resizedHeight = resized.height;
-    } catch (resizeErr) {
-      console.error("[editar-imagem-modelo] Resize error:", resizeErr);
-      return jsonResponse(
-        { success: false, error: "Falha ao processar imagem. Verifique se o formato Ã© vÃ¡lido (JPEG/PNG)." },
-        422
       );
     }
 
@@ -327,6 +240,26 @@ Deno.serve(async (req) => {
         return jsonResponse({ success: false, error: "CrÃ©ditos insuficientes" }, 402);
       }
       throw creditErr;
+    }
+
+    // Persistir imagem original em flux-imagens para slider antes/depois
+    const FLUX_IMAGENS_BUCKET = "flux-imagens";
+    try {
+      const originalPath = `originals/${editId}.jpeg`;
+      const { error: uploadOriginalErr } = await supabase.storage
+        .from(FLUX_IMAGENS_BUCKET)
+        .upload(originalPath, await bytes.arrayBuffer(), {
+          contentType: "image/jpeg",
+          upsert: true,
+        });
+      if (!uploadOriginalErr) {
+        const { data: urlData } = supabase.storage.from(FLUX_IMAGENS_BUCKET).getPublicUrl(originalPath);
+        await supabase.from("edits").update({ original_image_url: urlData.publicUrl }).eq("id", editId);
+      } else {
+        console.warn("[editar-imagem-modelo] Falha ao persistir original (continuando):", uploadOriginalErr);
+      }
+    } catch (origErr) {
+      console.warn("[editar-imagem-modelo] Erro ao persistir original (continuando):", origErr);
     }
 
     const webhookUrl = `${supabaseUrl}/functions/v1/flux-webhook`;
@@ -390,7 +323,8 @@ Deno.serve(async (req) => {
         500
       );
     }
-    return jsonResponse({ task_id: taskId });
+    console.log("[editar-imagem-modelo] Tarefa criada:", { taskId, editId, webhookUrl });
+    return jsonResponse({ task_id: taskId, edit_id: editId });
   } catch (error) {
     console.error("[editar-imagem-modelo] Erro:", error);
     return jsonResponse(

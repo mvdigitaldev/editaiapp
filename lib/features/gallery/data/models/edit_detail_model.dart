@@ -20,6 +20,7 @@ class EditDetailModel {
   final String? operationType;
   final String? taskId;
   final String? imageUrl;
+  final String? originalImageUrl;
   final int? fileSize;
   final String? mimeType;
   final int? width;
@@ -43,6 +44,7 @@ class EditDetailModel {
     this.operationType,
     this.taskId,
     this.imageUrl,
+    this.originalImageUrl,
     this.fileSize,
     this.mimeType,
     this.width,
@@ -70,6 +72,7 @@ class EditDetailModel {
       operationType: json['operation_type'] as String?,
       taskId: json['task_id'] as String?,
       imageUrl: json['image_url'] as String?,
+      originalImageUrl: json['original_image_url'] as String?,
       fileSize: json['file_size'] as int?,
       mimeType: json['mime_type'] as String?,
       width: json['width'] as int?,

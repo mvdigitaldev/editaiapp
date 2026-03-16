@@ -1,7 +1,19 @@
 # Configuração do projeto Supabase
 # https://supabase.com/docs/guides/functions/function-configuration
 
-# delete-edits: gateway não valida JWT (projeto pode usar chaves assimétricas ES256)
-# A função valida o JWT internamente com getClaims
+# Funções que validam JWT internamente (Authorization + getUser)
+# verify_jwt=false evita 401 no gateway quando há chaves assimétricas (ES256)
 [functions.delete-edits]
+verify_jwt = false
+
+[functions.editar-imagem-flux]
+verify_jwt = false
+
+[functions.editar-imagem-modelo]
+verify_jwt = false
+
+[functions.remover-fundo-flux]
+verify_jwt = false
+
+[functions.editar-multi-imagem-flux]
 verify_jwt = false

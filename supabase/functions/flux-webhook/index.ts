@@ -127,6 +127,8 @@ Deno.serve(async (req) => {
     const payload = (await req.json()) as WebhookPayload;
     const { id: taskId, status, result } = payload;
 
+    console.log("[flux-webhook] Recebido:", { taskId, status, hasResult: !!result?.sample });
+
     if (!taskId) {
       console.error("[flux-webhook] Payload sem id:", payload);
       return new Response(null, { status: 400 });

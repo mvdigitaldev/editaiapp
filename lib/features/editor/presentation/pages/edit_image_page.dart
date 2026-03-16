@@ -1,9 +1,12 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/utils/image_resize_utils.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_button.dart';
@@ -40,15 +43,36 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
     setState(() => _isLoading = true);
 
     try {
-      final bytes = await File(_selectedImagePath!).readAsBytes();
-      final imageBase64 = base64Encode(bytes);
-      // Usar DioClient: envia apikey + JWT (mesma autenticação que texto para imagem)
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        setState(() => _isLoading = false);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Faça login para continuar.')),
+        );
+        return;
+      }
+
+      final result = await resizeAndCompressForEdit(
+        inputPath: _selectedImagePath!,
+        maxMegapixels: 1.5,
+      );
+      final storagePath = '${user.id}/inputs/${const Uuid().v4()}.jpg';
+      await Supabase.instance.client.storage
+          .from(AppConfig.editInputsBucket)
+          .upload(storagePath, result.file, fileOptions: const FileOptions(upsert: false));
+      try {
+        await result.file.delete();
+      } catch (_) {}
+
       final dio = DioClient();
       final response = await dio.instance.post<Map<String, dynamic>>(
         '/functions/v1/editar-imagem-flux',
         data: {
           'user_prompt': prompt,
-          'image_base64': imageBase64,
+          'storage_path': storagePath,
+          'width': result.width,
+          'height': result.height,
         },
       );
 
@@ -56,9 +80,16 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
 
       final data = response.data;
       String? taskId;
-      if (data != null && data['task_id'] is String) {
-        final raw = data['task_id'] as String;
-        if (raw.isNotEmpty) taskId = raw;
+      String? editId;
+      if (data != null) {
+        if (data['task_id'] is String) {
+          final raw = data['task_id'] as String;
+          if (raw.isNotEmpty) taskId = raw;
+        }
+        if (data['edit_id'] is String) {
+          final raw = data['edit_id'] as String;
+          if (raw.isNotEmpty) editId = raw;
+        }
       }
 
       if (taskId == null) {
@@ -77,6 +108,7 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
         '/processing',
         arguments: <String, dynamic>{
           'taskId': taskId,
+          'editId': editId,
           'beforePath': _selectedImagePath,
           'before': null,
           'after': null,

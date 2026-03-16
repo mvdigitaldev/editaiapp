@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
 
     const { data: edits, error: selectError } = await supabase
       .from("edits")
-      .select("id, image_url")
+      .select("id, image_url, original_image_url")
       .not("expires_at", "is", null)
       .lt("expires_at", nowIso)
       .limit(BATCH_LIMIT);
@@ -78,6 +78,7 @@ Deno.serve(async (req) => {
     for (const row of edits) {
       const id = row.id as string | undefined;
       const imageUrl = row.image_url as string | null | undefined;
+      const originalImageUrl = row.original_image_url as string | null | undefined;
 
       if (id) {
         idsToDelete.push(id);
@@ -85,6 +86,12 @@ Deno.serve(async (req) => {
 
       if (imageUrl) {
         const path = extractStoragePathFromPublicUrl(imageUrl);
+        if (path) {
+          storagePaths.push(path);
+        }
+      }
+      if (originalImageUrl) {
+        const path = extractStoragePathFromPublicUrl(originalImageUrl);
         if (path) {
           storagePaths.push(path);
         }

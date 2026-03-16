@@ -88,13 +88,16 @@ class ProfilePage extends ConsumerWidget {
                               children: [
                                 Row(
                                   children: [
-                                    Text(
-                                      user?.displayName ?? 'Usuário',
-                                      style:
-                                          AppTextStyles.headingSmall.copyWith(
-                                        color: isDark
-                                            ? AppColors.textLight
-                                            : AppColors.textPrimary,
+                                    Flexible(
+                                      child: Text(
+                                        user?.displayName ?? 'Usuário',
+                                        style:
+                                            AppTextStyles.headingSmall.copyWith(
+                                          color: isDark
+                                              ? AppColors.textLight
+                                              : AppColors.textPrimary,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -129,6 +132,7 @@ class ProfilePage extends ConsumerWidget {
                                         ? AppColors.textTertiary
                                         : AppColors.textSecondary,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),

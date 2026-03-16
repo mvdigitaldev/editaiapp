@@ -21,6 +21,8 @@ class AppConfig {
   static const String avatarsBucket = 'avatars';
   // Bucket onde as imagens geradas pelas edições são salvas
   static const String editsBucket = 'flux-imagens';
+  // Bucket para imagens de entrada (upload antes de processar)
+  static const String editInputsBucket = 'edit-inputs';
   static const int maxFileSizeBytes = 50 * 1024 * 1024; // 50MB
   static const List<String> allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp'];
 

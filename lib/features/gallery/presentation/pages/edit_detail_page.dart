@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/image_save_utils.dart';
 import '../../../../core/widgets/app_card.dart';
+import '../../../../core/widgets/comparison_slider.dart';
 import '../../data/models/edit_detail_model.dart';
 import '../providers/gallery_provider.dart';
 
@@ -219,30 +220,63 @@ class _EditDetailPageState extends ConsumerState<EditDetailPage> {
     );
   }
 
+  bool _shouldShowComparison(EditDetailModel edit) {
+    const noComparisonTypes = ['text_to_image', 'multi_image'];
+    if (noComparisonTypes.contains(edit.operationType)) return false;
+
+    const comparisonTypes = ['edit_image', 'remove_background', 'edit_model'];
+    final hasOriginal = edit.originalImageUrl != null &&
+        edit.originalImageUrl!.isNotEmpty;
+    final hasEdited = edit.imageUrl != null && edit.imageUrl!.isNotEmpty;
+    return comparisonTypes.contains(edit.operationType) &&
+        hasOriginal &&
+        hasEdited;
+  }
+
+  double _imageAspectRatio(EditDetailModel edit) {
+    final w = edit.width;
+    final h = edit.height;
+    if (w != null && h != null && w > 0 && h > 0) return w / h;
+    return 1;
+  }
+
   Widget _buildImageSection(EditDetailModel edit, bool isDark) {
     final url = edit.imageUrl;
+    final showComparison = _shouldShowComparison(edit);
+    final aspectRatio = _imageAspectRatio(edit);
+
     return AppCard(
       padding: EdgeInsets.zero,
       margin: EdgeInsets.zero,
       borderRadius: BorderRadius.circular(16),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: url != null && url.isNotEmpty
+        child: showComparison
             ? AspectRatio(
-                aspectRatio: 1,
-                child: CachedNetworkImage(
-                  imageUrl: url,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                    color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                    child: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                  errorWidget: (_, __, ___) => _imagePlaceholder(isDark),
+                aspectRatio: aspectRatio,
+                child: ComparisonSlider(
+                  beforeImageUrl: edit.originalImageUrl,
+                  afterImageUrl: edit.imageUrl,
                 ),
               )
-            : _imagePlaceholder(isDark),
+            : url != null && url.isNotEmpty
+                ? AspectRatio(
+                    aspectRatio: aspectRatio,
+                    child: CachedNetworkImage(
+                      imageUrl: url,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        color: isDark
+                            ? AppColors.surfaceDark
+                            : AppColors.surfaceLight,
+                        child: const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => _imagePlaceholder(isDark),
+                    ),
+                  )
+                : _imagePlaceholder(isDark),
       ),
     );
   }

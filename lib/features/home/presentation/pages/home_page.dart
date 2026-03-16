@@ -146,16 +146,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                     child: Column(
                       children: [
                         _HeroActionCard(
-                          index: 0,
-                          icon: Icons.text_fields,
-                          title: 'Texto para imagem',
-                          description:
-                              'Gere imagens originais a partir de descrições.',
-                          onTap: () =>
-                              Navigator.of(context).pushNamed('/text-to-image'),
-                        ),
-                        const SizedBox(height: 12),
-                        _HeroActionCard(
                           index: 1,
                           icon: Icons.edit,
                           title: 'Editar imagem',
@@ -166,9 +156,19 @@ class _HomePageState extends ConsumerState<HomePage> {
                         ),
                         const SizedBox(height: 12),
                         _HeroActionCard(
+                          index: 0,
+                          icon: Icons.text_fields,
+                          title: 'Texto para imagem',
+                          description:
+                              'Gere imagens originais a partir de descrições.',
+                          onTap: () =>
+                              Navigator.of(context).pushNamed('/text-to-image'),
+                        ),
+                        const SizedBox(height: 12),
+                        _HeroActionCard(
                           index: 2,
                           icon: Icons.collections,
-                          title: 'Criar composição',
+                          title: 'Unir fotos',
                           description:
                               'Combine vários elementos em uma cena única.',
                           onTap: () => Navigator.of(context)

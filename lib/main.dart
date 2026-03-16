@@ -190,6 +190,7 @@ class MyApp extends ConsumerWidget {
           final args = ModalRoute.of(context)!.settings.arguments
               as Map<String, dynamic>?;
           return ComparisonPage(
+            editId: args?['editId'] as String?,
             beforeImagePath: args?['before'] as String?,
             afterImagePath: args?['after'] as String?,
             afterImageUrl: args?['afterUrl'] as String?,

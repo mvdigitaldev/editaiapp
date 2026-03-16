@@ -8,7 +8,8 @@ import {
 
 const FAL_API_URL = "https://fal.run/fal-ai/birefnet";
 const BUCKET_NAME = "flux-imagens";
-const MAX_BASE64_BYTES = 10 * 1024 * 1024; // 10 MB
+const EDIT_INPUTS_BUCKET = "edit-inputs";
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +18,7 @@ const CORS_HEADERS = {
 };
 
 interface RequestBody {
-  image_base64: string;
+  storage_path: string;
 }
 
 interface FalBirefnetResponse {
@@ -32,15 +33,6 @@ function jsonResponse(data: object, status = 200) {
   });
 }
 
-function normalizeBase64(input: string): { base64: string; mime: string } {
-  const trimmed = input.trim();
-  const dataUrlMatch = trimmed.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/i);
-  if (dataUrlMatch) {
-    return { base64: dataUrlMatch[2], mime: `image/${dataUrlMatch[1].toLowerCase()}` };
-  }
-  return { base64: trimmed, mime: "image/jpeg" };
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -52,38 +44,18 @@ Deno.serve(async (req) => {
 
   try {
     const body = (await req.json()) as Partial<RequestBody>;
-    const { image_base64 } = body;
+    const { storage_path } = body;
 
-    if (!image_base64 || typeof image_base64 !== "string" || image_base64.trim().length === 0) {
+    if (!storage_path || typeof storage_path !== "string" || storage_path.trim().length === 0) {
       return jsonResponse(
-        { success: false, error: "Campo 'image_base64' Ã© obrigatÃ³rio e nÃ£o pode estar vazio" },
+        { success: false, error: "Campo 'storage_path' é obrigatório" },
         422
       );
     }
 
     const falKey = Deno.env.get("FAL_KEY");
     if (!falKey) {
-      console.error("[remover-fundo-flux] FAL_KEY nÃ£o configurada");
-      return jsonResponse(
-        { success: false, error: "ConfiguraÃ§Ã£o do serviÃ§o indisponÃ­vel" },
-        500
-      );
-    }
-
-    const { base64: imageBase64, mime } = normalizeBase64(image_base64);
-    if (imageBase64.length < 100) {
-      return jsonResponse(
-        { success: false, error: "Imagem invÃ¡lida ou base64 corrompido" },
-        422
-      );
-    }
-
-    const base64Bytes = Math.ceil((imageBase64.length * 3) / 4);
-    if (base64Bytes > MAX_BASE64_BYTES) {
-      return jsonResponse(
-        { success: false, error: "Imagem muito grande. MÃ¡ximo: 10 MB." },
-        422
-      );
+      return jsonResponse({ success: false, error: "Configuração do serviço indisponível" }, 500);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -100,11 +72,35 @@ Deno.serve(async (req) => {
     const { data: { user } } = await authClient.auth.getUser();
     const userId = user?.id ?? null;
     if (!userId) {
-      return jsonResponse({ success: false, error: "AutenticaÃ§Ã£o obrigatÃ³ria" }, 401);
+      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
     }
 
+    if (!storage_path.startsWith(`${userId}/`)) {
+      return jsonResponse({ success: false, error: "Path inválido: não pertence ao usuário" }, 403);
+    }
+
+    const { data: bytes, error: downloadErr } = await supabase.storage
+      .from(EDIT_INPUTS_BUCKET)
+      .download(storage_path);
+
+    if (downloadErr || !bytes) {
+      console.error("[remover-fundo-flux] Erro ao baixar:", storage_path, downloadErr);
+      return jsonResponse({ success: false, error: "Imagem não encontrada ou inacessível" }, 422);
+    }
+
+    if (bytes.size > MAX_IMAGE_BYTES) {
+      return jsonResponse({ success: false, error: "Imagem muito grande. Máximo: 2 MB." }, 422);
+    }
+
+    const arr = new Uint8Array(bytes.size);
+    arr.set(new Uint8Array(await bytes.arrayBuffer()));
+    let outStr = "";
+    for (let j = 0; j < arr.length; j++) outStr += String.fromCharCode(arr[j]);
+    const imageBase64 = btoa(outStr);
+    const mime = "image/jpeg";
+
     const taskId = crypto.randomUUID();
-    const fileSizeBytes = Math.ceil((imageBase64.length * 3) / 4);
+    const fileSizeBytes = bytes.size;
 
     let editId: string;
     let reservationId = "";
@@ -133,6 +129,26 @@ Deno.serve(async (req) => {
       }
       throw creditErr;
     }
+
+    // Persistir imagem original em flux-imagens para slider antes/depois
+    try {
+      const originalPath = `originals/${editId}.jpeg`;
+      const { error: uploadOriginalErr } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(originalPath, await bytes.arrayBuffer(), {
+          contentType: mime,
+          upsert: true,
+        });
+      if (!uploadOriginalErr) {
+        const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(originalPath);
+        await supabase.from("edits").update({ original_image_url: urlData.publicUrl }).eq("id", editId);
+      } else {
+        console.warn("[remover-fundo-flux] Falha ao persistir original (continuando):", uploadOriginalErr);
+      }
+    } catch (origErr) {
+      console.warn("[remover-fundo-flux] Erro ao persistir original (continuando):", origErr);
+    }
+
     const imageUrl = `data:${mime};base64,${imageBase64}`;
 
     const { error: insertError } = await supabase.from("flux_tasks").insert({

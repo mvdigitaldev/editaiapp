@@ -11,16 +11,28 @@ class ModelsPage extends ConsumerWidget {
 
   static IconData _iconForSlug(String slug) {
     switch (slug.toLowerCase()) {
-      case 'carros':
-        return Icons.directions_car;
-      case 'roupas':
-        return Icons.checkroom;
-      case 'comida':
+      case 'alimentacao':
         return Icons.restaurant;
-      case 'joias':
-        return Icons.diamond;
-      case 'objetos':
-        return Icons.inventory_2;
+      case 'moda-produtos':
+        return Icons.checkroom;
+      case 'beleza-estetica':
+        return Icons.face_retouching_natural;
+      case 'casa-decoracao':
+        return Icons.home;
+      case 'automotivo':
+        return Icons.directions_car;
+      case 'pets':
+        return Icons.pets;
+      case 'imoveis':
+        return Icons.apartment;
+      case 'profissionais-autonomos':
+        return Icons.medical_services;
+      case 'pequenos-empreendedores':
+        return Icons.store;
+      case 'marketing-conteudo':
+        return Icons.campaign;
+      case 'eventos':
+        return Icons.celebration;
       default:
         return Icons.auto_fix_high;
     }

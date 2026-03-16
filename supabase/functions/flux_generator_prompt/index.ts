@@ -168,35 +168,59 @@ Focus on relevant FLUX official documentation, especially:
     // 6️⃣ FINAL PROMPT GENERATION (AGORA COM CONTEXTO REAL)
     // =========================
 
-    const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.2,
-        messages: [
-          {
-            role: "system",
-            content: `
-You are a professional FLUX image editing prompt optimizer.
+    let improved_prompt: string;
+
+    // Bypass: quando RAG retorna docs irrelevantes e o pedido é curto, usar prompt minimal
+    if (avg_similarity < 0.5 && translated_prompt.split(/\s+/).length <= 15) {
+      const minimalResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          temperature: 0,
+          messages: [
+            {
+              role: "system",
+              content: "Output ONLY a short English phrase (10-30 words) that describes this edit: 'Same scene, with: [user request]'. Do NOT describe the full scene.",
+            },
+            { role: "user", content: `User request: ${translated_prompt}` },
+          ],
+        }),
+      });
+      const minimalData = await minimalResponse.json();
+      improved_prompt = minimalData.choices?.[0]?.message?.content?.trim() || translated_prompt;
+    } else {
+      const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          temperature: 0.2,
+          messages: [
+            {
+              role: "system",
+              content: `
+You are a FLUX image editing prompt optimizer.
 
 STRICT RULES:
 - OUTPUT ONLY the final improved English prompt.
-- This is IMAGE EDITING, not image generation.
-- PRESERVE the original scene and environment.
-- DO NOT invent new locations.
-- ONLY modify what the user requested.
+- This is IMAGE EDITING: describe ONLY the change to apply. The input image already provides the scene.
+- For simple edits (add/remove/change one thing): keep prompt SHORT (10-50 words). Do NOT re-describe clothing, background, or objects.
+- PRESERVE the original scene. ONLY modify what the user requested.
 - NEVER use negative prompts.
 - Use positive visual replacement strategy.
-- Follow: Subject + Action + Style + Context.
+- If the user asks for a minimal change (e.g. "add pregnant belly"), output something like: "Same woman, same pose and setting, with a visibly pregnant belly" — NOT a full scene description.
 `
-          },
-          {
-            role: "user",
-            content: `
+            },
+            {
+              role: "user",
+              content: `
 Original editing request:
 ${translated_prompt}
 
@@ -209,18 +233,19 @@ ${intent}
 Relevant FLUX documentation:
 ${contextString}
 `
-          }
-        ],
-      }),
-    });
+            }
+          ],
+        }),
+      });
 
-    const chatData = await chatResponse.json();
+      const chatData = await chatResponse.json();
 
-    if (!chatData.choices || !chatData.choices[0]?.message?.content) {
-      throw new Error("Chat completion failed");
+      if (!chatData.choices || !chatData.choices[0]?.message?.content) {
+        throw new Error("Chat completion failed");
+      }
+
+      improved_prompt = chatData.choices[0].message.content.trim();
     }
-
-    const improved_prompt = chatData.choices[0].message.content.trim();
 
     // =========================
     // 7️⃣ LOGGING

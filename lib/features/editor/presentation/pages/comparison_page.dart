@@ -3,8 +3,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/ad_banner_widget.dart';
+import '../../../../core/widgets/comparison_slider.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/utils/image_save_utils.dart';
@@ -15,12 +17,14 @@ import '../../../subscription/presentation/providers/credits_usage_provider.dart
 import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 
 class ComparisonPage extends ConsumerStatefulWidget {
+  final String? editId;
   final String? beforeImagePath;
   final String? afterImagePath;
   final String? afterImageUrl;
 
   const ComparisonPage({
     super.key,
+    this.editId,
     this.beforeImagePath,
     this.afterImagePath,
     this.afterImageUrl,
@@ -32,11 +36,48 @@ class ComparisonPage extends ConsumerStatefulWidget {
 
 class _ComparisonPageState extends ConsumerState<ComparisonPage> {
   bool _isDownloading = false;
+  bool _isLoadingEdit = false;
+  String? _originalImageUrl;
+  String? _afterImageUrl;
+  String? _operationType;
+  int? _width;
+  int? _height;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowInterstitial());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowInterstitial();
+      if (widget.editId != null && widget.editId!.isNotEmpty) {
+        _fetchEdit();
+      }
+    });
+  }
+
+  Future<void> _fetchEdit() async {
+    if (widget.editId == null) return;
+    setState(() => _isLoadingEdit = true);
+    try {
+      final res = await Supabase.instance.client
+          .from('edits')
+          .select('original_image_url, image_url, operation_type, width, height')
+          .eq('id', widget.editId!)
+          .maybeSingle();
+      if (mounted && res != null) {
+        setState(() {
+          _originalImageUrl = res['original_image_url'] as String?;
+          _afterImageUrl = res['image_url'] as String?;
+          _operationType = res['operation_type'] as String?;
+          _width = res['width'] as int?;
+          _height = res['height'] as int?;
+          _isLoadingEdit = false;
+        });
+      } else if (mounted) {
+        setState(() => _isLoadingEdit = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingEdit = false);
+    }
   }
 
   void _maybeShowInterstitial() {
@@ -56,12 +97,100 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
         route.settings.name == '/' || route.settings.name == '/home' || route.isFirst);
   }
 
+  String? get _effectiveAfterUrl =>
+      _afterImageUrl ?? widget.afterImageUrl;
+
+  static const _noComparisonTypes = ['text_to_image', 'multi_image'];
+
+  bool get _hasBeforeAndAfter {
+    if (_operationType != null &&
+        _noComparisonTypes.contains(_operationType)) {
+      return false;
+    }
+    final before = _originalImageUrl ?? widget.beforeImagePath;
+    final after = _effectiveAfterUrl ?? widget.afterImagePath;
+    return before != null && after != null;
+  }
+
+  double get _imageAspectRatio {
+    if (_width != null && _height != null && _width! > 0 && _height! > 0) {
+      return _width! / _height!;
+    }
+    return 1;
+  }
+
+  Widget _buildImageContent(bool isDark) {
+    if (_isLoadingEdit && !_hasBeforeAndAfter) {
+      return Container(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_hasBeforeAndAfter) {
+      final beforeUrl = _originalImageUrl;
+      final beforePath = widget.beforeImagePath;
+      final afterUrl = _effectiveAfterUrl;
+      final afterPath = widget.afterImagePath;
+      return ComparisonSlider(
+        beforeImageUrl: beforeUrl,
+        beforeImagePath: beforePath,
+        afterImageUrl: afterUrl,
+        afterImagePath: afterPath,
+      );
+    }
+    final afterUrl = _effectiveAfterUrl;
+    if (afterUrl != null) {
+      return CachedNetworkImage(
+        imageUrl: afterUrl,
+        fit: BoxFit.contain,
+        width: double.infinity,
+        placeholder: (_, __) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+        errorWidget: (_, __, ___) => Container(
+          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          child: const Center(child: Icon(Icons.error_outline)),
+        ),
+      );
+    }
+    if (widget.afterImagePath != null) {
+      return Image.file(
+        File(widget.afterImagePath!),
+        fit: BoxFit.contain,
+        width: double.infinity,
+      );
+    }
+    return Container(
+      color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.image,
+              size: 64,
+              color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Imagem gerada',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleDownload() async {
     if (_isDownloading) return;
 
-    if (widget.afterImageUrl != null) {
+    final afterUrl = _effectiveAfterUrl;
+    if (afterUrl != null) {
       setState(() => _isDownloading = true);
-      final success = await saveRemoteImageToGallery(widget.afterImageUrl!);
+      final success = await saveRemoteImageToGallery(afterUrl);
       if (!mounted) return;
       setState(() => _isDownloading = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -170,57 +299,12 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: widget.afterImageUrl != null
-                            ? CachedNetworkImage(
-                                imageUrl: widget.afterImageUrl!,
-                                fit: BoxFit.contain,
-                                width: double.infinity,
-                                placeholder: (_, __) => const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                                errorWidget: (_, __, ___) => Container(
-                                  color: isDark
-                                      ? AppColors.surfaceDark
-                                      : AppColors.surfaceLight,
-                                  child: const Center(
-                                    child: Icon(Icons.error_outline),
-                                  ),
-                                ),
+                        child: _hasBeforeAndAfter
+                            ? AspectRatio(
+                                aspectRatio: _imageAspectRatio,
+                                child: _buildImageContent(isDark),
                               )
-                            : widget.afterImagePath != null
-                                ? Image.file(
-                                    File(widget.afterImagePath!),
-                                    fit: BoxFit.contain,
-                                    width: double.infinity,
-                                  )
-                                : Container(
-                                    color: isDark
-                                        ? AppColors.surfaceDark
-                                        : AppColors.surfaceLight,
-                                    child: Center(
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.image,
-                                            size: 64,
-                                            color: isDark
-                                                ? AppColors.textTertiary
-                                                : AppColors.textSecondary,
-                                          ),
-                                          const SizedBox(height: 16),
-                                          Text(
-                                            'Imagem gerada',
-                                            style: AppTextStyles.bodyMedium.copyWith(
-                                              color: isDark
-                                                  ? AppColors.textTertiary
-                                                  : AppColors.textSecondary,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                            : _buildImageContent(isDark),
                       ),
                     ),
                     const SizedBox(height: 100),

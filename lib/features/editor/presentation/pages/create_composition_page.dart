@@ -1,9 +1,12 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/utils/image_resize_utils.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -45,10 +48,33 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
     setState(() => _isLoading = true);
 
     try {
-      final images = <String>[];
-      for (final path in _imagePaths) {
-        final bytes = await File(path).readAsBytes();
-        images.add(base64Encode(bytes));
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        setState(() => _isLoading = false);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Faça login para continuar.')),
+        );
+        return;
+      }
+
+      // Resize e compressão no cliente (max 1.0 MP multi-imagem, dimensões múltiplas de 16)
+      // Upload para Storage (path: {user_id}/inputs/{uuid}.jpg)
+      const uuid = Uuid();
+      final storagePaths = <String>[];
+      for (final localPath in _imagePaths) {
+        final result = await resizeAndCompressForEdit(
+          inputPath: localPath,
+          maxMegapixels: 1,
+        );
+        final storagePath = '${user.id}/inputs/${uuid.v4()}.jpg';
+        await Supabase.instance.client.storage
+            .from(AppConfig.editInputsBucket)
+            .upload(storagePath, result.file, fileOptions: const FileOptions(upsert: false));
+        storagePaths.add(storagePath);
+        try {
+          await result.file.delete();
+        } catch (_) {}
       }
 
       final size = getFluxSizeForAspect(_selectedAspectRatio);
@@ -57,7 +83,7 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
         '/functions/v1/editar-multi-imagem-flux',
         data: {
           'user_prompt': prompt,
-          'images': images,
+          'storage_paths': storagePaths,
           'width': size.width,
           'height': size.height,
         },
@@ -66,13 +92,13 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
       if (!mounted) return;
 
       final data = response.data;
-      String? taskId;
-      if (data != null && data['task_id'] is String) {
-        final raw = data['task_id'] as String;
-        if (raw.isNotEmpty) taskId = raw;
+      String? editId;
+      if (data != null && data['edit_id'] is String) {
+        final raw = data['edit_id'] as String;
+        if (raw.isNotEmpty) editId = raw;
       }
 
-      if (taskId == null) {
+      if (editId == null) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -87,7 +113,7 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
       Navigator.of(context).pushNamed(
         '/processing',
         arguments: <String, dynamic>{
-          'taskId': taskId,
+          'editId': editId,
         },
       );
     } catch (e) {

@@ -1,9 +1,12 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/utils/image_resize_utils.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -37,13 +40,33 @@ class _RemoveBackgroundPageState extends ConsumerState<RemoveBackgroundPage> {
     setState(() => _isLoading = true);
 
     try {
-      final bytes = await File(_selectedImagePath!).readAsBytes();
-      final imageBase64 = base64Encode(bytes);
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        setState(() => _isLoading = false);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Faça login para continuar.')),
+        );
+        return;
+      }
+
+      final result = await resizeAndCompressForEdit(
+        inputPath: _selectedImagePath!,
+        maxMegapixels: 1.5,
+      );
+      final storagePath = '${user.id}/inputs/${const Uuid().v4()}.jpg';
+      await Supabase.instance.client.storage
+          .from(AppConfig.editInputsBucket)
+          .upload(storagePath, result.file, fileOptions: const FileOptions(upsert: false));
+      try {
+        await result.file.delete();
+      } catch (_) {}
+
       final dio = DioClient();
       final response = await dio.instance.post<Map<String, dynamic>>(
         '/functions/v1/remover-fundo-flux',
         data: {
-          'image_base64': imageBase64,
+          'storage_path': storagePath,
         },
       );
 
