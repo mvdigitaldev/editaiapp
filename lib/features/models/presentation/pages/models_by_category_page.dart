@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/widgets/app_button.dart';
 import '../../data/models/modelo_model.dart';
 import '../providers/modelos_provider.dart';
 
@@ -67,8 +66,8 @@ class ModelsByCategoryPage extends ConsumerWidget {
               ),
             );
           }
-          final viewportHeight = MediaQuery.of(context).size.height;
-          final cardHeight = viewportHeight * 0.48;
+          final viewportWidth = MediaQuery.of(context).size.width;
+          final cardHeight = (viewportWidth - 32) * 9 / 16;
           return CustomScrollView(
             slivers: [
               SliverPadding(
@@ -83,6 +82,7 @@ class ModelsByCategoryPage extends ConsumerWidget {
                           height: cardHeight,
                           child: _ModeloCard(
                             modelo: modelo,
+                            categoriaNome: categoriaNome,
                             isDark: isDark,
                           ),
                         ),
@@ -115,52 +115,42 @@ class ModelsByCategoryPage extends ConsumerWidget {
 
 class _ModeloCard extends StatelessWidget {
   final ModeloModel modelo;
+  final String categoriaNome;
   final bool isDark;
 
-  const _ModeloCard({required this.modelo, required this.isDark});
+  const _ModeloCard({
+    required this.modelo,
+    required this.categoriaNome,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context) {
     final descricao = modelo.descricao ?? modelo.promptPadrao ?? modelo.nome;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isDark ? AppColors.borderDark : AppColors.border,
-          width: 1,
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).pushNamed(
+          '/edit-model',
+          arguments: <String, dynamic>{
+            'modeloId': modelo.id,
+            'modeloNome': modelo.nome,
+            'categoriaNome': categoriaNome,
+            'modeloDescricao': modelo.descricao,
+            'modeloPromptPadrao': modelo.promptPadrao,
+          },
+        );
+      },
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: isDark ? AppColors.borderDark : AppColors.border,
+            width: 1,
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            flex: 3,
-            child: _buildThumbnailWithOverlay(descricao),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-            child: SizedBox(
-              height: 48,
-              width: double.infinity,
-              child: AppButton(
-                text: 'Editar imagem',
-                width: double.infinity,
-                height: 48,
-                onPressed: () {
-                  Navigator.of(context).pushNamed(
-                    '/edit-model',
-                    arguments: <String, dynamic>{
-                      'modeloId': modelo.id,
-                      'modeloNome': modelo.nome,
-                    },
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
+        child: _buildThumbnailWithOverlay(descricao),
       ),
     );
   }

@@ -19,7 +19,7 @@ class PaymentsDataSourceImpl implements PaymentsDataSource {
     final response = await _supabase
         .from('payments')
         .select(
-          'id, amount, currency, payment_method, payment_status, payment_provider, paid_at, created_at',
+          'id, amount, currency, payment_method, payment_status, payment_provider, external_payment_id, invoice_url, paid_at, created_at',
         )
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);

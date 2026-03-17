@@ -160,33 +160,30 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final modeloNome = args?['modeloNome'] as String? ?? 'Editar com modelo';
+    final categoriaNome = args?['categoriaNome'] as String?;
+    final modeloDescricao = args?['modeloDescricao'] as String?;
+    final modeloPromptPadrao = args?['modeloPromptPadrao'] as String?;
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios_new),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
-                  const Spacer(),
-                  Expanded(
-                    child: Text(
-                      modeloNome,
+                  if (categoriaNome != null && categoriaNome.isNotEmpty) ...[
+                    Text(
+                      categoriaNome,
                       style: AppTextStyles.headingMedium.copyWith(
                         color: isDark ? AppColors.textLight : AppColors.textPrimary,
                       ),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  const Spacer(),
-                  const SizedBox(width: 48),
+                  ],
                 ],
               ),
             ),
@@ -232,10 +229,29 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
                       ),
                     )
                   : SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Text(
+                            modeloNome,
+                            style: AppTextStyles.headingSmall.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                            ),
+                          ),
+                          if (modeloDescricao != null && modeloDescricao.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              modeloDescricao,
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: isDark
+                                    ? AppColors.textTertiary
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
                           Text(
                             'Selecione uma imagem para aplicar o modelo',
                             style: AppTextStyles.bodyMedium.copyWith(
@@ -253,6 +269,28 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
                             title: 'Selecione uma imagem',
                             subtitle: 'Toque para carregar',
                           ),
+                          if (modeloPromptPadrao != null &&
+                              modeloPromptPadrao.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              'Prompt que será aplicado',
+                              style: AppTextStyles.labelSmall.copyWith(
+                                color: isDark
+                                    ? AppColors.textTertiary
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              modeloPromptPadrao,
+                              style: AppTextStyles.caption.copyWith(
+                                color: (isDark
+                                        ? AppColors.textTertiary
+                                        : AppColors.textSecondary)
+                                    .withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

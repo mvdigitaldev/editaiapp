@@ -115,6 +115,7 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
                         photoExpirationDays: user.photoExpirationDays,
                         creditExpirationDays: user.creditExpirationDays,
                         creditReferral: user.creditReferral,
+                        addCredit: user.addCredit,
                         isDark: isDark,
                       ),
                     ],
@@ -418,6 +419,7 @@ class _CurrentPlanCard extends StatelessWidget {
   final int? photoExpirationDays;
   final int? creditExpirationDays;
   final int? creditReferral;
+  final int? addCredit;
   final bool isDark;
 
   const _CurrentPlanCard({
@@ -427,6 +429,7 @@ class _CurrentPlanCard extends StatelessWidget {
     this.photoExpirationDays,
     this.creditExpirationDays,
     this.creditReferral,
+    this.addCredit,
     required this.isDark,
   });
 
@@ -492,7 +495,8 @@ class _CurrentPlanCard extends StatelessWidget {
           ),
           if (photoExpirationDays != null ||
               creditExpirationDays != null ||
-              creditReferral != null) ...[
+              creditReferral != null ||
+              addCredit != null) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
@@ -525,7 +529,7 @@ class _CurrentPlanCard extends StatelessWidget {
                       label: 'Créditos expiram em',
                       value: '$creditExpirationDays dias',
                       isDark: isDark,
-                      showDivider: creditReferral != null,
+                      showDivider: creditReferral != null || addCredit != null,
                     ),
                   if (creditReferral != null)
                     _PlanDetailRow(
@@ -534,6 +538,16 @@ class _CurrentPlanCard extends StatelessWidget {
                       value: creditReferral == 0
                           ? 'Sem bônus'
                           : '$creditReferral créditos',
+                      isDark: isDark,
+                      showDivider: addCredit != null,
+                    ),
+                  if (addCredit != null)
+                    _PlanDetailRow(
+                      icon: Icons.refresh_outlined,
+                      label: 'Créditos na renovação',
+                      value: addCredit == 0
+                          ? 'Nenhum'
+                          : '$addCredit créditos',
                       isDark: isDark,
                       showDivider: false,
                     ),

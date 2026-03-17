@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -244,6 +245,20 @@ class _PaymentCard extends StatelessWidget {
 
   const _PaymentCard({required this.payment, required this.isDark});
 
+  Color _secondaryColor() =>
+      isDark ? AppColors.textTertiary : AppColors.textSecondary;
+
+  TextStyle _labelStyle() => AppTextStyles.labelSmall.copyWith(
+        color: _secondaryColor(),
+      );
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final statusInfo = _statusInfo(payment.paymentStatus);
@@ -268,97 +283,133 @@ class _PaymentCard extends StatelessWidget {
                 ),
               ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: statusInfo.color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(statusInfo.icon, color: statusInfo.color, size: 22),
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: statusInfo.color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(statusInfo.icon, color: statusInfo.color, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      payment.formattedAmount,
+                      style: AppTextStyles.headingSmall.copyWith(
+                        color: isDark
+                            ? AppColors.textLight
+                            : AppColors.textPrimary,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      payment.formattedDateWithTime,
+                      style: _labelStyle(),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: statusInfo.color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  payment.statusLabel,
+                  style: AppTextStyles.labelSmall.copyWith(
+                    color: statusInfo.color,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 14),
-          Expanded(
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: (isDark ? AppColors.backgroundDark : AppColors.backgroundLight)
+                  .withOpacity(0.5),
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        payment.formattedAmount,
-                        style: AppTextStyles.headingSmall.copyWith(
-                          color: isDark
-                              ? AppColors.textLight
-                              : AppColors.textPrimary,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusInfo.color.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        payment.statusLabel,
-                        style: AppTextStyles.labelSmall.copyWith(
-                          color: statusInfo.color,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  ],
+                _InfoRow(
+                  icon: Icons.credit_card_outlined,
+                  label: 'Método',
+                  value: payment.paymentMethod,
+                  labelStyle: _labelStyle(),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.credit_card,
-                      size: 14,
-                      color: isDark
-                          ? AppColors.textTertiary
-                          : AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        '${payment.paymentMethod} · ${payment.paymentProvider}',
-                        style: AppTextStyles.labelSmall.copyWith(
-                          color: isDark
-                              ? AppColors.textTertiary
-                              : AppColors.textSecondary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const Spacer(),
-                    Icon(
-                      Icons.calendar_today_outlined,
-                      size: 13,
-                      color: isDark
-                          ? AppColors.textTertiary
-                          : AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      payment.formattedDate,
-                      style: AppTextStyles.labelSmall.copyWith(
-                        color: isDark
-                            ? AppColors.textTertiary
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 8),
+                _InfoRow(
+                  icon: Icons.store_outlined,
+                  label: 'Provedor',
+                  value: payment.paymentProvider,
+                  labelStyle: _labelStyle(),
                 ),
+                if (payment.paidAt != null &&
+                    payment.paidAt != payment.createdAt) ...[
+                  const SizedBox(height: 8),
+                  _InfoRow(
+                    icon: Icons.check_circle_outline,
+                    label: 'Pago em',
+                    value: payment.formattedPaidAt!,
+                    labelStyle: _labelStyle(),
+                  ),
+                ],
+                if (payment.shortExternalId != null) ...[
+                  const SizedBox(height: 8),
+                  _InfoRow(
+                    icon: Icons.tag_outlined,
+                    label: 'ID',
+                    value: payment.shortExternalId!,
+                    labelStyle: _labelStyle(),
+                  ),
+                ],
+                if (payment.invoiceUrl != null &&
+                    payment.invoiceUrl!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: () => _openUrl(payment.invoiceUrl!),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.receipt_long_outlined,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Ver fatura',
+                            style: AppTextStyles.labelSmall.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -367,7 +418,7 @@ class _PaymentCard extends StatelessWidget {
     );
   }
 
-  _StatusInfo _statusInfo(String status) {
+  static _StatusInfo _statusInfo(String status) {
     switch (status) {
       case 'paid':
         return _StatusInfo(Icons.check_circle, AppColors.success);
@@ -380,6 +431,42 @@ class _PaymentCard extends StatelessWidget {
       default:
         return _StatusInfo(Icons.help_outline, AppColors.textSecondary);
     }
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final TextStyle labelStyle;
+
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.labelStyle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: labelStyle.color),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 72,
+          child: Text(label, style: labelStyle),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: labelStyle,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
   }
 }
 

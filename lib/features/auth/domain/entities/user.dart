@@ -13,6 +13,7 @@ class User {
   final int? photoExpirationDays;
   final int? creditExpirationDays;
   final int? creditReferral;
+  final int? addCredit;
 
   User({
     required this.id,
@@ -29,6 +30,7 @@ class User {
     this.photoExpirationDays,
     this.creditExpirationDays,
     this.creditReferral,
+    this.addCredit,
   });
 
   User copyWith({
@@ -46,6 +48,7 @@ class User {
     int? photoExpirationDays,
     int? creditExpirationDays,
     int? creditReferral,
+    int? addCredit,
   }) {
     return User(
       id: id ?? this.id,
@@ -62,6 +65,7 @@ class User {
       photoExpirationDays: photoExpirationDays ?? this.photoExpirationDays,
       creditExpirationDays: creditExpirationDays ?? this.creditExpirationDays,
       creditReferral: creditReferral ?? this.creditReferral,
+      addCredit: addCredit ?? this.addCredit,
     );
   }
 }

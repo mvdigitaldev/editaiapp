@@ -39,26 +39,13 @@ class DashboardPage extends ConsumerWidget {
             child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Painel',
-                    style: AppTextStyles.headingLarge.copyWith(
-                      color: isDark
-                          ? AppColors.textLight
-                          : AppColors.textPrimary,
-                    ),
-                  ),
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: AppColors.primary.withOpacity(0.1),
-                    child: Icon(
-                      Icons.person,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
+              Text(
+                'Painel',
+                style: AppTextStyles.headingLarge.copyWith(
+                  color: isDark
+                      ? AppColors.textLight
+                      : AppColors.textPrimary,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
