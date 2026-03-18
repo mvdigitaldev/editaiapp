@@ -23,32 +23,12 @@ class LoginPage extends ConsumerWidget {
               children: [
                 const SizedBox(height: 64),
                 // Logo
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withOpacity(0.3),
-                        blurRadius: 20,
-                        spreadRadius: 0,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.auto_fix_high,
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Editai',
-                  style: AppTextStyles.headingMedium.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.asset(
+                    'assets/logo.png',
+                    height: 80,
+                    fit: BoxFit.contain,
                   ),
                 ),
                 const SizedBox(height: 48),

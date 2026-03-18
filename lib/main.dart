@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -8,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/config/app_config.dart';
+import 'core/navigation/app_navigator.dart';
 import 'core/services/ad_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/widgets/ad_banner_widget.dart';
@@ -18,6 +20,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_provider.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/pages/register_page.dart';
+import 'features/auth/presentation/pages/reset_password_page.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/editor/presentation/pages/editor_page.dart';
 import 'features/gallery/presentation/pages/gallery_page.dart';
@@ -91,10 +94,16 @@ void main() async {
   await initializeDateFormatting('pt_BR', null);
 
   // Inicializar Supabase (se falhar, app ainda abre para não ficar tela branca)
+  // authFlowType.implicit: redirect de reset de senha usa tokens no hash (funciona no browser)
+  // detectSessionInUri: false — tratamos deep link manualmente no AuthWrapper
   try {
     await Supabase.initialize(
       url: AppConfig.supabaseUrl,
       anonKey: AppConfig.supabaseAnonKey,
+      authOptions: const FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.implicit,
+        detectSessionInUri: false,
+      ),
     );
   } catch (e, st) {
     debugPrint('[Editai] Erro ao inicializar Supabase: $e');
@@ -122,18 +131,17 @@ void main() async {
   }
 
   // Push notifications: não bloquear abertura do app — inicializar em background
-  final navigatorKey = GlobalKey<NavigatorState>();
   runApp(
     ProviderScope(
       overrides: adServiceInstance != null
           ? [adServiceProvider.overrideWithValue(adServiceInstance)]
           : [],
-      child: MyApp(navigatorKey: navigatorKey),
+      child: MyApp(navigatorKey: appNavigatorKey),
     ),
   );
 
   if (!kIsWeb) {
-    NotificationService().setNavigatorKey(navigatorKey);
+    NotificationService().setNavigatorKey(appNavigatorKey);
     Future<void>.microtask(() async {
       try {
         await Firebase.initializeApp(
@@ -175,6 +183,7 @@ class MyApp extends ConsumerWidget {
         '/': (context) => const AuthWrapper(),
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
+        '/reset-password': (context) => const ResetPasswordPage(),
         '/home': (context) => const MainShellPage(),
         '/editor': (context) => const EditorPage(),
         '/gallery': (context) => const GalleryPage(),
@@ -241,10 +250,81 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
   bool _loadingTimedOut = false;
   Timer? _loadingTimer;
 
+  StreamSubscription<Uri>? _linkSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    // Web: trocar code por sessão quando usuário volta do link de recuperação de senha
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _handleAuthCallback());
+    } else {
+      // Mobile: tratar deep link manualmente (editai:// ou Universal Links)
+      _initDeepLinks();
+    }
+  }
+
+  void _initDeepLinks() {
+    final appLinks = AppLinks();
+    appLinks.getInitialLink().then((uri) {
+      if (uri != null) _handleDeepLink(uri);
+    });
+    _linkSubscription = appLinks.uriLinkStream.listen(_handleDeepLink);
+  }
+
+  Future<void> _handleDeepLink(Uri uri) async {
+    final path = uri.path;
+    if (!path.contains('reset-password')) return;
+
+    try {
+      final code = uri.queryParameters['code'];
+      final hasHash = uri.fragment.isNotEmpty;
+
+      if (code != null && code.isNotEmpty) {
+        await Supabase.instance.client.auth.exchangeCodeForSession(code);
+      } else if (hasHash) {
+        await Supabase.instance.client.auth.getSessionFromUrl(uri);
+      } else {
+        return;
+      }
+
+      if (!mounted) return;
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/reset-password',
+          (route) => route.isFirst,
+        );
+      }
+    } catch (e) {
+      debugPrint('[Editai] Erro ao processar deep link: $e');
+    }
+  }
+
   @override
   void dispose() {
+    _linkSubscription?.cancel();
     _loadingTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _handleAuthCallback() async {
+    final code = Uri.base.queryParameters['code'];
+    if (code == null || code.isEmpty) return;
+    try {
+      await Supabase.instance.client.auth.exchangeCodeForSession(code);
+      // AuthNotifier pode detectar passwordRecovery; se não, navegar manualmente
+      if (!mounted) return;
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/reset-password',
+          (route) => route.isFirst,
+        );
+      }
+    } catch (e) {
+      debugPrint('[Editai] Erro ao trocar code por sessão: $e');
+    }
   }
 
   static const _loadingTimeoutDuration = Duration(seconds: 12);

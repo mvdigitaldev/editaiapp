@@ -113,7 +113,15 @@ class AuthDataSourceImpl implements AuthDataSource {
   @override
   Future<void> resetPassword(String email) async {
     try {
-      await _supabase.auth.resetPasswordForEmail(email);
+      // URL web universal: funciona em desktop e mobile (plano reset_senha_web_e_mobile)
+      final redirectTo = kIsWeb
+          ? '${Uri.base.origin}/reset-password'
+          : 'https://app.editai.online/reset-password';
+
+      await _supabase.auth.resetPasswordForEmail(
+        email,
+        redirectTo: redirectTo,
+      );
     } catch (e) {
       throw AuthFailure(message: e.toString());
     }

@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/material.dart' show GlobalKey, NavigatorState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:editaiapp/core/services/notification_service.dart';
 import '../../data/datasources/auth_datasource.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/repositories/auth_repository.dart';
+import 'package:editaiapp/core/navigation/app_navigator.dart';
 import '../../domain/usecases/delete_account.dart';
 import '../../domain/usecases/get_current_user.dart';
+import '../../domain/usecases/reset_password.dart';
 import '../../domain/usecases/sign_in.dart';
 import '../../domain/usecases/sign_out.dart';
 import '../../domain/usecases/sign_up.dart';
@@ -56,9 +59,20 @@ final deleteAccountProvider = Provider<DeleteAccount>((ref) {
   return DeleteAccount(ref.watch(authRepositoryProvider));
 });
 
+final resetPasswordProvider = Provider<ResetPassword>((ref) {
+  return ResetPassword(ref.watch(authRepositoryProvider));
+});
+
+final navigatorKeyProvider = Provider<GlobalKey<NavigatorState>>((ref) {
+  return appNavigatorKey;
+});
+
 // State Provider
 final authStateProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  final notifier = AuthNotifier(ref.watch(getCurrentUserProvider));
+  final notifier = AuthNotifier(
+    ref.watch(getCurrentUserProvider),
+    ref.watch(navigatorKeyProvider),
+  );
   ref.onDispose(() => notifier.cancelAuthListener());
   return notifier;
 });
@@ -91,13 +105,26 @@ class AuthState {
 // Notifier
 class AuthNotifier extends StateNotifier<AuthState> {
   final GetCurrentUser _getCurrentUser;
+  final GlobalKey<NavigatorState> _navigatorKey;
   StreamSubscription<dynamic>? _authSubscription;
 
-  AuthNotifier(this._getCurrentUser) : super(AuthState()) {
+  AuthNotifier(this._getCurrentUser, this._navigatorKey) : super(AuthState()) {
     checkAuth();
     _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
       (data) async {
         final event = data.event;
+
+        // Recuperação de senha: redirecionar para página de nova senha
+        if (event == AuthChangeEvent.passwordRecovery) {
+          Future.microtask(() {
+            _navigatorKey.currentState?.pushNamedAndRemoveUntil(
+              '/reset-password',
+              (route) => route.isFirst,
+            );
+          });
+          return;
+        }
+
         if (!kIsWeb) {
           if (data.session != null) {
             try {
