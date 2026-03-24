@@ -48,6 +48,8 @@ import 'features/dashboard/presentation/pages/credit_history_page.dart';
 import 'features/gallery/presentation/pages/edit_detail_page.dart';
 import 'features/models/presentation/pages/edit_model_page.dart';
 import 'features/models/presentation/pages/models_by_category_page.dart';
+import 'features/models/presentation/pages/admin_categoria_form_page.dart';
+import 'features/models/presentation/pages/admin_modelo_form_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -211,6 +213,8 @@ class MyApp extends ConsumerWidget {
         '/remove-background': (context) => const RemoveBackgroundPage(),
         '/edit-model': (context) => const EditModelPage(),
         '/models-by-category': (context) => const ModelsByCategoryPage(),
+        '/admin/categoria/form': (context) => const AdminCategoriaFormPage(),
+        '/admin/modelo/form': (context) => const AdminModeloFormPage(),
         '/text-to-image-result': (context) => const TextToImageResultPage(),
         '/processing': (context) => const ProcessingPage(),
         '/profile': (context) => const ProfilePage(),

@@ -14,6 +14,8 @@ class User {
   final int? creditExpirationDays;
   final int? creditReferral;
   final int? addCredit;
+  /// Valor vindo de `user_profiles.role` (`user` | `admin`).
+  final String? role;
 
   User({
     required this.id,
@@ -31,7 +33,10 @@ class User {
     this.creditExpirationDays,
     this.creditReferral,
     this.addCredit,
+    this.role,
   });
+
+  bool get isAdmin => role == 'admin';
 
   User copyWith({
     String? id,
@@ -49,6 +54,7 @@ class User {
     int? creditExpirationDays,
     int? creditReferral,
     int? addCredit,
+    String? role,
   }) {
     return User(
       id: id ?? this.id,
@@ -66,6 +72,7 @@ class User {
       creditExpirationDays: creditExpirationDays ?? this.creditExpirationDays,
       creditReferral: creditReferral ?? this.creditReferral,
       addCredit: addCredit ?? this.addCredit,
+      role: role ?? this.role,
     );
   }
 }

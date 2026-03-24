@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../gallery/presentation/providers/gallery_provider.dart';
+import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 
 class ProcessingPage extends ConsumerStatefulWidget {
@@ -18,11 +19,13 @@ class ProcessingPage extends ConsumerStatefulWidget {
 
 class _ProcessingPageState extends ConsumerState<ProcessingPage>
     with WidgetsBindingObserver {
-  double _progress = 0.0;
   bool _hasError = false;
+  bool _hasTimeout = false;
+  bool _hasFinished = false;
   String? _errorMessage;
   RealtimeChannel? _channel;
   Timer? _pollTimer;
+  Timer? _timeoutTimer;
   String? _beforePathFromArgs;
   String? _editId;
   String? _taskId;
@@ -38,7 +41,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && !_hasError) {
+    if (state == AppLifecycleState.resumed && !_hasError && !_hasFinished) {
       _recheckStatus();
     }
   }
@@ -51,18 +54,88 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
 
     if (_editId != null && _editId!.isNotEmpty) {
       await _startEditProcessing(_editId!);
+      _scheduleProcessingTimeout();
     } else if (_taskId != null && _taskId!.isNotEmpty) {
       await _startFluxProcessing(_taskId!);
+      _scheduleProcessingTimeout();
     } else {
       await _simulateProcessing(args);
     }
+  }
+
+  void _scheduleProcessingTimeout() {
+    if (_hasFinished) return;
+    final hasRealJob = (_editId != null && _editId!.isNotEmpty) ||
+        (_taskId != null && _taskId!.isNotEmpty);
+    if (!hasRealJob) return;
+    _cancelTimeoutTimer();
+    _timeoutTimer = Timer(const Duration(seconds: 80), () {
+      unawaited(_onProcessingTimeout());
+    });
+  }
+
+  void _cancelTimeoutTimer() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = null;
+  }
+
+  Future<String?> _resolveEditIdForRelease() async {
+    if (_editId != null && _editId!.isNotEmpty) return _editId;
+    final taskId = _taskId;
+    if (taskId == null || taskId.isEmpty) return null;
+    try {
+      final res = await Supabase.instance.client
+          .from('flux_tasks')
+          .select('edit_id')
+          .eq('task_id', taskId)
+          .maybeSingle();
+      final id = res?['edit_id'];
+      return id is String && id.isNotEmpty ? id : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _onProcessingTimeout() async {
+    if (!mounted || _hasFinished || _hasError) return;
+
+    _cleanupChannel();
+
+    await _recheckStatus();
+    if (!mounted || _hasFinished) return;
+
+    final effectiveEditId = await _resolveEditIdForRelease();
+    if (effectiveEditId != null) {
+      try {
+        await Supabase.instance.client.rpc(
+          'user_release_pending_reservation_for_edit',
+          params: <String, dynamic>{
+            'p_edit_id': effectiveEditId,
+            'p_reason': 'client_processing_timeout',
+          },
+        );
+      } catch (e, st) {
+        debugPrint('[ProcessingPage] Falha ao liberar reserva: $e\n$st');
+      }
+    }
+
+    ref.invalidate(creditsUsageProvider);
+    ref.invalidate(planLimitsProvider);
+
+    if (!mounted || _hasFinished) return;
+    setState(() {
+      _hasError = true;
+      _hasTimeout = true;
+      _errorMessage =
+          'A operação demorou mais do que o esperado. Tente novamente mais tarde.';
+    });
   }
 
   void _startPolling() {
     _cancelPolling();
     _recheckStatus();
     _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (!mounted || _hasError) return;
+      if (!mounted || _hasError || _hasFinished) return;
       _recheckStatus();
     });
   }
@@ -73,7 +146,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
   }
 
   Future<void> _recheckStatus() async {
-    if (!mounted || _hasError) return;
+    if (!mounted || _hasError || _hasFinished) return;
 
     if (_editId != null && _editId!.isNotEmpty) {
       try {
@@ -83,8 +156,8 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
             .eq('id', _editId!)
             .maybeSingle();
 
-        if (res != null && res is Map<String, dynamic>) {
-          _handleEditRecord(res);
+        if (res != null) {
+          _handleEditRecord(Map<String, dynamic>.from(res as Map));
         }
       } catch (_) {}
     } else if (_taskId != null && _taskId!.isNotEmpty) {
@@ -95,8 +168,8 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
             .eq('task_id', _taskId!)
             .maybeSingle();
 
-        if (res != null && res is Map<String, dynamic>) {
-          _handleTaskRecord(res);
+        if (res != null) {
+          _handleTaskRecord(Map<String, dynamic>.from(res as Map));
         }
       } catch (_) {}
     }
@@ -117,10 +190,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
           value: editId,
         ),
         callback: (payload) {
-          final record = payload.newRecord;
-          if (record is Map<String, dynamic>) {
-            _handleEditRecord(record);
-          }
+          _handleEditRecord(payload.newRecord);
         },
       )
       ..subscribe();
@@ -134,8 +204,8 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
           .eq('id', editId)
           .maybeSingle();
 
-      if (res != null && res is Map<String, dynamic>) {
-        _handleEditRecord(res);
+      if (res != null) {
+        _handleEditRecord(Map<String, dynamic>.from(res as Map));
       }
     } catch (_) {}
   }
@@ -147,6 +217,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
 
     if (status == 'completed') {
       final imageUrl = record['image_url'] as String?;
+      _hasFinished = true;
       _cleanupChannel();
       ref.invalidate(recentEditsProvider);
       ref.invalidate(planLimitsProvider);
@@ -190,17 +261,13 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
           value: taskId,
         ),
         callback: (payload) {
-          final record = payload.newRecord;
-          if (record is Map<String, dynamic>) {
-            _handleTaskRecord(record);
-          }
+          _handleTaskRecord(payload.newRecord);
         },
       )
       ..subscribe();
 
     _startPolling();
 
-    // Fallback obrigatório após inscrição
     try {
       final res = await supabase
           .from('flux_tasks')
@@ -208,12 +275,10 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
           .eq('task_id', taskId)
           .maybeSingle();
 
-      if (res != null && res is Map<String, dynamic>) {
-        _handleTaskRecord(res);
+      if (res != null) {
+        _handleTaskRecord(Map<String, dynamic>.from(res as Map));
       }
-    } catch (_) {
-      // Em caso de erro no fallback, continuamos aguardando via Realtime
-    }
+    } catch (_) {}
   }
 
   void _handleTaskRecord(Map<String, dynamic> record) {
@@ -223,11 +288,11 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
 
     if (status == 'ready') {
       final imageUrl = record['image_url'] as String?;
+      _hasFinished = true;
       _cleanupChannel();
       ref.invalidate(recentEditsProvider);
       ref.invalidate(planLimitsProvider);
       if (_beforePathFromArgs != null) {
-        // Fluxo editar-imagem: mostrar comparação (antes + resultado por URL)
         Navigator.of(context).pushReplacementNamed(
           '/comparison',
           arguments: <String, dynamic>{
@@ -238,7 +303,6 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
           },
         );
       } else {
-        // Fluxo texto para imagem
         Navigator.of(context).pushReplacementNamed(
           '/text-to-image-result',
           arguments: imageUrl,
@@ -256,19 +320,14 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
   }
 
   Future<void> _simulateProcessing(Map<String, dynamic>? args) async {
-    // Simulate processing
-    for (int i = 0; i <= 100; i++) {
-      await Future.delayed(const Duration(milliseconds: 50));
+    for (var i = 0; i <= 100; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
       if (!mounted) return;
-      setState(() {
-        _progress = i / 100;
-      });
     }
 
-    // Navigate to comparison after processing
     if (!mounted) return;
     ref.invalidate(recentEditsProvider);
-      ref.invalidate(planLimitsProvider);
+    ref.invalidate(planLimitsProvider);
     final before = args != null ? args['before'] as String? : null;
     final after = args != null ? args['after'] as String? : null;
     Navigator.of(context).pushReplacementNamed(
@@ -281,6 +340,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
   }
 
   void _cleanupChannel() {
+    _cancelTimeoutTimer();
     _cancelPolling();
     if (_channel != null) {
       _channel!.unsubscribe();
@@ -295,6 +355,10 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
     super.dispose();
   }
 
+  void _goHome() {
+    Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -307,7 +371,6 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Lottie animation
                 SizedBox(
                   width: 180,
                   height: 180,
@@ -319,7 +382,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
+                        color: AppColors.primary.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -331,7 +394,6 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
                   ),
                 ),
                 const SizedBox(height: 32),
-                // Title
                 Text(
                   'Processando sua edição...',
                   style: AppTextStyles.headingLarge.copyWith(
@@ -350,19 +412,32 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 32),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    child: Text(
-                      'Voltar',
-                      style: AppTextStyles.labelLarge.copyWith(
-                        color: isDark
-                            ? AppColors.textTertiary
-                            : AppColors.textSecondary,
+                  if (_hasTimeout)
+                    TextButton(
+                      onPressed: _goHome,
+                      child: Text(
+                        'Ir para o início',
+                        style: AppTextStyles.labelLarge.copyWith(
+                          color: isDark
+                              ? AppColors.textTertiary
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    )
+                  else
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: Text(
+                        'Voltar',
+                        style: AppTextStyles.labelLarge.copyWith(
+                          color: isDark
+                              ? AppColors.textTertiary
+                              : AppColors.textSecondary,
+                        ),
                       ),
                     ),
-                  ),
                 ] else ...[
                   Text(
                     'Nossa IA está trabalhando para criar o melhor resultado',
@@ -373,21 +448,6 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 32),
-                  // Cancel button
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    child: Text(
-                      'Cancelar',
-                      style: AppTextStyles.labelLarge.copyWith(
-                        color: isDark
-                            ? AppColors.textTertiary
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
                 ],
               ],
             ),
@@ -397,4 +457,3 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
     );
   }
 }
-

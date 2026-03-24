@@ -23,6 +23,8 @@ class AppConfig {
   static const String editsBucket = 'flux-imagens';
   // Bucket para imagens de entrada (upload antes de processar)
   static const String editInputsBucket = 'edit-inputs';
+  // Catálogo (admin): capas de categorias e thumbnails de modelos (mesmo bucket)
+  static const String thumbnailBucket = 'thumbnail';
   static const int maxFileSizeBytes = 50 * 1024 * 1024; // 50MB
   static const List<String> allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp'];
 

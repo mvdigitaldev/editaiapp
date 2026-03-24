@@ -13,7 +13,7 @@ final categoriasProvider = FutureProvider<List<CategoriaModel>>((ref) async {
   final user = ref.watch(authStateProvider).user;
   if (user == null) return [];
   final ds = ref.watch(modelosDataSourceProvider);
-  return ds.getCategorias();
+  return ds.getCategorias(includeInactive: user.isAdmin);
 });
 
 /// Lista de modelos por categoria (para a tela de modelos da categoria).
@@ -22,5 +22,8 @@ final modelosPorCategoriaProvider =
   final user = ref.watch(authStateProvider).user;
   if (user == null) return [];
   final ds = ref.watch(modelosDataSourceProvider);
-  return ds.getModelosPorCategoria(categoriaId);
+  return ds.getModelosPorCategoria(
+    categoriaId,
+    includeInactive: user.isAdmin,
+  );
 });

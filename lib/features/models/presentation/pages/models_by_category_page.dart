@@ -3,8 +3,56 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/postgrest_user_message.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../data/models/categoria_model.dart';
 import '../../data/models/modelo_model.dart';
 import '../providers/modelos_provider.dart';
+
+Future<void> _confirmDeleteModelo(
+  BuildContext context,
+  WidgetRef ref,
+  ModeloModel modelo,
+  String categoriaId,
+) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Excluir modelo?'),
+      content: Text('«${modelo.nome}» será removido.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Excluir'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  try {
+    await ref.read(modelosDataSourceProvider).deleteModelo(modelo.id);
+    ref.invalidate(modelosPorCategoriaProvider(categoriaId));
+    ref.invalidate(categoriasProvider);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Modelo removido')),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(postgrestUserMessage(e)),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
 
 /// Página de modelos por categoria. Layout estilo Nano Banana: thumbnail + prompt + botão Editar.
 ///
@@ -20,6 +68,8 @@ class ModelsByCategoryPage extends ConsumerWidget {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final categoriaId = args?['categoriaId'] as String?;
     final categoriaNome = args?['categoriaNome'] as String? ?? 'Modelos';
+    final categoriaCtx = args?['categoria'] as CategoriaModel?;
+    final isAdmin = ref.watch(authStateProvider).user?.isAdmin ?? false;
 
     if (categoriaId == null || categoriaId.isEmpty) {
       return Scaffold(
@@ -53,6 +103,52 @@ class ModelsByCategoryPage extends ConsumerWidget {
           ),
         ),
         centerTitle: true,
+        actions: [
+          if (isAdmin) ...[
+            if (categoriaCtx != null)
+              IconButton(
+                tooltip: 'Editar categoria',
+                icon: const Icon(Icons.edit_note),
+                color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                onPressed: () {
+                  Navigator.of(context)
+                      .pushNamed(
+                        '/admin/categoria/form',
+                        arguments: <String, dynamic>{
+                          'categoria': categoriaCtx,
+                        },
+                      )
+                      .then((saved) {
+                    if (saved == true) {
+                      ref.invalidate(categoriasProvider);
+                      ref.invalidate(modelosPorCategoriaProvider(categoriaId));
+                    }
+                  });
+                },
+              ),
+            IconButton(
+              tooltip: 'Novo modelo',
+              icon: const Icon(Icons.add),
+              color: isDark ? AppColors.textLight : AppColors.textPrimary,
+              onPressed: () {
+                Navigator.of(context)
+                    .pushNamed(
+                      '/admin/modelo/form',
+                      arguments: <String, dynamic>{
+                        'categoriaId': categoriaId,
+                        'categoriaNome': categoriaNome,
+                      },
+                    )
+                    .then((saved) {
+                  if (saved == true) {
+                    ref.invalidate(modelosPorCategoriaProvider(categoriaId));
+                    ref.invalidate(categoriasProvider);
+                  }
+                });
+              },
+            ),
+          ],
+        ],
       ),
       body: modelosAsync.when(
         data: (modelos) {
@@ -84,6 +180,32 @@ class ModelsByCategoryPage extends ConsumerWidget {
                             modelo: modelo,
                             categoriaNome: categoriaNome,
                             isDark: isDark,
+                            isAdmin: isAdmin,
+                            onAdminEdit: () {
+                              Navigator.of(context)
+                                  .pushNamed(
+                                    '/admin/modelo/form',
+                                    arguments: <String, dynamic>{
+                                      'categoriaId': categoriaId,
+                                      'categoriaNome': categoriaNome,
+                                      'modelo': modelo,
+                                    },
+                                  )
+                                  .then((saved) {
+                                if (saved == true) {
+                                  ref.invalidate(
+                                    modelosPorCategoriaProvider(categoriaId),
+                                  );
+                                  ref.invalidate(categoriasProvider);
+                                }
+                              });
+                            },
+                            onAdminDelete: () => _confirmDeleteModelo(
+                              context,
+                              ref,
+                              modelo,
+                              categoriaId,
+                            ),
                           ),
                         ),
                       );
@@ -117,41 +239,74 @@ class _ModeloCard extends StatelessWidget {
   final ModeloModel modelo;
   final String categoriaNome;
   final bool isDark;
+  final bool isAdmin;
+  final VoidCallback onAdminEdit;
+  final VoidCallback onAdminDelete;
 
   const _ModeloCard({
     required this.modelo,
     required this.categoriaNome,
     required this.isDark,
+    required this.isAdmin,
+    required this.onAdminEdit,
+    required this.onAdminDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     final descricao = modelo.descricao ?? modelo.promptPadrao ?? modelo.nome;
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context).pushNamed(
-          '/edit-model',
-          arguments: <String, dynamic>{
-            'modeloId': modelo.id,
-            'modeloNome': modelo.nome,
-            'categoriaNome': categoriaNome,
-            'modeloDescricao': modelo.descricao,
-            'modeloPromptPadrao': modelo.promptPadrao,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        GestureDetector(
+          onTap: () {
+            Navigator.of(context).pushNamed(
+              '/edit-model',
+              arguments: <String, dynamic>{
+                'modeloId': modelo.id,
+                'modeloNome': modelo.nome,
+                'categoriaNome': categoriaNome,
+                'modeloDescricao': modelo.descricao,
+                'modeloPromptPadrao': modelo.promptPadrao,
+              },
+            );
           },
-        );
-      },
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: isDark ? AppColors.borderDark : AppColors.border,
-            width: 1,
+          child: Card(
+            clipBehavior: Clip.antiAlias,
+            color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: isDark ? AppColors.borderDark : AppColors.border,
+                width: 1,
+              ),
+            ),
+            child: _buildThumbnailWithOverlay(descricao),
           ),
         ),
-        child: _buildThumbnailWithOverlay(descricao),
-      ),
+        if (isAdmin)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Material(
+              color: Colors.black54,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.more_vert, size: 22, color: Colors.white),
+                onSelected: (v) {
+                  if (v == 'edit') onAdminEdit();
+                  if (v == 'delete') onAdminDelete();
+                },
+                itemBuilder: (ctx) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Editar')),
+                  PopupMenuItem(value: 'delete', child: Text('Excluir')),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 

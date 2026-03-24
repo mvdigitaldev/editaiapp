@@ -24,12 +24,14 @@ class _MultiUploadAreaState extends State<MultiUploadArea> {
   Future<void> _pickImage() async {
     if (widget.imagePaths.length >= widget.maxCount) return;
     final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: ImageSource.gallery,
+    final remaining = widget.maxCount - widget.imagePaths.length;
+    final List<XFile> images = await picker.pickMultiImage(
       imageQuality: 85,
+      limit: remaining,
     );
-    if (image != null && mounted) {
-      final updated = List<String>.from(widget.imagePaths)..add(image.path);
+    if (images.isNotEmpty && mounted) {
+      final updated = List<String>.from(widget.imagePaths)
+        ..addAll(images.map((x) => x.path));
       widget.onChanged(updated);
     }
   }

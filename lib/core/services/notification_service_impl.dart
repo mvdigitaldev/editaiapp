@@ -207,7 +207,6 @@ class NotificationService {
           _processedMessages.take(_processedMessages.length - 100).toList();
       _processedMessages.removeAll(toRemove);
     }
-    _processNotificationDeepLink(message.data);
     _showLocalNotification(message);
   }
 
@@ -216,8 +215,17 @@ class NotificationService {
   }
 
   Future<void> _showLocalNotification(RemoteMessage message) async {
+    String title;
+    String body;
     final notification = message.notification;
-    if (notification == null) return;
+    if (notification != null) {
+      title = notification.title ?? '';
+      body = notification.body ?? '';
+    } else {
+      final data = message.data;
+      title = data['title'] as String? ?? 'Editai';
+      body = data['body'] as String? ?? '';
+    }
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
         _channelId,
@@ -234,8 +242,8 @@ class NotificationService {
     );
     await _localNotifications.show(
       message.hashCode,
-      notification.title ?? '',
-      notification.body ?? '',
+      title,
+      body,
       details,
       payload: message.data.isEmpty ? null : jsonEncode(message.data),
     );

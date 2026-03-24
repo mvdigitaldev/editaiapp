@@ -18,6 +18,7 @@ class UserModel extends User {
     super.creditExpirationDays,
     super.creditReferral,
     super.addCredit,
+    super.role,
   });
 
   static DateTime? _parseDateTime(dynamic v) => ServerDateUtils.parseServerDate(v);
@@ -47,6 +48,7 @@ class UserModel extends User {
       creditExpirationDays: _parseInt(json['credit_expiration_days']),
       creditReferral: _parseInt(json['credit_referral']),
       addCredit: _parseInt(json['add_credit']),
+      role: json['role'] as String?,
     );
   }
 
@@ -67,6 +69,7 @@ class UserModel extends User {
       if (creditExpirationDays != null) 'credit_expiration_days': creditExpirationDays,
       if (creditReferral != null) 'credit_referral': creditReferral,
       if (addCredit != null) 'add_credit': addCredit,
+      if (role != null) 'role': role,
     };
   }
 
@@ -87,6 +90,7 @@ class UserModel extends User {
       creditExpirationDays: creditExpirationDays,
       creditReferral: creditReferral,
       addCredit: addCredit,
+      role: role,
     );
   }
 }

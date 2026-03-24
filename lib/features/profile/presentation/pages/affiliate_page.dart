@@ -97,10 +97,38 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
     if (_referralLink == null) return;
     const prefix = 'Crie sua conta no Editai e edite fotos com IA: ';
     final message = '$prefix$_referralLink';
-    final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    final encoded = Uri.encodeComponent(message);
+
+    Future<bool> tryOpen(Uri uri) async {
+      try {
+        if (!await canLaunchUrl(uri)) return false;
+        return await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+      } catch (_) {
+        return false;
+      }
     }
+
+    // 1) Padrão recomendado — abre o app com texto; externalApplication evita WebView preso
+    final apiUri = Uri.parse('https://api.whatsapp.com/send?text=$encoded');
+    if (await tryOpen(apiUri)) return;
+
+    // 2) Fallback
+    final waUri = Uri.parse('https://wa.me/?text=$encoded');
+    if (await tryOpen(waUri)) return;
+
+    // 3) Deep link nativo (em alguns devices melhora o fluxo de escolher contato)
+    final appUri = Uri.parse('whatsapp://send?text=$encoded');
+    if (await tryOpen(appUri)) return;
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Não foi possível abrir o WhatsApp. Instale o app ou tente copiar o link.'),
+      ),
+    );
   }
 
   Future<void> _shareViaFacebook() async {
