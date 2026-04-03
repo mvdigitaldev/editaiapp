@@ -2,8 +2,44 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
   createEditAndReserveCredits,
-  releaseReservedCredits,
+  releaseReservedCreditsForEdit,
 } from "../_shared/credits.ts";
+
+/**
+ * Extrai o user id direto do payload do JWT (base64).
+ * Sem chamadas de rede — o gateway já validou a assinatura.
+ */
+function extractUserIdFromJwt(token: string): string | null {
+  try {
+    let t = token.trim();
+    if (t.toLowerCase().startsWith("bearer ")) t = t.slice(7).trim();
+    const parts = t.split(".");
+    if (parts.length !== 3) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+    const payload = JSON.parse(atob(b64 + pad)) as { sub?: string; exp?: number };
+    if (typeof payload.exp === "number" && payload.exp < Date.now() / 1000) return null;
+    const sub = payload.sub;
+    return typeof sub === "string" && sub.length > 0 ? sub : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveUserId(req: Request, bodyAccessToken?: string | null): string | null {
+  const sources = [
+    req.headers.get("Authorization"),
+    req.headers.get("authorization"),
+    req.headers.get("x-forwarded-authorization"),
+    typeof bodyAccessToken === "string" ? bodyAccessToken : null,
+  ];
+  for (const raw of sources) {
+    if (!raw?.trim()) continue;
+    const uid = extractUserIdFromJwt(raw);
+    if (uid) return uid;
+  }
+  return null;
+}
 const BFL_API_URL = "https://api.bfl.ai/v1/flux-2-pro";
 const OPENAI_API_URL = "https://api.openai.com/v1";
 const EDIT_INPUTS_BUCKET = "edit-inputs";
@@ -21,41 +57,11 @@ interface RequestBody {
   storage_path: string;
   width?: number;
   height?: number;
-}
-
-function getBearerToken(req: Request): string | null {
-  const rawHeader =
-    req.headers.get("Authorization") ??
-    req.headers.get("authorization") ??
-    req.headers.get("x-forwarded-authorization");
-  if (!rawHeader) return null;
-
-  const match = rawHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) return null;
-
-  const token = match[1]?.trim() ?? "";
-  return token.length > 0 ? token : null;
-}
-async function resolveAuthenticatedUserId(
-  req: Request,
-  supabase: ReturnType<typeof createClient>,
-  supabaseUrl: string,
-): Promise<string | null> {
-  const token = getBearerToken(req);
-  if (!token) return null;
-  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-  const claimSub = claimsData?.claims?.sub;
-  if (!claimsError && typeof claimSub === "string" && claimSub.length > 0) {
-    return claimSub;
-  }
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  if (!anonKey) return null;
-  const authClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-  const { data: { user }, error: userError } = await authClient.auth.getUser();
-  if (userError) return null;
-  return user?.id ?? null;
+  /** Somente para categorias edit_mode = guided */
+  selected_improvements?: string[];
+  user_notes?: string;
+  /** Fallback quando o gateway não repassa Authorization (ex.: app móvel). */
+  access_token?: string;
 }
 
 interface AsyncWebhookResponse {
@@ -114,12 +120,23 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse({ success: false, error: "MÃ©todo nÃ£o permitido" }, 405);
+    return jsonResponse({ success: false, error: "Método não permitido" }, 405);
   }
+
+  /** Preenchido após `createEditAndReserveCredits`; usado no catch global para liberar reserva. */
+  let editId: string | undefined;
 
   try {
     const body = (await req.json()) as Partial<RequestBody>;
-    const { modelo_id, storage_path, width, height } = body;
+    const {
+      modelo_id,
+      storage_path,
+      width,
+      height,
+      selected_improvements,
+      user_notes,
+      access_token,
+    } = body;
 
     if (!modelo_id || typeof modelo_id !== "string" || modelo_id.trim().length === 0) {
       return jsonResponse(
@@ -139,7 +156,7 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const userId = await resolveAuthenticatedUserId(req, supabase, supabaseUrl);
+    const userId = resolveUserId(req, access_token);
     if (!userId) {
       return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
     }
@@ -182,7 +199,7 @@ Deno.serve(async (req) => {
 
     const { data: modelo, error: modeloErr } = await supabase
       .from("modelos")
-      .select("id, prompt_padrao")
+      .select("id, prompt_padrao, categoria_id")
       .eq("id", modelo_id.trim())
       .eq("ativo", true)
       .maybeSingle();
@@ -194,6 +211,33 @@ Deno.serve(async (req) => {
       );
     }
 
+    const categoriaId = modelo.categoria_id as string;
+    const { data: categoriaRow } = await supabase
+      .from("categorias")
+      .select("edit_mode")
+      .eq("id", categoriaId)
+      .maybeSingle();
+
+    const editMode = (categoriaRow?.edit_mode as string | undefined) ?? "guided";
+
+    const improvementsRaw = Array.isArray(selected_improvements)
+      ? selected_improvements.filter((s): s is string => typeof s === "string")
+      : [];
+    const improvements = improvementsRaw.map((s) => s.trim()).filter((s) => s.length > 0);
+    const notesTrim = typeof user_notes === "string" ? user_notes.trim() : "";
+
+    if (editMode === "guided") {
+      if (improvements.length === 0 && notesTrim.length === 0) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Selecione ao menos uma sugestão ou descreva o que deseja alterar.",
+          },
+          422,
+        );
+      }
+    }
+
     let imageContext: string;
     try {
       imageContext = await generateImageContext(resizedBase64, openaiKey);
@@ -203,17 +247,26 @@ Deno.serve(async (req) => {
     } catch (visionErr) {
       console.error("[editar-imagem-modelo] Vision error:", visionErr);
       return jsonResponse(
-        { success: false, error: "Falha ao analisar a imagem. Verifique se o formato Ã© vÃ¡lido (JPEG/PNG)." },
+        { success: false, error: "Falha ao analisar a imagem. Verifique se o formato é válido (JPEG/PNG)." },
         502
       );
     }
 
     const promptPadrao = (modelo.prompt_padrao as string)?.trim() ?? "";
-    const promptFinal = `${promptPadrao}\n\nImage context: ${imageContext}`;
+    let promptMiddle = "";
+    if (editMode === "guided") {
+      const bullets = improvements.map((s) => `- ${s}`).join("\n");
+      const impBlock = improvements.length > 0
+        ? `User-selected improvements:\n${bullets}`
+        : "User-selected improvements: (none)";
+      const notesBlock = notesTrim.length > 0
+        ? `Additional notes: ${notesTrim}`
+        : "Additional notes: (none)";
+      promptMiddle = `\n\n${impBlock}\n\n${notesBlock}`;
+    }
+    const promptFinal = `${promptPadrao}${promptMiddle}\n\nImage context: ${imageContext}`;
 
     const fileSizeBytes = Math.ceil((resizedBase64.length * 3) / 4);
-    let editId: string;
-    let reservationId = "";
     try {
       const result = await createEditAndReserveCredits(
         supabase,
@@ -233,14 +286,23 @@ Deno.serve(async (req) => {
         }
       );
       editId = result.editId;
-      reservationId = result.reservationId;
     } catch (creditErr) {
       const err = creditErr as Error & { status?: number };
       if (err.status === 402) {
-        return jsonResponse({ success: false, error: "CrÃ©ditos insuficientes" }, 402);
+        return jsonResponse({ success: false, error: "Créditos insuficientes" }, 402);
       }
       throw creditErr;
     }
+
+    const abortAfterReserve = async (reason: string, errMsg: string, httpStatus: number) => {
+      const eid = editId!;
+      await releaseReservedCreditsForEdit(supabase, eid, reason);
+      await supabase.from("edits").update({ status: "failed" }).eq("id", eid);
+      return jsonResponse(
+        { success: false, error: errMsg, edit_id: eid },
+        httpStatus,
+      );
+    };
 
     // Persistir imagem original em flux-imagens para slider antes/depois
     const FLUX_IMAGENS_BUCKET = "flux-imagens";
@@ -284,15 +346,21 @@ Deno.serve(async (req) => {
 
     if (!initRes.ok) {
       const errText = await initRes.text();
-      let errMsg = "Erro ao iniciar ediÃ§Ã£o na BFL";
-      if (initRes.status === 401) errMsg = "API key BFL invÃ¡lida";
-      else if (initRes.status === 402) errMsg = "CrÃ©ditos insuficientes na conta BFL";
-      else if (initRes.status === 422) errMsg = "Dados invÃ¡lidos: " + (errText || "verifique prompt e imagem");
-      else if (initRes.status === 429) errMsg = "Rate limit excedido, tente novamente em breve";
+      let errMsg = "Erro ao iniciar edição na BFL";
+      if (initRes.status === 401) errMsg = "API key BFL inválida";
+      else if (initRes.status === 402) {
+        errMsg =
+          "Créditos insuficientes no provedor de imagem. Tente mais tarde ou contate o suporte.";
+      } else if (initRes.status === 422) {
+        errMsg = "Dados inválidos: " + (errText || "verifique prompt e imagem");
+      } else if (initRes.status === 429) errMsg = "Rate limit excedido, tente novamente em breve";
       console.error("[editar-imagem-modelo] BFL init error:", initRes.status, errText);
-      await releaseReservedCredits(supabase, reservationId, "bfl_init_error");
-      await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
-      return jsonResponse({ success: false, error: errMsg }, initRes.status >= 500 ? 502 : initRes.status);
+      const reason = initRes.status === 402 ? "bfl_provider_402" : "bfl_init_error";
+      /** 402 da BFL não é saldo do app — evita confusão com `credits_shop`. */
+      const httpStatus = initRes.status === 402
+        ? 502
+        : (initRes.status >= 500 ? 502 : initRes.status);
+      return await abortAfterReserve(reason, errMsg, httpStatus);
     }
 
     const initData = (await initRes.json()) as AsyncWebhookResponse;
@@ -300,9 +368,7 @@ Deno.serve(async (req) => {
 
     if (!taskId) {
       console.error("[editar-imagem-modelo] Resposta BFL sem id:", initData);
-      await releaseReservedCredits(supabase, reservationId, "missing_task_id");
-      await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
-      return jsonResponse({ success: false, error: "Resposta invÃ¡lida da API" }, 502);
+      return await abortAfterReserve("missing_task_id", "Resposta inválida da API", 502);
     }
 
     await supabase.from("edits").update({ task_id: taskId }).eq("id", editId);
@@ -316,21 +382,28 @@ Deno.serve(async (req) => {
 
     if (insertError) {
       console.error("[editar-imagem-modelo] Erro ao inserir flux_tasks:", insertError);
-      await releaseReservedCredits(supabase, reservationId, "flux_task_insert_error");
-      await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
-      return jsonResponse(
-        { success: false, error: "Falha ao registrar tarefa" },
-        500
-      );
+      return await abortAfterReserve("flux_task_insert_error", "Falha ao registrar tarefa", 500);
     }
     console.log("[editar-imagem-modelo] Tarefa criada:", { taskId, editId, webhookUrl });
     return jsonResponse({ task_id: taskId, edit_id: editId });
   } catch (error) {
     console.error("[editar-imagem-modelo] Erro:", error);
+    if (editId) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const supabaseCleanup = createClient(supabaseUrl, supabaseKey);
+        await releaseReservedCreditsForEdit(supabaseCleanup, editId, "edge_uncaught_error");
+        await supabaseCleanup.from("edits").update({ status: "failed" }).eq("id", editId);
+      } catch (cleanupErr) {
+        console.error("[editar-imagem-modelo] Falha ao liberar reserva após erro:", cleanupErr);
+      }
+    }
     return jsonResponse(
       {
         success: false,
         error: error instanceof Error ? error.message : "Erro interno",
+        ...(editId ? { edit_id: editId } : {}),
       },
       500
     );

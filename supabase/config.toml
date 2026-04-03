@@ -12,6 +12,9 @@ verify_jwt = false
 [functions.editar-imagem-modelo]
 verify_jwt = false
 
+[functions.modelo-sugerir-melhorias]
+verify_jwt = false
+
 [functions.remover-fundo-flux]
 verify_jwt = false
 

@@ -26,6 +26,8 @@ class _AdminCategoriaFormPageState extends ConsumerState<AdminCategoriaFormPage>
   late final TextEditingController _slugController;
   late final TextEditingController _ordemController;
   bool _ativo = true;
+  String _editMode = CategoriaModel.editModeGuided;
+  bool _featured = false;
   bool _saving = false;
   bool _pickingImage = false;
   bool _seededFromRoute = false;
@@ -57,6 +59,8 @@ class _AdminCategoriaFormPageState extends ConsumerState<AdminCategoriaFormPage>
       _ordemController.text = '${existing.ordem}';
       _coverImageUrl = existing.coverImageUrl;
       _ativo = existing.ativo;
+      _editMode = existing.editMode;
+      _featured = existing.featured;
     }
   }
 
@@ -121,6 +125,8 @@ class _AdminCategoriaFormPageState extends ConsumerState<AdminCategoriaFormPage>
           ordem: ordem,
           ativo: _ativo,
           coverImageUrl: _coverImageUrl,
+          editMode: _editMode,
+          featured: _featured,
         );
       } else {
         await ds.updateCategoria(
@@ -130,6 +136,8 @@ class _AdminCategoriaFormPageState extends ConsumerState<AdminCategoriaFormPage>
           ordem: ordem,
           ativo: _ativo,
           coverImageUrl: _coverImageUrl,
+          editMode: _editMode,
+          featured: _featured,
         );
       }
       ref.invalidate(categoriasProvider);
@@ -201,6 +209,54 @@ class _AdminCategoriaFormPageState extends ConsumerState<AdminCategoriaFormPage>
               decoration: const InputDecoration(labelText: 'Ordem'),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Modo de edição',
+              style: AppTextStyles.bodyMedium.copyWith(
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.textLight : AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment<String>(
+                    value: CategoriaModel.editModeGuided,
+                    label: Text('Guiado'),
+                    tooltip: 'Sugestões IA + escolhas do usuário',
+                  ),
+                  ButtonSegment<String>(
+                    value: CategoriaModel.editModeFixed,
+                    label: Text('Direto'),
+                    tooltip: 'Prompt fixo do modelo (um passo)',
+                  ),
+                ],
+                emptySelectionAllowed: false,
+                selected: {_editMode},
+                onSelectionChanged: _saving
+                    ? null
+                    : (s) {
+                        if (s.isNotEmpty) setState(() => _editMode = s.first);
+                      },
+              ),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Destaque na lista de modelos'),
+              subtitle: Text(
+                'Exibe a categoria em evidência na tela inicial.',
+                style: AppTextStyles.caption.copyWith(
+                  color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                ),
+              ),
+              value: _featured,
+              onChanged: _saving
+                  ? null
+                  : (v) => setState(() => _featured = v),
             ),
             const SizedBox(height: 20),
             Text(

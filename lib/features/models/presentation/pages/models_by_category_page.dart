@@ -178,6 +178,9 @@ class ModelsByCategoryPage extends ConsumerWidget {
                           height: cardHeight,
                           child: _ModeloCard(
                             modelo: modelo,
+                            categoriaId: categoriaId,
+                            categoriaEditMode: categoriaCtx?.editMode ??
+                                CategoriaModel.editModeGuided,
                             categoriaNome: categoriaNome,
                             isDark: isDark,
                             isAdmin: isAdmin,
@@ -237,6 +240,8 @@ class ModelsByCategoryPage extends ConsumerWidget {
 
 class _ModeloCard extends StatelessWidget {
   final ModeloModel modelo;
+  final String categoriaId;
+  final String categoriaEditMode;
   final String categoriaNome;
   final bool isDark;
   final bool isAdmin;
@@ -245,6 +250,8 @@ class _ModeloCard extends StatelessWidget {
 
   const _ModeloCard({
     required this.modelo,
+    required this.categoriaId,
+    required this.categoriaEditMode,
     required this.categoriaNome,
     required this.isDark,
     required this.isAdmin,
@@ -260,16 +267,19 @@ class _ModeloCard extends StatelessWidget {
       children: [
         GestureDetector(
           onTap: () {
-            Navigator.of(context).pushNamed(
-              '/edit-model',
-              arguments: <String, dynamic>{
-                'modeloId': modelo.id,
-                'modeloNome': modelo.nome,
-                'categoriaNome': categoriaNome,
-                'modeloDescricao': modelo.descricao,
-                'modeloPromptPadrao': modelo.promptPadrao,
-              },
-            );
+            final args = <String, dynamic>{
+              'modeloId': modelo.id,
+              'modeloNome': modelo.nome,
+              'categoriaId': categoriaId,
+              'categoriaNome': categoriaNome,
+              'modeloDescricao': modelo.descricao,
+              'modeloPromptPadrao': modelo.promptPadrao,
+            };
+            if (categoriaEditMode == CategoriaModel.editModeGuided) {
+              Navigator.of(context).pushNamed('/edit-model-guided', arguments: args);
+            } else {
+              Navigator.of(context).pushNamed('/edit-model', arguments: args);
+            }
           },
           child: Card(
             clipBehavior: Clip.antiAlias,

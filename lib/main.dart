@@ -47,6 +47,7 @@ import 'features/profile/presentation/pages/referral_details_page.dart';
 import 'features/dashboard/presentation/pages/credit_history_page.dart';
 import 'features/gallery/presentation/pages/edit_detail_page.dart';
 import 'features/models/presentation/pages/edit_model_page.dart';
+import 'features/models/presentation/pages/edit_model_guided_page.dart';
 import 'features/models/presentation/pages/models_by_category_page.dart';
 import 'features/models/presentation/pages/admin_categoria_form_page.dart';
 import 'features/models/presentation/pages/admin_modelo_form_page.dart';
@@ -212,6 +213,7 @@ class MyApp extends ConsumerWidget {
         '/create-composition': (context) => const CreateCompositionPage(),
         '/remove-background': (context) => const RemoveBackgroundPage(),
         '/edit-model': (context) => const EditModelPage(),
+        '/edit-model-guided': (context) => const EditModelGuidedPage(),
         '/models-by-category': (context) => const ModelsByCategoryPage(),
         '/admin/categoria/form': (context) => const AdminCategoriaFormPage(),
         '/admin/modelo/form': (context) => const AdminModeloFormPage(),

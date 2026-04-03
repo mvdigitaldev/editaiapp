@@ -16,21 +16,175 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/upload_area.dart';
 
-class EditModelPage extends ConsumerStatefulWidget {
-  const EditModelPage({super.key});
+/// Edição com modelo em categoria [guided]: análise IA → sugestões → texto livre → geração.
+class EditModelGuidedPage extends ConsumerStatefulWidget {
+  const EditModelGuidedPage({super.key});
 
   @override
-  ConsumerState<EditModelPage> createState() => _EditModelPageState();
+  ConsumerState<EditModelGuidedPage> createState() =>
+      _EditModelGuidedPageState();
 }
 
-class _EditModelPageState extends ConsumerState<EditModelPage> {
+class _EditModelGuidedPageState extends ConsumerState<EditModelGuidedPage> {
   String? _selectedImagePath;
+  String? _storagePath;
+  int _width = 1024;
+  int _height = 1024;
+
+  final Set<String> _selectedSuggestions = {};
+  final TextEditingController _notesController = TextEditingController();
+  List<String> _suggestions = [];
+  bool _analyzing = false;
   bool _isLoading = false;
 
   static const int _creditsRequired = 7;
 
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  void _onImageSelected(File file) {
+    setState(() {
+      _selectedImagePath = file.path;
+      _storagePath = null;
+      _suggestions = [];
+      _selectedSuggestions.clear();
+    });
+  }
+
+  Future<void> _analyzeImage() async {
+    if (_selectedImagePath == null || _analyzing) return;
+
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final modeloId = args?['modeloId'] as String?;
+
+    if (modeloId == null || modeloId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Modelo inválido. Volte e tente novamente.')),
+      );
+      return;
+    }
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Faça login para continuar.')),
+      );
+      return;
+    }
+
+    final accessToken = Supabase.instance.client.auth.currentSession?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sessão inválida. Saia e entre de novo no app.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _analyzing = true);
+
+    try {
+      final result = await resizeAndCompressForEdit(
+        inputPath: _selectedImagePath!,
+        maxMegapixels: 1.5,
+      );
+      final storagePath = '${user.id}/inputs/${const Uuid().v4()}.jpg';
+      await Supabase.instance.client.storage
+          .from(AppConfig.editInputsBucket)
+          .upload(storagePath, result.file, fileOptions: const FileOptions(upsert: false));
+      try {
+        await result.file.delete();
+      } catch (_) {}
+
+      final dio = DioClient().instance;
+      final response = await dio.post<Map<String, dynamic>>(
+        '/functions/v1/modelo-sugerir-melhorias',
+        data: {
+          'modelo_id': modeloId,
+          'storage_path': storagePath,
+          'width': result.width,
+          'height': result.height,
+          'access_token': accessToken,
+        },
+        options: Options(
+          receiveTimeout: const Duration(seconds: 90),
+          sendTimeout: const Duration(seconds: 60),
+        ),
+      );
+
+      if (!mounted) return;
+
+      final list = response.data?['suggestions'];
+      if (list is! List || list.length < 5) {
+        setState(() => _analyzing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível obter sugestões. Tente novamente.'),
+          ),
+        );
+        return;
+      }
+
+      final strings = list.map((e) => '$e'.trim()).where((s) => s.isNotEmpty).toList();
+      setState(() {
+        _analyzing = false;
+        _storagePath = storagePath;
+        _width = result.width;
+        _height = result.height;
+        _suggestions = strings;
+        _selectedSuggestions.clear();
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() => _analyzing = false);
+      final code = e.response?.statusCode;
+      if (code == 401) {
+        final err = e.response?.data;
+        final msg = err is Map && err['error'] is String
+            ? err['error'] as String
+            : 'Sessão inválida ou expirada. Entre novamente.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      } else if (code == 422) {
+        final msg = e.response?.data is Map
+            ? '${e.response?.data['error'] ?? 'Requisição inválida'}'
+            : 'Requisição inválida';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao analisar a imagem. Verifique a conexão e tente de novo.'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _analyzing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Erro ao analisar a imagem. Tente novamente.'),
+        ),
+      );
+    }
+  }
+
   Future<void> _handleGenerate() async {
-    if (_selectedImagePath == null || _isLoading) return;
+    if (_storagePath == null || _isLoading) return;
+
+    final notes = _notesController.text.trim();
+    if (_selectedSuggestions.isEmpty && notes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecione sugestões ou descreva o que deseja alterar.'),
+        ),
+      );
+      return;
+    }
 
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final modeloId = args?['modeloId'] as String?;
@@ -76,26 +230,16 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
         return;
       }
 
-      final result = await resizeAndCompressForEdit(
-        inputPath: _selectedImagePath!,
-        maxMegapixels: 1.5,
-      );
-      final storagePath = '${user.id}/inputs/${const Uuid().v4()}.jpg';
-      await Supabase.instance.client.storage
-          .from(AppConfig.editInputsBucket)
-          .upload(storagePath, result.file, fileOptions: const FileOptions(upsert: false));
-      try {
-        await result.file.delete();
-      } catch (_) {}
-
       final dio = DioClient();
       final response = await dio.instance.post<Map<String, dynamic>>(
         '/functions/v1/editar-imagem-modelo',
         data: {
           'modelo_id': modeloId,
-          'storage_path': storagePath,
-          'width': result.width,
-          'height': result.height,
+          'storage_path': _storagePath,
+          'width': _width,
+          'height': _height,
+          'selected_improvements': _selectedSuggestions.toList(),
+          'user_notes': notes.isEmpty ? null : notes,
           'access_token': accessToken,
         },
       );
@@ -117,12 +261,7 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
       }
 
       if (taskId == null) {
-        String? stuckEditId;
-        if (data != null && data['edit_id'] is String) {
-          final raw = data['edit_id'] as String;
-          if (raw.isNotEmpty) stuckEditId = raw;
-        }
-        await tryReleasePendingReservationForEdit(stuckEditId);
+        await tryReleasePendingReservationForEdit(editId);
         if (!mounted) return;
         ref.invalidate(creditsUsageProvider);
         ref.invalidate(planLimitsProvider);
@@ -167,6 +306,17 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Modelo não encontrado. Volte e tente novamente.')),
           );
+        } else if (statusCode == 401) {
+          final err = e.response?.data;
+          final msg = err is Map && err['error'] is String
+              ? err['error'] as String
+              : 'Sessão inválida ou expirada. Entre novamente.';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        } else if (statusCode == 422) {
+          final msg = e.response?.data is Map
+              ? '${e.response?.data['error'] ?? 'Verifique os dados e tente de novo.'}'
+              : 'Verifique os dados e tente de novo.';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
         } else if (statusCode == 502) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -205,6 +355,9 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
     final modeloDescricao = args?['modeloDescricao'] as String?;
     final modeloPromptPadrao = args?['modeloPromptPadrao'] as String?;
 
+    final canGenerate = _storagePath != null &&
+        (_selectedSuggestions.isNotEmpty || _notesController.text.trim().isNotEmpty);
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -218,10 +371,13 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   if (categoriaNome != null && categoriaNome.isNotEmpty) ...[
-                    Text(
-                      categoriaNome,
-                      style: AppTextStyles.headingMedium.copyWith(
-                        color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                    Expanded(
+                      child: Text(
+                        categoriaNome,
+                        style: AppTextStyles.headingMedium.copyWith(
+                          color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -246,7 +402,7 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
                                 width: 120,
                                 height: 120,
                                 decoration: BoxDecoration(
-                                  color: AppColors.primary.withOpacity(0.1),
+                                  color: AppColors.primary.withValues(alpha: 0.1),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
@@ -294,41 +450,117 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
                           ],
                           const SizedBox(height: 8),
                           Text(
-                            'Selecione uma imagem para aplicar o modelo',
-                            style: AppTextStyles.bodyMedium.copyWith(
+                            'Objetivo base do modelo',
+                            style: AppTextStyles.labelSmall.copyWith(
                               color: isDark
                                   ? AppColors.textTertiary
                                   : AppColors.textSecondary,
                             ),
                           ),
+                          const SizedBox(height: 4),
+                          Text(
+                            (modeloPromptPadrao != null &&
+                                    modeloPromptPadrao.trim().isNotEmpty)
+                                ? modeloPromptPadrao
+                                : '—',
+                            style: AppTextStyles.caption.copyWith(
+                              color: (isDark
+                                      ? AppColors.textTertiary
+                                      : AppColors.textSecondary)
+                                  .withValues(alpha: 0.85),
+                            ),
+                          ),
                           const SizedBox(height: 16),
+                          Text(
+                            '1. Selecione a foto',
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
                           UploadArea(
                             imagePath: _selectedImagePath,
-                            onImageSelected: (File file) {
-                              setState(() => _selectedImagePath = file.path);
-                            },
-                            title: 'Selecione uma imagem',
-                            subtitle: 'Toque para carregar',
+                            onImageSelected: _onImageSelected,
+                            title: 'Enviar imagem',
+                            subtitle: 'Toque para escolher',
                           ),
-                          if (modeloPromptPadrao != null &&
-                              modeloPromptPadrao.isNotEmpty) ...[
-                            const SizedBox(height: 16),
+                          const SizedBox(height: 12),
+                          AppButton(
+                            text: _analyzing ? 'Analisando…' : 'Analisar imagem',
+                            onPressed: (_selectedImagePath == null || _analyzing)
+                                ? null
+                                : _analyzeImage,
+                            icon: Icons.psychology_outlined,
+                            width: double.infinity,
+                            isLoading: _analyzing,
+                          ),
+                          if (_suggestions.isNotEmpty) ...[
+                            const SizedBox(height: 24),
                             Text(
-                              'Prompt que será aplicado',
-                              style: AppTextStyles.labelSmall.copyWith(
-                                color: isDark
-                                    ? AppColors.textTertiary
-                                    : AppColors.textSecondary,
+                              '2. Escolha as melhorias (uma ou mais)',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? AppColors.textLight : AppColors.textPrimary,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 8),
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final w = constraints.maxWidth;
+                                return Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: _suggestions.map((s) {
+                                    final selected = _selectedSuggestions.contains(s);
+                                    return SizedBox(
+                                      width: w,
+                                      child: FilterChip(
+                                        label: DefaultTextStyle.merge(
+                                          maxLines: null,
+                                          overflow: TextOverflow.clip,
+                                          softWrap: true,
+                                          child: Text(
+                                            s,
+                                            softWrap: true,
+                                            maxLines: 12,
+                                          ),
+                                        ),
+                                        selected: selected,
+                                        onSelected: (_) {
+                                          setState(() {
+                                            if (selected) {
+                                              _selectedSuggestions.remove(s);
+                                            } else {
+                                              _selectedSuggestions.add(s);
+                                            }
+                                          });
+                                        },
+                                      ),
+                                    );
+                                  }).toList(),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 16),
                             Text(
-                              modeloPromptPadrao,
-                              style: AppTextStyles.caption.copyWith(
-                                color: (isDark
-                                        ? AppColors.textTertiary
-                                        : AppColors.textSecondary)
-                                    .withValues(alpha: 0.6),
+                              '3. Mais detalhes (opcional)',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _notesController,
+                              maxLines: 4,
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                hintText: 'Ex.: deixar o pão mais dourado, menos sombra…',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                alignLabelWithHint: true,
                               ),
                             ),
                           ],
@@ -371,7 +603,9 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
                           absorbing: !hasEnoughCredits,
                           child: AppButton(
                             text: 'Gerar',
-                            onPressed: hasEnoughCredits ? _handleGenerate : null,
+                            onPressed: (hasEnoughCredits && canGenerate && !_analyzing)
+                                ? _handleGenerate
+                                : null,
                             icon: Icons.auto_fix_high,
                             width: double.infinity,
                             isLoading: _isLoading,
@@ -381,7 +615,16 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
                       if (!isLoadingCredits && balance < _creditsRequired) ...[
                         const SizedBox(height: 8),
                         Text(
-                          'Você precisa de $_creditsRequired créditos. Toque no botão para comprar.',
+                          'Você precisa de $_creditsRequired créditos. Toque no campo acima para comprar.',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ] else if (_storagePath == null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Analise a imagem para liberar sugestões e a geração.',
                           style: AppTextStyles.bodySmall.copyWith(
                             color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
                           ),

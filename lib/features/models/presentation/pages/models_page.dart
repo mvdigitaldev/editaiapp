@@ -113,7 +113,14 @@ class ModelsPage extends ConsumerWidget {
             ),
             categoriasAsync.when(
               data: (categorias) {
-                if (categorias.isEmpty) {
+                final sorted = List<CategoriaModel>.from(categorias)
+                  ..sort((a, b) {
+                    if (a.featured != b.featured) {
+                      return a.featured ? -1 : 1;
+                    }
+                    return a.ordem.compareTo(b.ordem);
+                  });
+                if (sorted.isEmpty) {
                   return SliverFillRemaining(
                     hasScrollBody: false,
                     child: Center(
@@ -133,7 +140,7 @@ class ModelsPage extends ConsumerWidget {
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
-                        final categoria = categorias[index];
+                        final categoria = sorted[index];
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _CategoriaCard(
@@ -169,7 +176,7 @@ class ModelsPage extends ConsumerWidget {
                           ),
                         );
                       },
-                      childCount: categorias.length,
+                      childCount: sorted.length,
                     ),
                   ),
                 );
@@ -228,117 +235,157 @@ class _CategoriaCard extends StatelessWidget {
     final themeBg =
         isDark ? AppColors.backgroundDark : AppColors.backgroundLight;
     final url = categoria.coverImageUrl;
+    const outerRadius = 12.0;
+    final borderWidth = categoria.featured ? 2.0 : 1.0;
+    final innerRadius = (outerRadius - borderWidth).clamp(0.0, outerRadius);
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(outerRadius),
         child: Container(
-          height: ModelsPage._cardHeight,
+          height:
+              categoria.featured ? ModelsPage._cardHeight + 8 : ModelsPage._cardHeight,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(outerRadius),
             border: Border.all(
-              color: isDark ? AppColors.borderDark : AppColors.border,
+              color: categoria.featured
+                  ? AppColors.primary
+                  : (isDark ? AppColors.borderDark : AppColors.border),
+              width: borderWidth,
             ),
             boxShadow: isDark
                 ? null
                 : [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 8,
+                      color: categoria.featured
+                          ? AppColors.primary.withValues(alpha: 0.12)
+                          : Colors.black.withValues(alpha: 0.04),
+                      blurRadius: categoria.featured ? 12 : 8,
                       offset: const Offset(0, 2),
                     ),
                   ],
           ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (url != null)
-                CachedNetworkImage(
-                  imageUrl: url,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => ColoredBox(color: surface),
-                  errorWidget: (_, __, ___) => ColoredBox(color: surface),
-                )
-              else
-                ColoredBox(color: surface),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    stops: const [0.0, 0.3, 1.0],
-                    colors: [
-                      themeBg,
-                      themeBg,
-                      themeBg.withValues(alpha: 0.50),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(innerRadius),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (url != null)
+                  CachedNetworkImage(
+                    imageUrl: url,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => ColoredBox(color: surface),
+                    errorWidget: (_, __, ___) => ColoredBox(color: surface),
+                  )
+                else
+                  ColoredBox(color: surface),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      stops: const [0.0, 0.3, 1.0],
+                      colors: [
+                        themeBg,
+                        themeBg,
+                        themeBg.withValues(alpha: 0.50),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      if (isAdmin) ...[
+                        Material(
+                          color: Colors.black38,
+                          borderRadius: BorderRadius.circular(20),
+                          clipBehavior: Clip.antiAlias,
+                          child: SizedBox(
+                            width: 36,
+                            height: 36,
+                            child: PopupMenuButton<String>(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(
+                                Icons.more_vert,
+                                size: 20,
+                                color: Colors.white,
+                              ),
+                              onSelected: (v) {
+                                if (v == 'edit') onAdminEdit();
+                                if (v == 'delete') onAdminDelete();
+                              },
+                              itemBuilder: (ctx) => const [
+                                PopupMenuItem(
+                                  value: 'edit',
+                                  child: Text('Editar'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text('Excluir'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (categoria.featured)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Material(
+                                  color: AppColors.primary.withValues(alpha: 0.9),
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    child: Text(
+                                      'Em destaque',
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            Text(
+                              categoria.nome,
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? AppColors.textLight
+                                    : AppColors.textPrimary,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right,
+                        color: isDark
+                            ? AppColors.textTertiary
+                            : AppColors.textSecondary,
+                      ),
                     ],
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    if (isAdmin) ...[
-                      Material(
-                        color: Colors.black38,
-                        borderRadius: BorderRadius.circular(20),
-                        clipBehavior: Clip.antiAlias,
-                        child: SizedBox(
-                          width: 36,
-                          height: 36,
-                          child: PopupMenuButton<String>(
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(
-                              Icons.more_vert,
-                              size: 20,
-                              color: Colors.white,
-                            ),
-                            onSelected: (v) {
-                              if (v == 'edit') onAdminEdit();
-                              if (v == 'delete') onAdminDelete();
-                            },
-                            itemBuilder: (ctx) => const [
-                              PopupMenuItem(
-                                value: 'edit',
-                                child: Text('Editar'),
-                              ),
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Text('Excluir'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: Text(
-                        categoria.nome,
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? AppColors.textLight
-                              : AppColors.textPrimary,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Icon(
-                      Icons.chevron_right,
-                      color: isDark
-                          ? AppColors.textTertiary
-                          : AppColors.textSecondary,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

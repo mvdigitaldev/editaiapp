@@ -1,0 +1,40 @@
+-- =============================================================================
+-- Uso MANUAL (SQL Editor ou psql): libera reservas pending órfãs / edições falhas.
+-- Não executar como migração automática sem revisar os filtros.
+-- =============================================================================
+-- Exemplo: listar reservas pending do usuário com edição já marcada como failed
+-- SELECT r.id, r.user_id, r.edit_id, r.credits, r.status, r.created_at, e.status AS edit_status
+-- FROM public.credit_reservations r
+-- JOIN public.edits e ON e.id = r.edit_id
+-- WHERE r.status = 'pending'
+--   AND r.user_id = '4c3f47d6-b6a6-4400-8089-c353f92511de'::uuid
+--   AND e.status = 'failed';
+--
+-- Liberar uma reserva específica (service role / superuser):
+-- SELECT public.release_credit_reservation(
+--   'RESERVATION_UUID_AQUI'::uuid,
+--   'manual_cleanup_after_bfl_error'
+-- );
+--
+-- Liberar todas as pending ligadas a edits failed para um usuário:
+-- DO $$
+-- DECLARE
+--   rec RECORD;
+-- BEGIN
+--   FOR rec IN
+--     SELECT r.id AS res_id
+--     FROM public.credit_reservations r
+--     INNER JOIN public.edits e ON e.id = r.edit_id
+--     WHERE r.user_id = 'SUBSTITUIR_USER_UUID'::uuid
+--       AND r.status = 'pending'
+--       AND e.status = 'failed'
+--   LOOP
+--     PERFORM public.release_credit_reservation(rec.res_id, 'manual_cleanup_failed_edits');
+--   END LOOP;
+-- END $$;
+--
+-- Pelo app (usuário autenticado), por edição:
+-- SELECT public.user_release_pending_reservation_for_edit(
+--   'EDIT_UUID_AQUI'::uuid,
+--   'client_manual_cleanup'
+-- );

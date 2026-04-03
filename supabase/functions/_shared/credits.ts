@@ -119,15 +119,29 @@ export async function consumeReservedCredits(
   }
 }
 
+/**
+ * Libera reserva pendente. Retorna false se o RPC falhar (caller pode tentar de novo).
+ * Ignora id vazio (evita chamada inválida ao PostgREST).
+ */
 export async function releaseReservedCredits(
   supabase: SupabaseClient,
   reservationId: string,
   reason?: string,
-): Promise<void> {
-  await supabase.rpc("release_credit_reservation", {
-    p_reservation_id: reservationId,
+): Promise<boolean> {
+  const id = typeof reservationId === "string" ? reservationId.trim() : "";
+  if (!id) {
+    console.warn("[credits] release_reserved: empty reservation id");
+    return false;
+  }
+  const { error } = await supabase.rpc("release_credit_reservation", {
+    p_reservation_id: id,
     p_reason: reason ?? null,
   });
+  if (error) {
+    console.error("[credits] release_reserved failed", id, reason, error.message);
+    return false;
+  }
+  return true;
 }
 
 export async function getLatestReservationForEdit(
@@ -163,8 +177,15 @@ export async function releaseReservedCreditsForEdit(
   supabase: SupabaseClient,
   editId: string,
   reason?: string,
-): Promise<void> {
+): Promise<boolean> {
   const reservation = await getLatestReservationForEdit(supabase, editId);
-  if (!reservation || reservation.status !== "pending") return;
-  await releaseReservedCredits(supabase, reservation.id, reason);
+  if (!reservation || reservation.status !== "pending") return true;
+  const ok = await releaseReservedCredits(supabase, reservation.id, reason);
+  if (ok) return true;
+  await new Promise((r) => setTimeout(r, 250));
+  const retry = await releaseReservedCredits(supabase, reservation.id, reason);
+  if (!retry) {
+    console.error("[credits] release_reserved_for_edit retry failed", editId, reason);
+  }
+  return retry;
 }

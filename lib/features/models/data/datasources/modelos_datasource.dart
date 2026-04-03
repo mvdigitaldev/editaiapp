@@ -16,6 +16,8 @@ abstract class ModelosDataSource {
     int ordem,
     required bool ativo,
     String? coverImageUrl,
+    String editMode = CategoriaModel.editModeGuided,
+    bool featured = false,
   });
 
   Future<void> updateCategoria(
@@ -25,6 +27,8 @@ abstract class ModelosDataSource {
     int ordem,
     required bool ativo,
     String? coverImageUrl,
+    String editMode = CategoriaModel.editModeGuided,
+    bool featured = false,
   });
 
   Future<void> deleteCategoria(String id);
@@ -62,9 +66,9 @@ class ModelosDataSourceImpl implements ModelosDataSource {
   Future<List<CategoriaModel>> getCategorias({
     bool includeInactive = false,
   }) async {
-    var query = _supabase
-        .from('categorias')
-        .select('id, nome, slug, ordem, ativo, cover_image_url');
+    var query = _supabase.from('categorias').select(
+          'id, nome, slug, ordem, ativo, cover_image_url, edit_mode, featured',
+        );
     if (!includeInactive) {
       query = query.eq('ativo', true);
     }
@@ -101,12 +105,16 @@ class ModelosDataSourceImpl implements ModelosDataSource {
     int ordem = 0,
     required bool ativo,
     String? coverImageUrl,
+    String editMode = CategoriaModel.editModeGuided,
+    bool featured = false,
   }) async {
     final row = <String, dynamic>{
       'nome': nome,
       'slug': slug,
       'ordem': ordem,
       'ativo': ativo,
+      'edit_mode': editMode,
+      'featured': featured,
     };
     final url = coverImageUrl?.trim();
     if (url != null && url.isNotEmpty) {
@@ -123,12 +131,16 @@ class ModelosDataSourceImpl implements ModelosDataSource {
     int ordem = 0,
     required bool ativo,
     String? coverImageUrl,
+    String editMode = CategoriaModel.editModeGuided,
+    bool featured = false,
   }) async {
     final row = <String, dynamic>{
       'nome': nome,
       'slug': slug,
       'ordem': ordem,
       'ativo': ativo,
+      'edit_mode': editMode,
+      'featured': featured,
     };
     final url = coverImageUrl?.trim();
     row['cover_image_url'] =
