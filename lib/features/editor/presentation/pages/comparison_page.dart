@@ -16,6 +16,7 @@ import '../../../gallery/presentation/providers/gallery_provider.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 
+/// Mesmo padrão visual que [EditDetailPage] (`AspectRatio` + slider ou `CachedNetworkImage` com `cover`), sem `maxHeight` no comparador — isso encolhia fotos verticais e deslocava o bloco para a esquerda.
 class ComparisonPage extends ConsumerStatefulWidget {
   final String? editId;
   final String? beforeImagePath;
@@ -46,6 +47,9 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.editId != null && widget.editId!.isNotEmpty) {
+      _isLoadingEdit = true;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeShowInterstitial();
       if (widget.editId != null && widget.editId!.isNotEmpty) {
@@ -87,7 +91,6 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
     ref.read(adServiceProvider).loadAndShowInterstitial();
   }
 
-  /// Volta para a Home, removendo as telas de input da pilha (inputs ficam resetados na próxima abertura).
   void _goBackToHome() {
     ref.invalidate(recentEditsProvider);
     ref.invalidate(creditsUsageProvider);
@@ -112,73 +115,93 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
     return before != null && after != null;
   }
 
-  double get _imageAspectRatio {
+  double get _aspectRatio {
     if (_width != null && _height != null && _width! > 0 && _height! > 0) {
       return _width! / _height!;
     }
     return 1;
   }
 
-  Widget _buildImageContent(bool isDark) {
-    if (_isLoadingEdit && !_hasBeforeAndAfter) {
-      return Container(
-        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-        child: const Center(child: CircularProgressIndicator()),
+  Widget _buildImageArea(bool isDark) {
+    if (widget.editId != null &&
+        widget.editId!.isNotEmpty &&
+        _isLoadingEdit) {
+      return SizedBox(
+        height: 280,
+        child: ColoredBox(
+          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          child: const Center(child: CircularProgressIndicator()),
+        ),
       );
     }
+
     if (_hasBeforeAndAfter) {
-      final beforeUrl = _originalImageUrl;
-      final beforePath = widget.beforeImagePath;
-      final afterUrl = _effectiveAfterUrl;
-      final afterPath = widget.afterImagePath;
-      return ComparisonSlider(
-        beforeImageUrl: beforeUrl,
-        beforeImagePath: beforePath,
-        afterImageUrl: afterUrl,
-        afterImagePath: afterPath,
+      return AspectRatio(
+        aspectRatio: _aspectRatio,
+        child: ComparisonSlider(
+          beforeImageUrl: _originalImageUrl,
+          beforeImagePath:
+              _originalImageUrl != null ? null : widget.beforeImagePath,
+          afterImageUrl: _effectiveAfterUrl,
+          afterImagePath:
+              _effectiveAfterUrl != null ? null : widget.afterImagePath,
+        ),
       );
     }
+
     final afterUrl = _effectiveAfterUrl;
     if (afterUrl != null) {
-      return CachedNetworkImage(
-        imageUrl: afterUrl,
-        fit: BoxFit.contain,
-        width: double.infinity,
-        placeholder: (_, __) => const Center(
-          child: CircularProgressIndicator(),
-        ),
-        errorWidget: (_, __, ___) => Container(
-          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-          child: const Center(child: Icon(Icons.error_outline)),
+      return AspectRatio(
+        aspectRatio: _aspectRatio,
+        child: CachedNetworkImage(
+          imageUrl: afterUrl,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          placeholder: (_, __) => Container(
+            color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            child: const Center(child: CircularProgressIndicator()),
+          ),
+          errorWidget: (_, __, ___) => Container(
+            color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            child: const Center(child: Icon(Icons.error_outline)),
+          ),
         ),
       );
     }
+
     if (widget.afterImagePath != null) {
-      return Image.file(
-        File(widget.afterImagePath!),
-        fit: BoxFit.contain,
-        width: double.infinity,
+      return AspectRatio(
+        aspectRatio: _aspectRatio,
+        child: Image.file(
+          File(widget.afterImagePath!),
+          fit: BoxFit.cover,
+          width: double.infinity,
+        ),
       );
     }
-    return Container(
-      color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.image,
-              size: 64,
-              color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Imagem gerada',
-              style: AppTextStyles.bodyMedium.copyWith(
+
+    return SizedBox(
+      height: 200,
+      child: ColoredBox(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.image,
+                size: 64,
                 color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Text(
+                'Imagem gerada',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -238,7 +261,6 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
@@ -268,11 +290,11 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
                 ],
               ),
             ),
-            // Conteúdo: apenas a imagem resultado
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
                       'Sua criação está pronta',
@@ -281,12 +303,7 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    Container(
-                      width: double.infinity,
-                      constraints: const BoxConstraints(
-                        minHeight: 400,
-                        maxHeight: 600,
-                      ),
+                    DecoratedBox(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
@@ -299,12 +316,7 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: _hasBeforeAndAfter
-                            ? AspectRatio(
-                                aspectRatio: _imageAspectRatio,
-                                child: _buildImageContent(isDark),
-                              )
-                            : _buildImageContent(isDark),
+                        child: _buildImageArea(isDark),
                       ),
                     ),
                     const SizedBox(height: 100),
@@ -312,7 +324,6 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
                 ),
               ),
             ),
-            // Rodapé: botão Baixar
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(

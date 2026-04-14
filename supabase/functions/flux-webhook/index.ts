@@ -8,9 +8,20 @@ import {
 const BUCKET_NAME = "flux-imagens";
 
 interface WebhookPayload {
-  id: string;
-  status: string;
+  /** BFL polling/final; webhooks de progresso podem usar só `task_id` */
+  id?: string;
+  task_id?: string;
+  status?: string;
+  progress?: number;
   result?: { sample?: string };
+}
+
+function resolveFluxTaskId(payload: WebhookPayload): string | undefined {
+  const fromId = typeof payload.id === "string" ? payload.id.trim() : "";
+  if (fromId) return fromId;
+  const fromTask = typeof payload.task_id === "string" ? payload.task_id.trim() : "";
+  if (fromTask) return fromTask;
+  return undefined;
 }
 
 interface FluxTaskRow {
@@ -125,13 +136,14 @@ Deno.serve(async (req) => {
 
   try {
     const payload = (await req.json()) as WebhookPayload;
-    const { id: taskId, status, result } = payload;
+    const taskId = resolveFluxTaskId(payload);
+    const { status, result } = payload;
 
     console.log("[flux-webhook] Recebido:", { taskId, status, hasResult: !!result?.sample });
 
     if (!taskId) {
-      console.error("[flux-webhook] Payload sem id:", payload);
-      return new Response(null, { status: 400 });
+      console.warn("[flux-webhook] Payload sem id nem task_id:", payload);
+      return new Response(null, { status: 200 });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -148,15 +160,22 @@ Deno.serve(async (req) => {
       return new Response(null, { status: 200 });
     }
 
-    if (status === "Error" || status === "Content Moderated" || status === "Request Moderated") {
-      const errMsg = status === "Content Moderated" || status === "Request Moderated"
+    const st = typeof status === "string" ? status.trim() : "";
+    const stLower = st.toLowerCase();
+
+    if (
+      stLower === "error" ||
+      stLower === "content moderated" ||
+      stLower === "request moderated"
+    ) {
+      const errMsg = stLower === "content moderated" || stLower === "request moderated"
         ? "Conteudo moderado pela API"
         : "Erro na geracao da imagem";
       await markTaskAsFailed(supabase, taskId, errMsg, "provider_error");
       return new Response(null, { status: 200 });
     }
 
-    if (status !== "Ready") {
+    if (stLower !== "ready") {
       return new Response(null, { status: 200 });
     }
 

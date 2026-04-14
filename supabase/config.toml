@@ -20,3 +20,7 @@ verify_jwt = false
 
 [functions.editar-multi-imagem-flux]
 verify_jwt = false
+
+# Webhook público da BFL (sem JWT do app)
+[functions.flux-webhook]
+verify_jwt = false
