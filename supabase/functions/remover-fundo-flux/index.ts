@@ -18,6 +18,7 @@ const CORS_HEADERS = {
 };
 
 interface RequestBody {
+  client_request_id: string;
   storage_path: string;
 }
 
@@ -44,7 +45,18 @@ Deno.serve(async (req) => {
 
   try {
     const body = (await req.json()) as Partial<RequestBody>;
-    const { storage_path } = body;
+    const { client_request_id, storage_path } = body;
+
+    if (
+      !client_request_id ||
+      typeof client_request_id !== "string" ||
+      client_request_id.trim().length === 0
+    ) {
+      return jsonResponse(
+        { success: false, error: "Campo 'client_request_id' é obrigatório" },
+        422,
+      );
+    }
 
     if (!storage_path || typeof storage_path !== "string" || storage_path.trim().length === 0) {
       return jsonResponse(
@@ -64,7 +76,7 @@ Deno.serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return jsonResponse({ success: false, error: "AutenticaÃ§Ã£o obrigatÃ³ria" }, 401);
+      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
     }
     const authClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
@@ -104,6 +116,7 @@ Deno.serve(async (req) => {
 
     let editId: string;
     let reservationId = "";
+    let acceptedAt = new Date().toISOString();
     try {
       const result = await createEditAndReserveCredits(
         supabase,
@@ -113,6 +126,7 @@ Deno.serve(async (req) => {
         "remove_background",
         taskId,
         {
+          clientRequestId: client_request_id.trim(),
           imageMetadata: {
             file_size: fileSizeBytes,
             mime_type: mime,
@@ -122,6 +136,15 @@ Deno.serve(async (req) => {
       );
       editId = result.editId;
       reservationId = result.reservationId;
+      acceptedAt = result.acceptedAt;
+      if (result.reused) {
+        return jsonResponse({
+          task_id: result.taskId,
+          edit_id: result.editId,
+          status: result.status,
+          accepted_at: result.acceptedAt,
+        });
+      }
     } catch (creditErr) {
       const err = creditErr as Error & { status?: number };
       if (err.status === 402) {
@@ -276,25 +299,6 @@ Deno.serve(async (req) => {
 
     const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(fileName);
 
-    await supabase
-      .from("flux_tasks")
-      .update({
-        status: "ready",
-        image_url: urlData.publicUrl,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("task_id", taskId);
-
-    const aiProcessingTimeMs = Math.max(0, Date.now() - startMs);
-    await supabase
-      .from("edits")
-      .update({
-        status: "completed",
-        image_url: urlData.publicUrl,
-        ai_processing_time_ms: aiProcessingTimeMs,
-      })
-      .eq("id", editId);
-
     try {
       await consumeReservedCredits(supabase, reservationId, editId, "usage");
     } catch (consumeErr) {
@@ -315,7 +319,31 @@ Deno.serve(async (req) => {
       );
     }
 
-    return jsonResponse({ task_id: taskId });
+    await supabase
+      .from("flux_tasks")
+      .update({
+        status: "ready",
+        image_url: urlData.publicUrl,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("task_id", taskId);
+
+    const aiProcessingTimeMs = Math.max(0, Date.now() - startMs);
+    await supabase
+      .from("edits")
+      .update({
+        status: "completed",
+        image_url: urlData.publicUrl,
+        ai_processing_time_ms: aiProcessingTimeMs,
+      })
+      .eq("id", editId);
+
+    return jsonResponse({
+      task_id: taskId,
+      edit_id: editId,
+      status: "completed",
+      accepted_at: acceptedAt,
+    });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     const errStack = error instanceof Error ? error.stack : undefined;

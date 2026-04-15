@@ -17,6 +17,7 @@ const CORS_HEADERS = {
 };
 
 interface RequestBody {
+  client_request_id: string;
   user_prompt: string;
   storage_path: string;
   width?: number;
@@ -227,7 +228,19 @@ Deno.serve(async (req) => {
 
   try {
     const body = (await req.json()) as Partial<RequestBody>;
-    const { user_prompt, storage_path, width, height } = body;
+    const { client_request_id, user_prompt, storage_path, width, height } =
+      body;
+
+    if (
+      !client_request_id ||
+      typeof client_request_id !== "string" ||
+      client_request_id.trim().length === 0
+    ) {
+      return jsonResponse(
+        { success: false, error: "Campo 'client_request_id' é obrigatório" },
+        422,
+      );
+    }
 
     if (!user_prompt || typeof user_prompt !== "string" || user_prompt.trim().length === 0) {
       return jsonResponse(
@@ -340,6 +353,7 @@ Deno.serve(async (req) => {
     const fileSizeBytes = Math.ceil((resizedBase64.length * 3) / 4);
     let editId: string;
     let reservationId = "";
+    let acceptedAt = new Date().toISOString();
     try {
       const result = await createEditAndReserveCredits(
         supabase,
@@ -349,6 +363,7 @@ Deno.serve(async (req) => {
         improvedPrompt,
         null,
         {
+          clientRequestId: client_request_id.trim(),
           imageMetadata: {
             file_size: fileSizeBytes,
             mime_type: "image/jpeg",
@@ -360,6 +375,15 @@ Deno.serve(async (req) => {
       );
       editId = result.editId;
       reservationId = result.reservationId;
+      acceptedAt = result.acceptedAt;
+      if (result.reused) {
+        return jsonResponse({
+          task_id: result.taskId,
+          edit_id: result.editId,
+          status: result.status,
+          accepted_at: result.acceptedAt,
+        });
+      }
     } catch (creditErr) {
       const err = creditErr as Error & { status?: number };
       if (err.status === 402) {
@@ -409,7 +433,7 @@ Deno.serve(async (req) => {
 
     if (!initRes.ok) {
       const errText = await initRes.text();
-      let errMsg = "Erro ao iniciar ediÃ§Ã£o na BFL";
+      let errMsg = "Erro ao iniciar edição na BFL";
       if (initRes.status === 401) errMsg = "API key BFL invÃ¡lida";
       else if (initRes.status === 402) errMsg = "CrÃ©ditos insuficientes na conta BFL";
       else if (initRes.status === 422) errMsg = "Dados invÃ¡lidos: " + (errText || "verifique prompt e imagem");
@@ -449,7 +473,12 @@ Deno.serve(async (req) => {
       );
     }
     console.log("[editar-imagem-flux] Tarefa criada:", { taskId, editId, webhookUrl });
-    return jsonResponse({ task_id: taskId, edit_id: editId });
+    return jsonResponse({
+      task_id: taskId,
+      edit_id: editId,
+      status: "queued",
+      accepted_at: acceptedAt,
+    });
   } catch (error) {
     console.error("[editar-imagem-flux] Erro:", error);
     return jsonResponse(

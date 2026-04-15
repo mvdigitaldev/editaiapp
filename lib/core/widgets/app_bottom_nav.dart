@@ -14,6 +14,7 @@ class AppBottomNav extends StatelessWidget {
     required this.onTap,
   });
 
+  static const int indexGallery = 1;
   static const int indexEditor = 2;
 
   @override

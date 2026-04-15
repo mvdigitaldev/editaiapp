@@ -1,14 +1,15 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
-import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/aspect_ratio_utils.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/aspect_ratio_selector.dart';
+import '../utils/edit_submission_helpers.dart';
 
 class TextToImagePage extends ConsumerStatefulWidget {
   const TextToImagePage({super.key});
@@ -43,9 +44,11 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
 
     try {
       final dio = DioClient();
+      final clientRequestId = const Uuid().v4();
       final response = await dio.instance.post<Map<String, dynamic>>(
         '/functions/v1/gerar-imagem-flux',
         data: {
+          'client_request_id': clientRequestId,
           'user_prompt': prompt,
           'width': size.width,
           'height': size.height,
@@ -64,15 +67,11 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
       }
 
       final data = response.data;
-      String? taskId;
-      if (data != null) {
-        final raw = data['task_id'];
-        if (raw is String && raw.isNotEmpty) {
-          taskId = raw;
-        }
-      }
+      final editId = readAcceptedEditId(data);
+      final acceptedStatus = readAcceptedStatus(data);
+      final acceptedAt = readAcceptedAt(data);
 
-      if (taskId == null) {
+      if (editId == null) {
         setState(() {
           _isLoading = false;
         });
@@ -84,16 +83,18 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
         return;
       }
 
-      // Navega para a tela de processamento em modo Flux
-      ref.invalidate(creditsUsageProvider);
-      ref.invalidate(planLimitsProvider);
-      Navigator.of(context).pushNamed(
-        '/processing',
-        arguments: <String, dynamic>{
-          'taskId': taskId,
-          'before': null,
-          'after': null,
-        },
+      await trackAcceptedEdit(
+        ref,
+        editId: editId,
+        operationType: 'text_to_image',
+        status: acceptedStatus,
+        acceptedAt: acceptedAt,
+      );
+      if (!mounted) return;
+      openProcessingPage(
+        context,
+        editId: editId,
+        status: acceptedStatus,
       );
     } catch (e) {
       if (!mounted) return;
@@ -132,18 +133,21 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
+    return PopScope(
+      canPop: !_isLoading,
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new),
+                      onPressed:
+                          _isLoading ? null : () => Navigator.of(context).pop(),
+                    ),
                   const Spacer(),
                   Text(
                     'Texto para imagem',
@@ -273,6 +277,7 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

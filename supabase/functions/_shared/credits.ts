@@ -12,6 +12,23 @@ interface CreateEditAndReserveOptions {
   imageId?: string | null;
   imageMetadata?: EditImageMetadata;
   promptTextOriginal?: string | null;
+  clientRequestId?: string | null;
+}
+
+interface ExistingEditLookup {
+  id: string;
+  task_id: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface CreateEditAndReserveResult {
+  editId: string;
+  reservationId: string;
+  acceptedAt: string;
+  status: string;
+  taskId: string | null;
+  reused: boolean;
 }
 
 const DEFAULT_RESERVATION_TTL_SECONDS = 6 * 60 * 60;
@@ -19,6 +36,40 @@ const DEFAULT_RESERVATION_TTL_SECONDS = 6 * 60 * 60;
 interface CreditReservationLookup {
   id: string;
   status: "pending" | "consumed" | "released" | "expired";
+}
+
+async function findEditByClientRequestId(
+  supabase: SupabaseClient,
+  userId: string,
+  clientRequestId: string,
+): Promise<ExistingEditLookup | null> {
+  const { data, error } = await supabase
+    .from("edits")
+    .select("id, task_id, status, created_at")
+    .eq("user_id", userId)
+    .eq("client_request_id", clientRequestId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data as ExistingEditLookup | null) ?? null;
+}
+
+async function buildReusedEditResult(
+  supabase: SupabaseClient,
+  existing: ExistingEditLookup,
+): Promise<CreateEditAndReserveResult> {
+  const reservation = await getLatestReservationForEdit(supabase, existing.id);
+  return {
+    editId: existing.id,
+    reservationId: reservation?.id ?? "",
+    acceptedAt: existing.created_at,
+    status: existing.status || "queued",
+    taskId: existing.task_id ?? null,
+    reused: true,
+  };
 }
 
 export async function createEditAndReserveCredits(
@@ -29,8 +80,24 @@ export async function createEditAndReserveCredits(
   promptText: string,
   taskId: string | null,
   options?: CreateEditAndReserveOptions,
-): Promise<{ editId: string; reservationId: string }> {
+): Promise<CreateEditAndReserveResult> {
   let metadata: EditImageMetadata | undefined = options?.imageMetadata;
+  const clientRequestId =
+    typeof options?.clientRequestId === "string" &&
+        options.clientRequestId.trim().length > 0
+      ? options.clientRequestId.trim()
+      : null;
+
+  if (clientRequestId) {
+    const existing = await findEditByClientRequestId(
+      supabase,
+      userId,
+      clientRequestId,
+    );
+    if (existing) {
+      return await buildReusedEditResult(supabase, existing);
+    }
+  }
 
   if (options?.imageId && !metadata) {
     const { data: img } = await supabase
@@ -62,6 +129,7 @@ export async function createEditAndReserveCredits(
     status: "queued",
     credits_used: credits,
     expires_at: expiresAt.toISOString(),
+    client_request_id: clientRequestId,
   };
   if (metadata?.file_size != null) insertPayload.file_size = metadata.file_size;
   if (metadata?.mime_type) insertPayload.mime_type = metadata.mime_type;
@@ -71,10 +139,23 @@ export async function createEditAndReserveCredits(
   const { data: edit, error: editErr } = await supabase
     .from("edits")
     .insert(insertPayload as Record<string, unknown>)
-    .select("id")
+    .select("id, created_at")
     .single();
 
   if (editErr || !edit?.id) {
+    if (
+      clientRequestId &&
+      editErr?.message?.toLowerCase().includes("duplicate key")
+    ) {
+      const existing = await findEditByClientRequestId(
+        supabase,
+        userId,
+        clientRequestId,
+      );
+      if (existing) {
+        return await buildReusedEditResult(supabase, existing);
+      }
+    }
     throw new Error(editErr?.message ?? "Falha ao criar registro de edição");
   }
 
@@ -92,14 +173,23 @@ export async function createEditAndReserveCredits(
   if (reserveErr || !reservationId) {
     await supabase.from("edits").delete().eq("id", edit.id);
     if (reserveErr?.message?.includes("insufficient_credits")) {
-      const e = new Error("Créditos insuficientes") as Error & { status?: number };
+      const e = new Error("Créditos insuficientes") as Error & {
+        status?: number;
+      };
       e.status = 402;
       throw e;
     }
     throw new Error(reserveErr?.message ?? "Falha ao reservar créditos");
   }
 
-  return { editId: edit.id, reservationId };
+  return {
+    editId: edit.id,
+    reservationId,
+    acceptedAt: edit.created_at as string,
+    status: "queued",
+    taskId,
+    reused: false,
+  };
 }
 
 export async function consumeReservedCredits(
@@ -119,10 +209,6 @@ export async function consumeReservedCredits(
   }
 }
 
-/**
- * Libera reserva pendente. Retorna false se o RPC falhar (caller pode tentar de novo).
- * Ignora id vazio (evita chamada inválida ao PostgREST).
- */
 export async function releaseReservedCredits(
   supabase: SupabaseClient,
   reservationId: string,
@@ -138,7 +224,12 @@ export async function releaseReservedCredits(
     p_reason: reason ?? null,
   });
   if (error) {
-    console.error("[credits] release_reserved failed", id, reason, error.message);
+    console.error(
+      "[credits] release_reserved failed",
+      id,
+      reason,
+      error.message,
+    );
     return false;
   }
   return true;
@@ -185,7 +276,11 @@ export async function releaseReservedCreditsForEdit(
   await new Promise((r) => setTimeout(r, 250));
   const retry = await releaseReservedCredits(supabase, reservation.id, reason);
   if (!retry) {
-    console.error("[credits] release_reserved_for_edit retry failed", editId, reason);
+    console.error(
+      "[credits] release_reserved_for_edit retry failed",
+      editId,
+      reason,
+    );
   }
   return retry;
 }

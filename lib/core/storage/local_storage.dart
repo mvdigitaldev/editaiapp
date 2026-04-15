@@ -3,19 +3,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class LocalStorage {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  SharedPreferences? _prefs;
+  static SharedPreferences? _prefs;
 
-  Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
+  Future<SharedPreferences> _getPrefs() async {
+    _prefs ??= await SharedPreferences.getInstance();
+    return _prefs!;
   }
 
-  // Secure Storage (para tokens, dados sensíveis)
+  Future<void> init() async {
+    await _getPrefs();
+  }
+
+  // Secure Storage (para tokens, dados sensiveis)
   Future<void> writeSecure(String key, String value) async {
     await _secureStorage.write(key: key, value: value);
   }
 
   Future<String?> readSecure(String key) async {
-    return await _secureStorage.read(key: key);
+    return _secureStorage.read(key: key);
   }
 
   Future<void> deleteSecure(String key) async {
@@ -26,20 +31,24 @@ class LocalStorage {
     await _secureStorage.deleteAll();
   }
 
-  // Shared Preferences (para dados não sensíveis)
+  // Shared Preferences (para dados nao sensiveis)
   Future<void> write(String key, String value) async {
-    await _prefs?.setString(key, value);
+    final prefs = await _getPrefs();
+    await prefs.setString(key, value);
   }
 
   Future<String?> read(String key) async {
-    return _prefs?.getString(key);
+    final prefs = await _getPrefs();
+    return prefs.getString(key);
   }
 
   Future<void> delete(String key) async {
-    await _prefs?.remove(key);
+    final prefs = await _getPrefs();
+    await prefs.remove(key);
   }
 
   Future<void> clear() async {
-    await _prefs?.clear();
+    final prefs = await _getPrefs();
+    await prefs.clear();
   }
 }

@@ -24,3 +24,13 @@ verify_jwt = false
 # Webhook público da BFL (sem JWT do app)
 [functions.flux-webhook]
 verify_jwt = false
+
+# Funcoes invocadas pelo banco via pg_net com segredo no header Authorization
+[functions.notify-credit-earned]
+verify_jwt = false
+
+[functions.notify-plan-updated]
+verify_jwt = false
+
+[functions.notify-edit-terminal]
+verify_jwt = false

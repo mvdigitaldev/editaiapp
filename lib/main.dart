@@ -33,11 +33,13 @@ import 'features/editor/presentation/pages/edit_image_page.dart';
 import 'features/editor/presentation/pages/create_composition_page.dart';
 import 'features/editor/presentation/pages/remove_background_page.dart';
 import 'features/editor/presentation/pages/text_to_image_result_page.dart';
+import 'features/editor/presentation/widgets/active_edits_coordinator.dart';
 import 'features/profile/presentation/pages/profile_page.dart';
 import 'features/profile/presentation/pages/user_data_page.dart';
 import 'features/profile/presentation/pages/affiliate_page.dart';
 import 'features/subscription/presentation/pages/subscription_page.dart';
 import 'features/subscription/presentation/pages/credits_shop_page.dart';
+import 'core/widgets/app_bottom_nav.dart';
 import 'features/home/presentation/pages/main_shell_page.dart';
 import 'features/subscription/presentation/pages/checkout_webview_page.dart';
 import 'features/profile/presentation/pages/payment_history_page.dart';
@@ -168,12 +170,14 @@ class MyApp extends ConsumerWidget {
 
     return MaterialApp(
       builder: (context, child) {
-        return GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () {
-            FocusManager.instance.primaryFocus?.unfocus();
-          },
-          child: child ?? const SizedBox.shrink(),
+        return ActiveEditsCoordinator(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+            },
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
       navigatorKey: navigatorKey,
@@ -187,7 +191,12 @@ class MyApp extends ConsumerWidget {
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
         '/reset-password': (context) => const ResetPasswordPage(),
-        '/home': (context) => const MainShellPage(),
+        '/home': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments;
+          final index =
+              args is int ? args : AppBottomNav.indexEditor;
+          return MainShellPage(initialIndex: index);
+        },
         '/editor': (context) => const EditorPage(),
         '/gallery': (context) => const GalleryPage(),
         '/pre-evaluation': (context) {

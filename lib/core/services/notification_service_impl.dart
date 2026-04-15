@@ -268,13 +268,16 @@ class NotificationService {
 
   void _processNotificationDeepLink(Map<String, dynamic> data) {
     try {
-      final route = data['deep_link'] as String?;
+      final route = _resolveNotificationRoute(data);
       if (route == null || route.isEmpty) return;
       final key = _navigatorKey;
       if (key?.currentState == null) return;
       Future.delayed(const Duration(milliseconds: 500), () {
         try {
-          key?.currentState?.pushNamed(route);
+          key?.currentState?.pushNamed(
+            route,
+            arguments: _buildNotificationArguments(route, data),
+          );
         } catch (e) {
           debugPrint('[Editai] Erro ao navegar para $route: $e');
         }
@@ -282,6 +285,38 @@ class NotificationService {
     } catch (e) {
       debugPrint('[Editai] Erro ao processar deep link: $e');
     }
+  }
+
+  String? _resolveNotificationRoute(Map<String, dynamic> data) {
+    final explicitRoute =
+        (data['route'] as String?) ?? (data['deep_link'] as String?);
+    if (explicitRoute != null && explicitRoute.isNotEmpty) {
+      return explicitRoute;
+    }
+
+    final editId = (data['edit_id'] as String?) ?? (data['editId'] as String?);
+    final status = data['status'] as String?;
+    if (editId == null || editId.isEmpty) return null;
+    if (status == 'failed') return '/edit-detail';
+    return '/comparison';
+  }
+
+  Object? _buildNotificationArguments(
+    String route,
+    Map<String, dynamic> data,
+  ) {
+    final editId = (data['edit_id'] as String?) ?? (data['editId'] as String?);
+    if (editId == null || editId.isEmpty) return null;
+
+    if (route == '/comparison') {
+      return <String, dynamic>{'editId': editId};
+    }
+
+    if (route == '/edit-detail') {
+      return editId;
+    }
+
+    return null;
   }
 
   Future<void> _waitForAPNSToken() async {

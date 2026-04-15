@@ -1,20 +1,21 @@
 import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+
 import '../../../../core/config/app_config.dart';
 import '../../../../core/network/dio_client.dart';
-import '../../../../core/utils/image_resize_utils.dart';
-import '../../../../core/utils/pending_credit_reservation.dart';
-import '../../../subscription/presentation/providers/credits_usage_provider.dart';
-import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/utils/image_resize_utils.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/upload_area.dart';
+import '../../../editor/presentation/utils/edit_submission_helpers.dart';
+import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 
 class EditModelPage extends ConsumerStatefulWidget {
   const EditModelPage({super.key});
@@ -32,12 +33,15 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
   Future<void> _handleGenerate() async {
     if (_selectedImagePath == null || _isLoading) return;
 
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final modeloId = args?['modeloId'] as String?;
 
     if (modeloId == null || modeloId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Modelo inválido. Volte e tente novamente.')),
+        const SnackBar(
+          content: Text('Modelo invÃ¡lido. Volte e tente novamente.'),
+        ),
       );
       return;
     }
@@ -45,7 +49,9 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
     final balance = ref.read(creditsUsageProvider).valueOrNull?.balance ?? 0;
     if (balance < _creditsRequired) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+        const SnackBar(
+          content: Text('CrÃ©ditos insuficientes. Recarregue para continuar.'),
+        ),
       );
       Navigator.of(context).pushNamed('/credits-shop');
       return;
@@ -59,18 +65,19 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
         setState(() => _isLoading = false);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Faça login para continuar.')),
+          const SnackBar(content: Text('FaÃ§a login para continuar.')),
         );
         return;
       }
 
-      final accessToken = Supabase.instance.client.auth.currentSession?.accessToken;
+      final accessToken =
+          Supabase.instance.client.auth.currentSession?.accessToken;
       if (accessToken == null || accessToken.isEmpty) {
         setState(() => _isLoading = false);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Sessão inválida. Saia e entre de novo no app.'),
+            content: Text('SessÃ£o invÃ¡lida. Saia e entre de novo no app.'),
           ),
         );
         return;
@@ -83,15 +90,21 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
       final storagePath = '${user.id}/inputs/${const Uuid().v4()}.jpg';
       await Supabase.instance.client.storage
           .from(AppConfig.editInputsBucket)
-          .upload(storagePath, result.file, fileOptions: const FileOptions(upsert: false));
+          .upload(
+            storagePath,
+            result.file,
+            fileOptions: const FileOptions(upsert: false),
+          );
       try {
         await result.file.delete();
       } catch (_) {}
 
       final dio = DioClient();
+      final clientRequestId = const Uuid().v4();
       final response = await dio.instance.post<Map<String, dynamic>>(
         '/functions/v1/editar-imagem-modelo',
         data: {
+          'client_request_id': clientRequestId,
           'modelo_id': modeloId,
           'storage_path': storagePath,
           'width': result.width,
@@ -103,69 +116,59 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
       if (!mounted) return;
 
       final data = response.data;
-      String? taskId;
-      String? editId;
-      if (data != null) {
-        if (data['task_id'] is String) {
-          final raw = data['task_id'] as String;
-          if (raw.isNotEmpty) taskId = raw;
-        }
-        if (data['edit_id'] is String) {
-          final raw = data['edit_id'] as String;
-          if (raw.isNotEmpty) editId = raw;
-        }
-      }
+      final editId = readAcceptedEditId(data);
+      final acceptedStatus = readAcceptedStatus(data);
+      final acceptedAt = readAcceptedAt(data);
 
-      if (taskId == null) {
-        String? stuckEditId;
-        if (data != null && data['edit_id'] is String) {
-          final raw = data['edit_id'] as String;
-          if (raw.isNotEmpty) stuckEditId = raw;
-        }
-        await tryReleasePendingReservationForEdit(stuckEditId);
-        if (!mounted) return;
-        ref.invalidate(creditsUsageProvider);
-        ref.invalidate(planLimitsProvider);
+      if (editId == null) {
         setState(() => _isLoading = false);
-        final msg = data != null && data['error'] is String && (data['error'] as String).isNotEmpty
+        final msg = data != null &&
+                data['error'] is String &&
+                (data['error'] as String).isNotEmpty
             ? data['error'] as String
             : 'Não foi possível iniciar a edição. Tente novamente.';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
         return;
       }
 
-      ref.invalidate(creditsUsageProvider);
-      ref.invalidate(planLimitsProvider);
-      Navigator.of(context).pushNamed(
-        '/processing',
-        arguments: <String, dynamic>{
-          'taskId': taskId,
-          'editId': editId,
-          'beforePath': _selectedImagePath,
-          'before': null,
-          'after': null,
-        },
+      await trackAcceptedEdit(
+        ref,
+        editId: editId,
+        operationType: 'edit_model',
+        status: acceptedStatus,
+        acceptedAt: acceptedAt,
+      );
+      if (!mounted) return;
+      openProcessingPage(
+        context,
+        editId: editId,
+        beforePath: _selectedImagePath,
+        status: acceptedStatus,
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
       if (e is DioException) {
-        await tryReleasePendingReservationForEdit(editIdFromDioResponse(e));
-        if (!mounted) return;
-        ref.invalidate(creditsUsageProvider);
-        ref.invalidate(planLimitsProvider);
         final statusCode = e.response?.statusCode;
-        final errMsg = e.response?.data is Map && (e.response!.data as Map)['error'] != null
+        final errMsg = e.response?.data is Map &&
+                (e.response!.data as Map)['error'] != null
             ? '${(e.response!.data as Map)['error']}'
             : null;
         if (statusCode == 402) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+            const SnackBar(
+              content: Text(
+                'CrÃ©ditos insuficientes. Recarregue para continuar.',
+              ),
+            ),
           );
           Navigator.of(context).pushNamed('/credits-shop');
         } else if (statusCode == 404) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Modelo não encontrado. Volte e tente novamente.')),
+            const SnackBar(
+              content: Text('Modelo nÃ£o encontrado. Volte e tente novamente.'),
+            ),
           );
         } else if (statusCode == 502) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -181,7 +184,7 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
             SnackBar(
               content: Text(
                 errMsg ??
-                    'Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.',
+                    'Erro ao comunicar com o servidor. Verifique sua conexÃ£o e tente novamente.',
               ),
             ),
           );
@@ -189,7 +192,9 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
+            content: Text(
+              'Erro ao comunicar com o servidor. Verifique sua conexÃ£o e tente novamente.',
+            ),
           ),
         );
       }
@@ -199,92 +204,73 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final modeloNome = args?['modeloNome'] as String? ?? 'Editar com modelo';
     final categoriaNome = args?['categoriaNome'] as String?;
     final modeloDescricao = args?['modeloDescricao'] as String?;
     final modeloPromptPadrao = args?['modeloPromptPadrao'] as String?;
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  if (categoriaNome != null && categoriaNome.isNotEmpty) ...[
-                    Text(
-                      categoriaNome,
-                      style: AppTextStyles.headingMedium.copyWith(
-                        color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                      ),
+    return PopScope(
+      canPop: !_isLoading,
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new),
+                      onPressed:
+                          _isLoading ? null : () => Navigator.of(context).pop(),
                     ),
+                    if (categoriaNome != null && categoriaNome.isNotEmpty) ...[
+                      Text(
+                        categoriaNome,
+                        style: AppTextStyles.headingMedium.copyWith(
+                          color: isDark
+                              ? AppColors.textLight
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            Expanded(
-              child: _isLoading
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 180,
-                            height: 180,
-                            child: Lottie.asset(
-                              'assets/animations/cloud_robotics_abstract.json',
-                              fit: BoxFit.contain,
-                              repeat: true,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Container(
-                                width: 120,
-                                height: 120,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withOpacity(0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.auto_awesome,
-                                  size: 60,
-                                  color: AppColors.primary,
+              Expanded(
+                child: _isLoading
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 180,
+                              height: 180,
+                              child: Lottie.asset(
+                                'assets/animations/cloud_robotics_abstract.json',
+                                fit: BoxFit.contain,
+                                repeat: true,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Container(
+                                  width: 120,
+                                  height: 120,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.auto_awesome,
+                                    size: 60,
+                                    color: AppColors.primary,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 24),
-                          Text(
-                            'Processando...',
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              color: isDark
-                                  ? AppColors.textTertiary
-                                  : AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            modeloNome,
-                            style: AppTextStyles.headingSmall.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                            ),
-                          ),
-                          if (modeloDescricao != null && modeloDescricao.isNotEmpty) ...[
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 24),
                             Text(
-                              modeloDescricao,
+                              'Processando...',
                               style: AppTextStyles.bodyMedium.copyWith(
                                 color: isDark
                                     ? AppColors.textTertiary
@@ -292,108 +278,146 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
                               ),
                             ),
                           ],
-                          const SizedBox(height: 8),
-                          Text(
-                            'Selecione uma imagem para aplicar o modelo',
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              color: isDark
-                                  ? AppColors.textTertiary
-                                  : AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          UploadArea(
-                            imagePath: _selectedImagePath,
-                            onImageSelected: (File file) {
-                              setState(() => _selectedImagePath = file.path);
-                            },
-                            title: 'Selecione uma imagem',
-                            subtitle: 'Toque para carregar',
-                          ),
-                          if (modeloPromptPadrao != null &&
-                              modeloPromptPadrao.isNotEmpty) ...[
-                            const SizedBox(height: 16),
+                        ),
+                      )
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              'Prompt que será aplicado',
-                              style: AppTextStyles.labelSmall.copyWith(
+                              modeloNome,
+                              style: AppTextStyles.headingSmall.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? AppColors.textLight
+                                    : AppColors.textPrimary,
+                              ),
+                            ),
+                            if (modeloDescricao != null &&
+                                modeloDescricao.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                modeloDescricao,
+                                style: AppTextStyles.bodyMedium.copyWith(
+                                  color: isDark
+                                      ? AppColors.textTertiary
+                                      : AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            Text(
+                              'Selecione uma imagem para aplicar o modelo',
+                              style: AppTextStyles.bodyMedium.copyWith(
                                 color: isDark
                                     ? AppColors.textTertiary
                                     : AppColors.textSecondary,
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              modeloPromptPadrao,
-                              style: AppTextStyles.caption.copyWith(
-                                color: (isDark
-                                        ? AppColors.textTertiary
-                                        : AppColors.textSecondary)
-                                    .withValues(alpha: 0.6),
-                              ),
+                            const SizedBox(height: 16),
+                            UploadArea(
+                              imagePath: _selectedImagePath,
+                              onImageSelected: (File file) {
+                                setState(() => _selectedImagePath = file.path);
+                              },
+                              title: 'Selecione uma imagem',
+                              subtitle: 'Toque para carregar',
                             ),
+                            if (modeloPromptPadrao != null &&
+                                modeloPromptPadrao.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              Text(
+                                'Prompt que serÃ¡ aplicado',
+                                style: AppTextStyles.labelSmall.copyWith(
+                                  color: isDark
+                                      ? AppColors.textTertiary
+                                      : AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                modeloPromptPadrao,
+                                style: AppTextStyles.caption.copyWith(
+                                  color: (isDark
+                                          ? AppColors.textTertiary
+                                          : AppColors.textSecondary)
+                                      .withValues(alpha: 0.6),
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.backgroundDark
+                      : AppColors.backgroundLight,
+                  border: Border(
+                    top: BorderSide(
+                      color: isDark ? AppColors.borderDark : AppColors.border,
                     ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-                border: Border(
-                  top: BorderSide(
-                    color: isDark ? AppColors.borderDark : AppColors.border,
                   ),
                 ),
-              ),
-              child: Consumer(
-                builder: (context, ref, _) {
-                  final creditsAsync = ref.watch(creditsUsageProvider);
-                  final balance = creditsAsync.valueOrNull?.balance ?? 0;
-                  final isLoadingCredits = creditsAsync.isLoading;
-                  final hasEnoughCredits = isLoadingCredits || balance >= _creditsRequired;
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        onTap: () async {
-                          if (!hasEnoughCredits && !_isLoading) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Créditos insuficientes. Compre mais para continuar.'),
-                              ),
-                            );
-                            Navigator.of(context).pushNamed('/credits-shop');
-                          }
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        child: AbsorbPointer(
-                          absorbing: !hasEnoughCredits,
-                          child: AppButton(
-                            text: 'Gerar',
-                            onPressed: hasEnoughCredits ? _handleGenerate : null,
-                            icon: Icons.auto_fix_high,
-                            width: double.infinity,
-                            isLoading: _isLoading,
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final creditsAsync = ref.watch(creditsUsageProvider);
+                    final balance = creditsAsync.valueOrNull?.balance ?? 0;
+                    final isLoadingCredits = creditsAsync.isLoading;
+                    final hasEnoughCredits =
+                        isLoadingCredits || balance >= _creditsRequired;
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () async {
+                            if (!hasEnoughCredits && !_isLoading) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'CrÃ©ditos insuficientes. Compre mais para continuar.',
+                                  ),
+                                ),
+                              );
+                              Navigator.of(context).pushNamed('/credits-shop');
+                            }
+                          },
+                          behavior: HitTestBehavior.opaque,
+                          child: AbsorbPointer(
+                            absorbing: !hasEnoughCredits,
+                            child: AppButton(
+                              text: 'Gerar',
+                              onPressed:
+                                  hasEnoughCredits ? _handleGenerate : null,
+                              icon: Icons.auto_fix_high,
+                              width: double.infinity,
+                              isLoading: _isLoading,
+                            ),
                           ),
                         ),
-                      ),
-                      if (!isLoadingCredits && balance < _creditsRequired) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Você precisa de $_creditsRequired créditos. Toque no botão para comprar.',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                        if (!isLoadingCredits &&
+                            balance < _creditsRequired) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Você precisa de $_creditsRequired créditos. Toque no botão para comprar.',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: isDark
+                                  ? AppColors.textTertiary
+                                  : AppColors.textSecondary,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
-                        ),
+                        ],
                       ],
-                    ],
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

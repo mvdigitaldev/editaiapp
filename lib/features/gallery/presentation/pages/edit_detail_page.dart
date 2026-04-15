@@ -273,15 +273,17 @@ class _EditDetailPageState extends ConsumerState<EditDetailPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       ),
-                      errorWidget: (_, __, ___) => _imagePlaceholder(isDark),
+                      errorWidget: (_, __, ___) =>
+                          _imagePlaceholder(isDark, edit),
                     ),
                   )
-                : _imagePlaceholder(isDark),
+                : _imagePlaceholder(isDark, edit),
       ),
     );
   }
 
-  Widget _imagePlaceholder(bool isDark) {
+  Widget _imagePlaceholder(bool isDark, EditDetailModel edit) {
+    final isPending = edit.status == 'queued' || edit.status == 'processing';
     return Container(
       height: 200,
       color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
@@ -290,9 +292,15 @@ class _EditDetailPageState extends ConsumerState<EditDetailPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.image_not_supported_outlined,
+              isPending
+                  ? Icons.auto_awesome
+                  : Icons.image_not_supported_outlined,
               size: 48,
-              color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+              color: isPending
+                  ? AppColors.primary
+                  : (isDark
+                      ? AppColors.textTertiary
+                      : AppColors.textSecondary),
             ),
             const SizedBox(height: 8),
             Text(

@@ -53,6 +53,7 @@ const CORS_HEADERS = {
 };
 
 interface RequestBody {
+  client_request_id: string;
   modelo_id: string;
   storage_path: string;
   width?: number;
@@ -129,6 +130,7 @@ Deno.serve(async (req) => {
   try {
     const body = (await req.json()) as Partial<RequestBody>;
     const {
+      client_request_id,
       modelo_id,
       storage_path,
       width,
@@ -142,6 +144,17 @@ Deno.serve(async (req) => {
       return jsonResponse(
         { success: false, error: "Campo 'modelo_id' é obrigatório e não pode estar vazio" },
         422
+      );
+    }
+
+    if (
+      !client_request_id ||
+      typeof client_request_id !== "string" ||
+      client_request_id.trim().length === 0
+    ) {
+      return jsonResponse(
+        { success: false, error: "Campo 'client_request_id' é obrigatório" },
+        422,
       );
     }
 
@@ -267,6 +280,7 @@ Deno.serve(async (req) => {
     const promptFinal = `${promptPadrao}${promptMiddle}\n\nImage context: ${imageContext}`;
 
     const fileSizeBytes = Math.ceil((resizedBase64.length * 3) / 4);
+    let acceptedAt = new Date().toISOString();
     try {
       const result = await createEditAndReserveCredits(
         supabase,
@@ -276,6 +290,7 @@ Deno.serve(async (req) => {
         promptFinal,
         null,
         {
+          clientRequestId: client_request_id.trim(),
           imageMetadata: {
             file_size: fileSizeBytes,
             mime_type: "image/jpeg",
@@ -286,6 +301,15 @@ Deno.serve(async (req) => {
         }
       );
       editId = result.editId;
+      acceptedAt = result.acceptedAt;
+      if (result.reused) {
+        return jsonResponse({
+          task_id: result.taskId,
+          edit_id: result.editId,
+          status: result.status,
+          accepted_at: result.acceptedAt,
+        });
+      }
     } catch (creditErr) {
       const err = creditErr as Error & { status?: number };
       if (err.status === 402) {
@@ -385,7 +409,12 @@ Deno.serve(async (req) => {
       return await abortAfterReserve("flux_task_insert_error", "Falha ao registrar tarefa", 500);
     }
     console.log("[editar-imagem-modelo] Tarefa criada:", { taskId, editId, webhookUrl });
-    return jsonResponse({ task_id: taskId, edit_id: editId });
+    return jsonResponse({
+      task_id: taskId,
+      edit_id: editId,
+      status: "queued",
+      accepted_at: acceptedAt,
+    });
   } catch (error) {
     console.error("[editar-imagem-modelo] Erro:", error);
     if (editId) {

@@ -22,12 +22,31 @@ class GalleryEditModel {
       id: json['id'] as String,
       imageUrl: json['image_url'] as String?,
       createdAt: ServerDateUtils.parseServerDateOr(
-          json['created_at'], AppTimeUtils.nowUtc()),
+        json['created_at'],
+        AppTimeUtils.nowUtc(),
+      ),
       status: json['status'] as String? ?? 'queued',
       operationType: json['operation_type'] as String?,
     );
   }
 
-  /// Label amigável do tipo de operação (nunca exibir valor cru do banco).
   String get operationTypeLabel => OperationType.labelFrom(operationType);
+
+  String get statusLabel {
+    switch (status) {
+      case 'queued':
+        return 'Na fila';
+      case 'processing':
+        return 'Processando';
+      case 'completed':
+        return 'Concluida';
+      case 'failed':
+        return 'Falhou';
+      default:
+        return status;
+    }
+  }
+
+  bool get isActive => status == 'queued' || status == 'processing';
+  bool get canDelete => status == 'completed' || status == 'failed';
 }

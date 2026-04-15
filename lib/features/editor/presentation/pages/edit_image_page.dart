@@ -12,7 +12,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/upload_area.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
-import '../../../subscription/presentation/providers/plan_limits_provider.dart';
+import '../utils/edit_submission_helpers.dart';
 
 class EditImagePage extends ConsumerStatefulWidget {
   const EditImagePage({super.key});
@@ -34,7 +34,9 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
     final balance = creditsAsync.valueOrNull?.balance ?? 0;
     if (balance < 7) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+        const SnackBar(
+            content:
+                Text('Créditos insuficientes. Recarregue para continuar.')),
       );
       Navigator.of(context).pushNamed('/credits-shop');
       return;
@@ -60,15 +62,18 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
       final storagePath = '${user.id}/inputs/${const Uuid().v4()}.jpg';
       await Supabase.instance.client.storage
           .from(AppConfig.editInputsBucket)
-          .upload(storagePath, result.file, fileOptions: const FileOptions(upsert: false));
+          .upload(storagePath, result.file,
+              fileOptions: const FileOptions(upsert: false));
       try {
         await result.file.delete();
       } catch (_) {}
 
       final dio = DioClient();
+      final clientRequestId = const Uuid().v4();
       final response = await dio.instance.post<Map<String, dynamic>>(
         '/functions/v1/editar-imagem-flux',
         data: {
+          'client_request_id': clientRequestId,
           'user_prompt': prompt,
           'storage_path': storagePath,
           'width': result.width,
@@ -79,40 +84,34 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
       if (!mounted) return;
 
       final data = response.data;
-      String? taskId;
-      String? editId;
-      if (data != null) {
-        if (data['task_id'] is String) {
-          final raw = data['task_id'] as String;
-          if (raw.isNotEmpty) taskId = raw;
-        }
-        if (data['edit_id'] is String) {
-          final raw = data['edit_id'] as String;
-          if (raw.isNotEmpty) editId = raw;
-        }
-      }
+      final editId = readAcceptedEditId(data);
+      final acceptedStatus = readAcceptedStatus(data);
+      final acceptedAt = readAcceptedAt(data);
 
-      if (taskId == null) {
+      if (editId == null) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Não foi possível iniciar a edição. Tente novamente.'),
+            content:
+                Text('Não foi possível iniciar a edição. Tente novamente.'),
           ),
         );
         return;
       }
 
-      ref.invalidate(creditsUsageProvider);
-      ref.invalidate(planLimitsProvider);
-      Navigator.of(context).pushNamed(
-        '/processing',
-        arguments: <String, dynamic>{
-          'taskId': taskId,
-          'editId': editId,
-          'beforePath': _selectedImagePath,
-          'before': null,
-          'after': null,
-        },
+      await trackAcceptedEdit(
+        ref,
+        editId: editId,
+        operationType: 'edit_image',
+        status: acceptedStatus,
+        acceptedAt: acceptedAt,
+      );
+      if (!mounted) return;
+      openProcessingPage(
+        context,
+        editId: editId,
+        beforePath: _selectedImagePath,
+        status: acceptedStatus,
       );
     } catch (e) {
       if (!mounted) return;
@@ -121,20 +120,24 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
         final statusCode = e.response?.statusCode;
         if (statusCode == 402) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+            const SnackBar(
+                content:
+                    Text('Créditos insuficientes. Recarregue para continuar.')),
           );
           Navigator.of(context).pushNamed('/credits-shop');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
+              content: Text(
+                  'Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
             ),
           );
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
+            content: Text(
+                'Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
           ),
         );
       }
@@ -151,139 +154,162 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'Editar imagem',
-                    style: AppTextStyles.headingMedium.copyWith(
-                      color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                    ),
-                  ),
-                  const Spacer(),
-                  const SizedBox(width: 48),
-                ],
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return PopScope(
+      canPop: !_isLoading,
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
                   children: [
-                    UploadArea(
-                      imagePath: _selectedImagePath,
-                      onImageSelected: (File file) {
-                        setState(() => _selectedImagePath = file.path);
-                      },
-                      title: 'Selecione uma imagem',
-                      subtitle: 'Toque para carregar',
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new),
+                      onPressed:
+                          _isLoading ? null : () => Navigator.of(context).pop(),
                     ),
-                    const SizedBox(height: 24),
+                    const Spacer(),
                     Text(
-                      'Descreva a edição',
-                      style: AppTextStyles.labelLarge.copyWith(
-                        color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
+                      'Editar imagem',
+                      style: AppTextStyles.headingMedium.copyWith(
+                        color: isDark
+                            ? AppColors.textLight
+                            : AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isDark ? AppColors.borderDark : AppColors.border,
-                        ),
-                      ),
-                      child: TextField(
-                        controller: _promptController,
-                        maxLines: 4,
-                        style: AppTextStyles.bodyLarge.copyWith(
-                          color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Ex: Deixe a iluminação mais quente',
-                          hintStyle: AppTextStyles.bodyLarge.copyWith(
-                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.all(16),
-                        ),
-                      ),
-                    ),
+                    const Spacer(),
+                    const SizedBox(width: 48),
                   ],
                 ),
               ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-                border: Border(
-                  top: BorderSide(
-                    color: isDark ? AppColors.borderDark : AppColors.border,
-                  ),
-                ),
-              ),
-              child: Consumer(
-                builder: (context, ref, _) {
-                  final creditsAsync = ref.watch(creditsUsageProvider);
-                  final balance = creditsAsync.valueOrNull?.balance ?? 0;
-                  final isLoadingCredits = creditsAsync.isLoading;
-                  final hasEnoughCredits = isLoadingCredits || balance >= 7;
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      GestureDetector(
-                        onTap: () async {
-                          if (!hasEnoughCredits && !_isLoading) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Créditos insuficientes. Compre mais para continuar.'),
-                              ),
-                            );
-                            Navigator.of(context).pushNamed('/credits-shop');
-                          }
+                      UploadArea(
+                        imagePath: _selectedImagePath,
+                        onImageSelected: (File file) {
+                          setState(() => _selectedImagePath = file.path);
                         },
-                        behavior: HitTestBehavior.opaque,
-                        child: AbsorbPointer(
-                          absorbing: !hasEnoughCredits,
-                          child: AppButton(
-                            text: 'Gerar',
-                            onPressed: hasEnoughCredits ? _handleGenerate : null,
-                            icon: Icons.auto_awesome,
-                            width: double.infinity,
-                            isLoading: _isLoading,
+                        title: 'Selecione uma imagem',
+                        subtitle: 'Toque para carregar',
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Descreva a edição',
+                        style: AppTextStyles.labelLarge.copyWith(
+                          color: isDark
+                              ? AppColors.textLight
+                              : AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.surfaceDark
+                              : AppColors.surfaceLight,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark
+                                ? AppColors.borderDark
+                                : AppColors.border,
+                          ),
+                        ),
+                        child: TextField(
+                          controller: _promptController,
+                          maxLines: 4,
+                          style: AppTextStyles.bodyLarge.copyWith(
+                            color: isDark
+                                ? AppColors.textLight
+                                : AppColors.textPrimary,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Ex: Deixe a iluminação mais quente',
+                            hintStyle: AppTextStyles.bodyLarge.copyWith(
+                              color: isDark
+                                  ? AppColors.textTertiary
+                                  : AppColors.textSecondary,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.all(16),
                           ),
                         ),
                       ),
-                      if (!isLoadingCredits && balance < 7) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Você precisa de 7 créditos. Toque no botão para comprar.',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
                     ],
-                  );
-                },
+                  ),
+                ),
               ),
-            ),
-          ],
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.backgroundDark
+                      : AppColors.backgroundLight,
+                  border: Border(
+                    top: BorderSide(
+                      color: isDark ? AppColors.borderDark : AppColors.border,
+                    ),
+                  ),
+                ),
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final creditsAsync = ref.watch(creditsUsageProvider);
+                    final balance = creditsAsync.valueOrNull?.balance ?? 0;
+                    final isLoadingCredits = creditsAsync.isLoading;
+                    final hasEnoughCredits = isLoadingCredits || balance >= 7;
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () async {
+                            if (!hasEnoughCredits && !_isLoading) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'Créditos insuficientes. Compre mais para continuar.'),
+                                ),
+                              );
+                              Navigator.of(context).pushNamed('/credits-shop');
+                            }
+                          },
+                          behavior: HitTestBehavior.opaque,
+                          child: AbsorbPointer(
+                            absorbing: !hasEnoughCredits,
+                            child: AppButton(
+                              text: 'Gerar',
+                              onPressed:
+                                  hasEnoughCredits ? _handleGenerate : null,
+                              icon: Icons.auto_awesome,
+                              width: double.infinity,
+                              isLoading: _isLoading,
+                            ),
+                          ),
+                        ),
+                        if (!isLoadingCredits && balance < 7) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Você precisa de 7 créditos. Toque no botão para comprar.',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: isDark
+                                  ? AppColors.textTertiary
+                                  : AppColors.textSecondary,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

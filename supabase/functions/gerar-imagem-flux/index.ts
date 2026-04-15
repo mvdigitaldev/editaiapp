@@ -15,6 +15,7 @@ const CORS_HEADERS = {
 };
 
 interface RequestBody {
+  client_request_id: string;
   user_prompt: string;
   image_context?: string;
   width: number;
@@ -188,7 +189,22 @@ Deno.serve(async (req) => {
 
   try {
     const body = (await req.json()) as Partial<RequestBody>;
-    const { user_prompt, image_context, width, height } = body;
+    const { client_request_id, user_prompt, image_context, width, height } =
+      body;
+
+    if (
+      !client_request_id ||
+      typeof client_request_id !== "string" ||
+      client_request_id.trim().length === 0
+    ) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Campo 'client_request_id' é obrigatório",
+        },
+        422,
+      );
+    }
 
     if (!user_prompt || typeof user_prompt !== "string" || user_prompt.trim().length === 0) {
       return jsonResponse(
@@ -216,14 +232,14 @@ Deno.serve(async (req) => {
     if (!bflApiKey) {
       console.error("[gerar-imagem-flux] BFL_API_KEY nÃ£o configurada");
       return jsonResponse(
-        { success: false, error: "ConfiguraÃ§Ã£o do serviÃ§o indisponÃ­vel" },
+        { success: false, error: "Configuração do serviço indisponível" },
         500
       );
     }
     if (!openaiKey) {
       console.error("[gerar-imagem-flux] OPENAI_API_KEY nÃ£o configurada");
       return jsonResponse(
-        { success: false, error: "ConfiguraÃ§Ã£o do serviÃ§o indisponÃ­vel" },
+        { success: false, error: "Configuração do serviço indisponível" },
         500
       );
     }
@@ -234,7 +250,7 @@ Deno.serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return jsonResponse({ success: false, error: "AutenticaÃ§Ã£o obrigatÃ³ria" }, 401);
+      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
     }
     const authClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
@@ -242,7 +258,7 @@ Deno.serve(async (req) => {
     const { data: { user } } = await authClient.auth.getUser();
     const userId = user?.id ?? null;
     if (!userId) {
-      return jsonResponse({ success: false, error: "AutenticaÃ§Ã£o obrigatÃ³ria" }, 401);
+      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
     }
 
     const { improvedPrompt, intent, avgSimilarity, matchedIds } = await optimizePrompt(
@@ -273,6 +289,7 @@ Deno.serve(async (req) => {
 
     let editId: string;
     let reservationId = "";
+    let acceptedAt = new Date().toISOString();
     try {
       const result = await createEditAndReserveCredits(
         supabase,
@@ -282,6 +299,7 @@ Deno.serve(async (req) => {
         improvedPrompt,
         null,
         {
+          clientRequestId: client_request_id.trim(),
           imageMetadata: {
             mime_type: "image/jpeg",
             width,
@@ -292,10 +310,19 @@ Deno.serve(async (req) => {
       );
       editId = result.editId;
       reservationId = result.reservationId;
+      acceptedAt = result.acceptedAt;
+      if (result.reused) {
+        return jsonResponse({
+          edit_id: result.editId,
+          task_id: result.taskId,
+          status: result.status,
+          accepted_at: result.acceptedAt,
+        });
+      }
     } catch (creditErr) {
       const err = creditErr as Error & { status?: number };
       if (err.status === 402) {
-        return jsonResponse({ success: false, error: "CrÃ©ditos insuficientes" }, 402);
+        return jsonResponse({ success: false, error: "Créditos insuficientes" }, 402);
       }
       throw creditErr;
     }
@@ -321,7 +348,7 @@ Deno.serve(async (req) => {
 
     if (!initRes.ok) {
       const errText = await initRes.text();
-      let errMsg = "Erro ao iniciar geraÃ§Ã£o na BFL";
+      let errMsg = "Erro ao iniciar geração na BFL";
       if (initRes.status === 401) errMsg = "API key BFL invÃ¡lida";
       else if (initRes.status === 402) errMsg = "CrÃ©ditos insuficientes na conta BFL";
       else if (initRes.status === 422) errMsg = "Dados invÃ¡lidos: " + (errText || "verifique prompt e dimensÃµes");
@@ -360,7 +387,12 @@ Deno.serve(async (req) => {
         500
       );
     }
-    return jsonResponse({ task_id: taskId });
+    return jsonResponse({
+      task_id: taskId,
+      edit_id: editId,
+      status: "queued",
+      accepted_at: acceptedAt,
+    });
   } catch (error) {
     console.error("[gerar-imagem-flux] Erro:", error);
     return jsonResponse(

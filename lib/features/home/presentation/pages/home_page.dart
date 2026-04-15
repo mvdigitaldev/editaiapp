@@ -298,9 +298,8 @@ class _HomePageState extends ConsumerState<HomePage> {
       itemCount: recentEdits.length,
       itemBuilder: (context, index) {
         final edit = recentEdits[index];
-        final url = edit.imageUrl;
         return _RecentEditCard(
-          imageUrl: url,
+          edit: edit,
           onTap: () {
             Navigator.of(context).pushNamed(
               '/edit-detail',
@@ -535,18 +534,18 @@ class _HeroActionCard extends StatelessWidget {
 }
 
 class _RecentEditCard extends StatelessWidget {
-  final String? imageUrl;
+  final GalleryEditModel edit;
   final VoidCallback onTap;
 
   const _RecentEditCard({
-    required this.imageUrl,
+    required this.edit,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final url = imageUrl;
+    final url = edit.imageUrl;
 
     return GestureDetector(
       onTap: onTap,
@@ -585,8 +584,60 @@ class _RecentEditCard extends StatelessWidget {
                     )
                   : Container(
                       color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                      child: const Icon(Icons.image),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            edit.status == 'failed'
+                                ? Icons.error_outline
+                                : edit.status == 'processing'
+                                    ? Icons.auto_awesome
+                                    : Icons.schedule,
+                            color: edit.status == 'failed'
+                                ? AppColors.error
+                                : AppColors.primary,
+                          ),
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Text(
+                              edit.operationTypeLabel,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: isDark
+                                    ? AppColors.textLight
+                                    : AppColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+            ),
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: edit.status == 'failed'
+                      ? AppColors.error.withOpacity(0.92)
+                      : edit.status == 'completed'
+                          ? AppColors.primary.withOpacity(0.92)
+                          : AppColors.overlay,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  edit.statusLabel,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ),
             Positioned(
               bottom: 8,

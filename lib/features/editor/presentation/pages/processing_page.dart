@@ -4,11 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/app_bottom_nav.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../gallery/presentation/providers/gallery_provider.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../subscription/presentation/providers/plan_limits_provider.dart';
+import '../providers/active_edits_provider.dart';
 
 class ProcessingPage extends ConsumerStatefulWidget {
   const ProcessingPage({super.key});
@@ -20,343 +24,173 @@ class ProcessingPage extends ConsumerStatefulWidget {
 class _ProcessingPageState extends ConsumerState<ProcessingPage>
     with WidgetsBindingObserver {
   bool _hasError = false;
-  bool _hasTimeout = false;
   bool _hasFinished = false;
+  bool _isLongRunning = false;
   String? _errorMessage;
-  RealtimeChannel? _channel;
-  Timer? _pollTimer;
-  Timer? _timeoutTimer;
   String? _beforePathFromArgs;
   String? _editId;
-  String? _taskId;
+  Timer? _pollTimer;
+  Timer? _longWaitTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initProcessing();
+      unawaited(_initProcessing());
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && !_hasError && !_hasFinished) {
-      _recheckStatus();
+    if (state == AppLifecycleState.resumed && !_hasFinished) {
+      unawaited(ref.read(activeEditsProvider.notifier).syncNow());
+      unawaited(_recheckStatus());
     }
   }
 
   Future<void> _initProcessing() async {
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    _taskId = args != null ? args['taskId'] as String? : null;
-    _editId = args != null ? args['editId'] as String? : null;
-    _beforePathFromArgs = args != null ? args['beforePath'] as String? : null;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    _beforePathFromArgs = args?['beforePath'] as String?;
+    _editId = args?['editId'] as String?;
 
-    if (_editId != null && _editId!.isNotEmpty) {
-      await _startEditProcessing(_editId!);
-      _scheduleProcessingTimeout();
-    } else if (_taskId != null && _taskId!.isNotEmpty) {
-      await _startFluxProcessing(_taskId!);
-      _scheduleProcessingTimeout();
-    } else {
-      await _simulateProcessing(args);
+    if ((_editId == null || _editId!.isEmpty) &&
+        args?['taskId'] is String &&
+        (args?['taskId'] as String).isNotEmpty) {
+      _editId = await _resolveEditIdFromTask(args?['taskId'] as String);
     }
+
+    if (!mounted) return;
+
+    if (_editId == null || _editId!.isEmpty) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Não foi possÃ­vel localizar esta edição.';
+      });
+      return;
+    }
+
+    _scheduleLongWaitNotice();
+    _startPolling();
+    await _recheckStatus();
   }
 
-  void _scheduleProcessingTimeout() {
-    if (_hasFinished) return;
-    final hasRealJob = (_editId != null && _editId!.isNotEmpty) ||
-        (_taskId != null && _taskId!.isNotEmpty);
-    if (!hasRealJob) return;
-    _cancelTimeoutTimer();
-    _timeoutTimer = Timer(const Duration(seconds: 80), () {
-      unawaited(_onProcessingTimeout());
-    });
-  }
-
-  void _cancelTimeoutTimer() {
-    _timeoutTimer?.cancel();
-    _timeoutTimer = null;
-  }
-
-  Future<String?> _resolveEditIdForRelease() async {
-    if (_editId != null && _editId!.isNotEmpty) return _editId;
-    final taskId = _taskId;
-    if (taskId == null || taskId.isEmpty) return null;
+  Future<String?> _resolveEditIdFromTask(String taskId) async {
     try {
-      final res = await Supabase.instance.client
+      final response = await Supabase.instance.client
           .from('flux_tasks')
           .select('edit_id')
           .eq('task_id', taskId)
           .maybeSingle();
-      final id = res?['edit_id'];
-      return id is String && id.isNotEmpty ? id : null;
-    } catch (_) {
-      return null;
-    }
+      final editId = response?['edit_id'];
+      if (editId is String && editId.isNotEmpty) {
+        return editId;
+      }
+    } catch (_) {}
+    return null;
   }
 
-  Future<void> _onProcessingTimeout() async {
-    if (!mounted || _hasFinished || _hasError) return;
-
-    _cleanupChannel();
-
-    await _recheckStatus();
-    if (!mounted || _hasFinished) return;
-
-    final effectiveEditId = await _resolveEditIdForRelease();
-    if (effectiveEditId != null) {
-      try {
-        await Supabase.instance.client.rpc(
-          'user_release_pending_reservation_for_edit',
-          params: <String, dynamic>{
-            'p_edit_id': effectiveEditId,
-            'p_reason': 'client_processing_timeout',
-          },
-        );
-      } catch (e, st) {
-        debugPrint('[ProcessingPage] Falha ao liberar reserva: $e\n$st');
-      }
-    }
-
-    ref.invalidate(creditsUsageProvider);
-    ref.invalidate(planLimitsProvider);
-
-    if (!mounted || _hasFinished) return;
-    setState(() {
-      _hasError = true;
-      _hasTimeout = true;
-      _errorMessage =
-          'A operação demorou mais do que o esperado. Tente novamente mais tarde.';
+  void _scheduleLongWaitNotice() {
+    _longWaitTimer?.cancel();
+    _longWaitTimer = Timer(const Duration(seconds: 80), () {
+      if (!mounted || _hasFinished) return;
+      setState(() => _isLongRunning = true);
     });
   }
 
   void _startPolling() {
-    _cancelPolling();
-    _recheckStatus();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (!mounted || _hasError || _hasFinished) return;
-      _recheckStatus();
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted || _hasFinished) return;
+      unawaited(_recheckStatus());
     });
   }
 
-  void _cancelPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = null;
-  }
-
   Future<void> _recheckStatus() async {
-    if (!mounted || _hasError || _hasFinished) return;
-
-    if (_editId != null && _editId!.isNotEmpty) {
-      try {
-        final res = await Supabase.instance.client
-            .from('edits')
-            .select()
-            .eq('id', _editId!)
-            .maybeSingle();
-
-        if (res != null) {
-          _handleEditRecord(Map<String, dynamic>.from(res as Map));
-        }
-      } catch (_) {}
-    } else if (_taskId != null && _taskId!.isNotEmpty) {
-      try {
-        final res = await Supabase.instance.client
-            .from('flux_tasks')
-            .select()
-            .eq('task_id', _taskId!)
-            .maybeSingle();
-
-        if (res != null) {
-          _handleTaskRecord(Map<String, dynamic>.from(res as Map));
-        }
-      } catch (_) {}
+    final editId = _editId;
+    if (!mounted || _hasFinished || editId == null || editId.isEmpty) {
+      return;
     }
-  }
-
-  Future<void> _startEditProcessing(String editId) async {
-    final supabase = Supabase.instance.client;
-
-    _channel = supabase
-        .channel('edit-$editId')
-      ..onPostgresChanges(
-        event: PostgresChangeEvent.update,
-        schema: 'public',
-        table: 'edits',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'id',
-          value: editId,
-        ),
-        callback: (payload) {
-          _handleEditRecord(payload.newRecord);
-        },
-      )
-      ..subscribe();
-
-    _startPolling();
 
     try {
-      final res = await supabase
+      final response = await Supabase.instance.client
           .from('edits')
-          .select()
+          .select('id, status')
           .eq('id', editId)
           .maybeSingle();
 
-      if (res != null) {
-        _handleEditRecord(Map<String, dynamic>.from(res as Map));
-      }
+      if (response == null || !mounted) return;
+      final record = Map<String, dynamic>.from(response as Map);
+      await _handleEditRecord(record);
     } catch (_) {}
   }
 
-  void _handleEditRecord(Map<String, dynamic> record) {
+  Future<void> _handleEditRecord(Map<String, dynamic> record) async {
     if (!mounted) return;
+
     final status = record['status'] as String?;
-    if (status == null) return;
+    if (status == null || status.isEmpty) return;
 
     if (status == 'completed') {
-      final imageUrl = record['image_url'] as String?;
       _hasFinished = true;
-      _cleanupChannel();
+      _cleanupTimers();
       ref.invalidate(recentEditsProvider);
-      ref.invalidate(planLimitsProvider);
-      if (_beforePathFromArgs != null) {
-        Navigator.of(context).pushReplacementNamed(
-          '/comparison',
-          arguments: <String, dynamic>{
-            'editId': record['id'],
+      Navigator.of(context).pushReplacementNamed(
+        '/comparison',
+        arguments: <String, dynamic>{
+          'editId': record['id'],
+          if (_beforePathFromArgs != null && _beforePathFromArgs!.isNotEmpty)
             'before': _beforePathFromArgs,
-            'after': null,
-            'afterUrl': imageUrl,
-          },
-        );
-      } else {
-        Navigator.of(context).pushReplacementNamed(
-          '/text-to-image-result',
-          arguments: imageUrl,
-        );
-      }
-    } else if (status == 'failed') {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Ocorreu um erro ao gerar a imagem.';
-      });
-      _cleanupChannel();
-    }
-  }
-
-  Future<void> _startFluxProcessing(String taskId) async {
-    final supabase = Supabase.instance.client;
-
-    _channel = supabase
-        .channel('flux-task-$taskId')
-      ..onPostgresChanges(
-        event: PostgresChangeEvent.update,
-        schema: 'public',
-        table: 'flux_tasks',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'task_id',
-          value: taskId,
-        ),
-        callback: (payload) {
-          _handleTaskRecord(payload.newRecord);
         },
-      )
-      ..subscribe();
+      );
+      return;
+    }
 
-    _startPolling();
-
-    try {
-      final res = await supabase
-          .from('flux_tasks')
-          .select()
-          .eq('task_id', taskId)
-          .maybeSingle();
-
-      if (res != null) {
-        _handleTaskRecord(Map<String, dynamic>.from(res as Map));
-      }
-    } catch (_) {}
-  }
-
-  void _handleTaskRecord(Map<String, dynamic> record) {
-    if (!mounted) return;
-    final status = record['status'] as String?;
-    if (status == null) return;
-
-    if (status == 'ready') {
-      final imageUrl = record['image_url'] as String?;
-      _hasFinished = true;
-      _cleanupChannel();
-      ref.invalidate(recentEditsProvider);
-      ref.invalidate(planLimitsProvider);
-      if (_beforePathFromArgs != null) {
-        Navigator.of(context).pushReplacementNamed(
-          '/comparison',
-          arguments: <String, dynamic>{
-            'editId': record['edit_id'],
-            'before': _beforePathFromArgs,
-            'after': null,
-            'afterUrl': imageUrl,
-          },
-        );
-      } else {
-        Navigator.of(context).pushReplacementNamed(
-          '/text-to-image-result',
-          arguments: imageUrl,
-        );
-      }
-    } else if (status == 'error') {
-      final message =
-          record['error_message'] as String? ?? 'Ocorreu um erro ao gerar a imagem.';
+    if (status == 'failed') {
+      _cleanupTimers();
       setState(() {
         _hasError = true;
-        _errorMessage = message;
+        _errorMessage =
+            'Não foi possÃ­vel concluir esta edição. Você pode acompanhar os detalhes no histÃ³rico.';
       });
-      _cleanupChannel();
     }
   }
 
-  Future<void> _simulateProcessing(Map<String, dynamic>? args) async {
-    for (var i = 0; i <= 100; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      if (!mounted) return;
-    }
-
-    if (!mounted) return;
-    ref.invalidate(recentEditsProvider);
-    ref.invalidate(planLimitsProvider);
-    final before = args != null ? args['before'] as String? : null;
-    final after = args != null ? args['after'] as String? : null;
-    Navigator.of(context).pushReplacementNamed(
-      '/comparison',
-      arguments: <String, String?>{
-        'before': before,
-        'after': after,
-      },
-    );
-  }
-
-  void _cleanupChannel() {
-    _cancelTimeoutTimer();
-    _cancelPolling();
-    if (_channel != null) {
-      _channel!.unsubscribe();
-      _channel = null;
-    }
+  void _cleanupTimers() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _longWaitTimer?.cancel();
+    _longWaitTimer = null;
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _cleanupChannel();
+    _cleanupTimers();
     super.dispose();
   }
 
-  void _goHome() {
-    Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+  void _openEditDetail() {
+    final editId = _editId;
+    if (editId == null || editId.isEmpty) return;
+    Navigator.of(context).pushReplacementNamed(
+      '/edit-detail',
+      arguments: editId,
+    );
+  }
+
+  /// Volta ao shell principal na aba Galeria, sem repor o formulário de edição.
+  void _goBackToHome() {
+    ref.invalidate(recentEditsProvider);
+    ref.invalidate(creditsUsageProvider);
+    ref.invalidate(planLimitsProvider);
+    ref.invalidate(currentMonthUsageTotalProvider);
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      '/home',
+      (route) => route.isFirst,
+      arguments: AppBottomNav.indexGallery,
+    );
   }
 
   @override
@@ -365,92 +199,119 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
 
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 180,
-                  height: 180,
-                  child: Lottie.asset(
-                    'assets/animations/cloud_robotics_abstract.json',
-                    fit: BoxFit.contain,
-                    repeat: true,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.auto_awesome,
-                        size: 60,
-                        color: AppColors.primary,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new),
+                    onPressed: _goBackToHome,
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Processamento em andamento',
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.headingMedium.copyWith(
+                        color: isDark
+                            ? AppColors.textLight
+                            : AppColors.textPrimary,
                       ),
                     ),
                   ),
+                  const SizedBox(width: 48),
+                ],
+              ),
+              const Spacer(),
+              SizedBox(
+                width: 180,
+                height: 180,
+                child: Lottie.asset(
+                  'assets/animations/cloud_robotics_abstract.json',
+                  fit: BoxFit.contain,
+                  repeat: true,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome,
+                      size: 60,
+                      color: AppColors.primary,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 32),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                _hasError
+                    ? 'Sua edição precisa de atenção'
+                    : 'Sua edição continua sendo processada',
+                style: AppTextStyles.headingLarge.copyWith(
+                  color:
+                      isDark ? AppColors.textLight : AppColors.textPrimary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _hasError
+                    ? (_errorMessage ??
+                        'Não foi possível concluir esta edição.')
+                    : 'Você pode sair desta tela e continuar usando o app. Vamos avisar quando ela ficar pronta.',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: _hasError
+                      ? AppColors.error
+                      : (isDark
+                          ? AppColors.textTertiary
+                          : AppColors.textSecondary),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (!_hasError) ...[
+                const SizedBox(height: 16),
                 Text(
-                  'Processando sua edição...',
-                  style: AppTextStyles.headingLarge.copyWith(
-                    color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                  _isLongRunning
+                      ? 'Ela está levando mais tempo que o normal, mas continua rodando no servidor.'
+                      : 'Sair da tela Não cancela o job, Não perde a edição e Não afeta seus créditos.',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: isDark
+                        ? AppColors.textTertiary
+                        : AppColors.textSecondary,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 16),
-                if (_hasError) ...[
-                  Text(
-                    _errorMessage ??
-                        'Ocorreu um erro ao processar sua edição. Tente novamente.',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.error,
-                    ),
-                    textAlign: TextAlign.center,
+              ],
+              const Spacer(),
+              if (_hasError) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _openEditDetail,
+                    child: const Text('Ver detalhes da edição'),
                   ),
-                  const SizedBox(height: 32),
-                  if (_hasTimeout)
-                    TextButton(
-                      onPressed: _goHome,
-                      child: Text(
-                        'Ir para o início',
-                        style: AppTextStyles.labelLarge.copyWith(
-                          color: isDark
-                              ? AppColors.textTertiary
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    )
-                  else
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      child: Text(
-                        'Voltar',
-                        style: AppTextStyles.labelLarge.copyWith(
-                          color: isDark
-                              ? AppColors.textTertiary
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                ] else ...[
-                  Text(
-                    'Nossa IA está trabalhando para criar o melhor resultado',
-                    style: AppTextStyles.bodyMedium.copyWith(
+                ),
+                const SizedBox(height: 12),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: _goBackToHome,
+                  child: Text(
+                    _hasError ? 'Voltar' : 'Voltar e continuar no app',
+                    style: AppTextStyles.labelLarge.copyWith(
                       color: isDark
                           ? AppColors.textTertiary
                           : AppColors.textSecondary,
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                ],
-              ],
-            ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

@@ -7,6 +7,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../data/models/gallery_edit_model.dart';
+import '../../../editor/presentation/providers/active_edits_provider.dart';
 import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 import '../providers/gallery_provider.dart';
 
@@ -119,12 +120,23 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     });
   }
 
-  void _toggleItemSelection(String id) {
+  void _toggleItemSelection(GalleryEditModel item) {
+    if (!item.canDelete) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Aguarde a conclusão desta edição antes de tentar excluí-la.',
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() {
-      if (_selectedIds.contains(id)) {
-        _selectedIds.remove(id);
+      if (_selectedIds.contains(item.id)) {
+        _selectedIds.remove(item.id);
       } else {
-        _selectedIds.add(id);
+        _selectedIds.add(item.id);
       }
     });
   }
@@ -199,9 +211,13 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final planLimitsAsync = ref.watch(planLimitsProvider);
+    ref.listen(activeEditsProvider, (_, __) {
+      if (!mounted) return;
+      _loadFirst();
+    });
 
     final subtitleText = planLimitsAsync.when(
-      data: (limits) => '${limits.storedPhotosCount} foto${limits.storedPhotosCount != 1 ? 's' : ''} · Arraste para atualizar',
+      data: (limits) => '${limits.storedPhotosCount} ediç${limits.storedPhotosCount == 1 ? 'ão' : 'ões'} · Arraste para atualizar',
       loading: () => 'Arraste para atualizar',
       error: (_, __) => 'Arraste para atualizar',
     );
@@ -435,17 +451,12 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           }
 
           final item = _items[index];
-          final url = item.imageUrl;
-          if (url == null || url.isEmpty) {
-            return const SizedBox.shrink();
-          }
-
           final isSelected = _selectedIds.contains(item.id);
 
           return InkWell(
             onTap: () {
               if (_isSelectionMode) {
-                _toggleItemSelection(item.id);
+                _toggleItemSelection(item);
               } else {
                 Navigator.of(context)
                     .pushNamed('/edit-detail', arguments: item.id)
@@ -457,19 +468,13 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                CachedNetworkImage(
-                  imageUrl: url,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                    color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                  ),
-                  errorWidget: (_, __, ___) => Container(
-                    color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                    child: Icon(Icons.broken_image_outlined, color: AppColors.textTertiary),
-                  ),
+                _buildGalleryTile(item, isDark),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: _buildStatusChip(item, isDark),
                 ),
-                if (_isSelectionMode)
+                if (_isSelectionMode && item.canDelete)
                   Positioned(
                     top: 8,
                     left: 8,
@@ -495,6 +500,93 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildGalleryTile(GalleryEditModel item, bool isDark) {
+    final url = item.imageUrl;
+    if (url != null && url.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: url,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => Container(
+          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+        errorWidget: (_, __, ___) => _buildPendingPlaceholder(item, isDark),
+      );
+    }
+
+    return _buildPendingPlaceholder(item, isDark);
+  }
+
+  Widget _buildPendingPlaceholder(GalleryEditModel item, bool isDark) {
+    final icon = item.status == 'failed'
+        ? Icons.error_outline
+        : item.status == 'processing'
+            ? Icons.auto_awesome
+            : Icons.schedule;
+
+    return Container(
+      color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: 28,
+            color: item.status == 'failed'
+                ? AppColors.error
+                : AppColors.primary,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            item.operationTypeLabel,
+            style: AppTextStyles.bodySmall.copyWith(
+              color: isDark ? AppColors.textLight : AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(GalleryEditModel item, bool isDark) {
+    final backgroundColor = switch (item.status) {
+      'completed' => AppColors.primary.withOpacity(0.9),
+      'failed' => AppColors.error.withOpacity(0.92),
+      'processing' => AppColors.primary.withOpacity(0.92),
+      _ => (isDark ? Colors.black87 : Colors.white),
+    };
+
+    final textColor = switch (item.status) {
+      'queued' => isDark ? AppColors.textLight : AppColors.textPrimary,
+      _ => Colors.white,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: item.status == 'queued'
+              ? (isDark ? AppColors.borderDark : AppColors.border)
+              : Colors.transparent,
+        ),
+      ),
+      child: Text(
+        item.statusLabel,
+        style: AppTextStyles.bodySmall.copyWith(
+          color: textColor,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

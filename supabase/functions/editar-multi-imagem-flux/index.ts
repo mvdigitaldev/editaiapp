@@ -12,6 +12,7 @@ const MAX_JOBS_PER_USER = 5;
 const JOB_LIMIT_WINDOW_HOURS = 1;
 
 interface RequestBody {
+  client_request_id: string;
   user_prompt: string;
   storage_paths: string[];
   width: number;
@@ -36,7 +37,19 @@ Deno.serve(async (req) => {
 
   try {
     const body = (await req.json()) as Partial<RequestBody>;
-    const { user_prompt, storage_paths, width, height } = body;
+    const { client_request_id, user_prompt, storage_paths, width, height } =
+      body;
+
+    if (
+      !client_request_id ||
+      typeof client_request_id !== "string" ||
+      client_request_id.trim().length === 0
+    ) {
+      return jsonResponse(
+        { success: false, error: "Campo 'client_request_id' é obrigatório" },
+        422,
+      );
+    }
 
     if (!user_prompt || typeof user_prompt !== "string" || user_prompt.trim().length === 0) {
       return jsonResponse(
@@ -121,6 +134,7 @@ Deno.serve(async (req) => {
     const creditsMulti = 7 + (storage_paths.length - 1) * 3;
     let editId: string;
     let reservationId: string;
+    let acceptedAt = new Date().toISOString();
 
     try {
       const result = await createEditAndReserveCredits(
@@ -130,10 +144,22 @@ Deno.serve(async (req) => {
         creditsMulti,
         user_prompt.trim(),
         null,
-        { promptTextOriginal: user_prompt.trim() }
+        {
+          promptTextOriginal: user_prompt.trim(),
+          clientRequestId: client_request_id.trim(),
+        }
       );
       editId = result.editId;
       reservationId = result.reservationId;
+      acceptedAt = result.acceptedAt;
+      if (result.reused) {
+        return jsonResponse({
+          edit_id: result.editId,
+          task_id: result.taskId,
+          status: result.status,
+          accepted_at: result.acceptedAt,
+        });
+      }
     } catch (creditErr) {
       const err = creditErr as Error & { status?: number };
       if (err.status === 402) {
@@ -164,7 +190,11 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: false, error: "Falha ao enfileirar job" }, 500);
     }
 
-    return jsonResponse({ edit_id: editId });
+    return jsonResponse({
+      edit_id: editId,
+      status: "queued",
+      accepted_at: acceptedAt,
+    });
   } catch (error) {
     console.error("[editar-multi-imagem-flux] Erro:", error);
     return jsonResponse(
