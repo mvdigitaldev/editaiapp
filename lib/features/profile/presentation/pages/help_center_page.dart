@@ -18,6 +18,18 @@ final _faqDataSourceProvider = Provider<FaqDataSource>((ref) {
   return FaqDataSourceImpl(Supabase.instance.client);
 });
 
+/// WhatsApp só para plano topo (Pro / Premium no banco). Demais planos: chamados + e-mail.
+bool _subscriptionTierAllowsWhatsApp(String? tier) {
+  if (tier == null || tier.isEmpty) return false;
+  switch (tier.toLowerCase().trim()) {
+    case 'pro':
+    case 'premium':
+      return true;
+    default:
+      return false;
+  }
+}
+
 class HelpCenterPage extends ConsumerStatefulWidget {
   const HelpCenterPage({super.key});
 
@@ -195,7 +207,7 @@ class _HelpCenterPageState extends ConsumerState<HelpCenterPage> {
           const SizedBox(height: 32),
           if (currentUser != null) _buildTicketsSection(isDark),
           if (currentUser != null) const SizedBox(height: 24),
-          _buildContactSection(isDark),
+          _buildContactSection(isDark, currentUser?.subscriptionTier),
           const SizedBox(height: 32),
         ],
       ),
@@ -269,11 +281,13 @@ class _HelpCenterPageState extends ConsumerState<HelpCenterPage> {
     );
   }
 
-  Widget _buildContactSection(bool isDark) {
+  Widget _buildContactSection(bool isDark, String? subscriptionTier) {
     final hasWhatsApp = _whatsapp != null && _whatsapp!.isNotEmpty;
     final hasEmail = _email != null && _email!.isNotEmpty;
+    final showWhatsApp =
+        hasWhatsApp && _subscriptionTierAllowsWhatsApp(subscriptionTier);
 
-    if (!hasWhatsApp && !hasEmail) return const SizedBox.shrink();
+    if (!showWhatsApp && !hasEmail) return const SizedBox.shrink();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -311,7 +325,7 @@ class _HelpCenterPageState extends ConsumerState<HelpCenterPage> {
             ),
           ),
           const SizedBox(height: 20),
-          if (hasWhatsApp)
+          if (showWhatsApp)
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -331,7 +345,7 @@ class _HelpCenterPageState extends ConsumerState<HelpCenterPage> {
                 ),
               ),
             ),
-          if (hasWhatsApp && hasEmail) const SizedBox(height: 12),
+          if (showWhatsApp && hasEmail) const SizedBox(height: 12),
           if (hasEmail)
             SizedBox(
               width: double.infinity,
