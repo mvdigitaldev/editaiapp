@@ -305,6 +305,13 @@ class NotificationService {
     String route,
     Map<String, dynamic> data,
   ) {
+    final ticketId =
+        (data['ticket_id'] as String?) ?? (data['ticketId'] as String?);
+    if (route == '/support-ticket') {
+      if (ticketId == null || ticketId.isEmpty) return null;
+      return <String, dynamic>{'ticketId': ticketId};
+    }
+
     final editId = (data['edit_id'] as String?) ?? (data['editId'] as String?);
     if (editId == null || editId.isEmpty) return null;
 

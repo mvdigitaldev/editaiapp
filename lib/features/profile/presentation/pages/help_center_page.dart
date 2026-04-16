@@ -8,6 +8,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../data/datasources/app_settings_datasource.dart';
 import '../../data/datasources/faq_datasource.dart';
 import '../../data/models/faq_item_model.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 final _appSettingsProvider = Provider<AppSettingsDataSource>((ref) {
   return AppSettingsDataSourceImpl(Supabase.instance.client);
@@ -100,8 +101,7 @@ class _HelpCenterPageState extends ConsumerState<HelpCenterPage> {
         child: Column(
           children: [
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
                   IconButton(
@@ -112,9 +112,8 @@ class _HelpCenterPageState extends ConsumerState<HelpCenterPage> {
                   Text(
                     'Central de Ajuda',
                     style: AppTextStyles.headingMedium.copyWith(
-                      color: isDark
-                          ? AppColors.textLight
-                          : AppColors.textPrimary,
+                      color:
+                          isDark ? AppColors.textLight : AppColors.textPrimary,
                     ),
                   ),
                   const Spacer(),
@@ -130,6 +129,8 @@ class _HelpCenterPageState extends ConsumerState<HelpCenterPage> {
   }
 
   Widget _buildBody(bool isDark) {
+    final currentUser = ref.watch(authStateProvider).user;
+
     if (_isLoading) {
       return Center(
         child: CircularProgressIndicator(
@@ -151,9 +152,8 @@ class _HelpCenterPageState extends ConsumerState<HelpCenterPage> {
                 'Não foi possível carregar a central de ajuda.',
                 textAlign: TextAlign.center,
                 style: AppTextStyles.bodySmall.copyWith(
-                  color: isDark
-                      ? AppColors.textTertiary
-                      : AppColors.textSecondary,
+                  color:
+                      isDark ? AppColors.textTertiary : AppColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 16),
@@ -184,9 +184,7 @@ class _HelpCenterPageState extends ConsumerState<HelpCenterPage> {
           Text(
             'Encontre respostas para as dúvidas mais comuns',
             style: AppTextStyles.bodySmall.copyWith(
-              color: isDark
-                  ? AppColors.textTertiary
-                  : AppColors.textSecondary,
+              color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 16),
@@ -195,8 +193,63 @@ class _HelpCenterPageState extends ConsumerState<HelpCenterPage> {
           else
             ..._faqs.map((faq) => _FaqCard(faq: faq, isDark: isDark)),
           const SizedBox(height: 32),
+          if (currentUser != null) _buildTicketsSection(isDark),
+          if (currentUser != null) const SizedBox(height: 24),
           _buildContactSection(isDark),
           const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTicketsSection(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.border,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Chamados no app',
+            style: AppTextStyles.headingSmall.copyWith(
+              color: isDark ? AppColors.textLight : AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Abra um chamado e acompanhe a conversa com o suporte sem sair do EditAI.',
+            style: AppTextStyles.bodySmall.copyWith(
+              color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pushNamed('/support-tickets/new');
+              },
+              icon: const Icon(Icons.add_comment_outlined),
+              label: const Text('Abrir chamado'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pushNamed('/support-tickets');
+              },
+              icon: const Icon(Icons.forum_outlined),
+              label: const Text('Ver meus chamados'),
+            ),
+          ),
         ],
       ),
     );
@@ -254,9 +307,7 @@ class _HelpCenterPageState extends ConsumerState<HelpCenterPage> {
             'Entre em contato com nossa equipe de suporte',
             textAlign: TextAlign.center,
             style: AppTextStyles.bodySmall.copyWith(
-              color: isDark
-                  ? AppColors.textTertiary
-                  : AppColors.textSecondary,
+              color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 20),
@@ -330,9 +381,7 @@ class _FaqCardState extends State<_FaqCard>
       padding: const EdgeInsets.only(bottom: 8),
       child: Container(
         decoration: BoxDecoration(
-          color: widget.isDark
-              ? AppColors.surfaceDark
-              : AppColors.surfaceLight,
+          color: widget.isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _isExpanded
@@ -354,22 +403,18 @@ class _FaqCardState extends State<_FaqCard>
           child: ExpansionTile(
             tilePadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            childrenPadding:
-                const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             expandedCrossAxisAlignment: CrossAxisAlignment.start,
             leading: Icon(
-              _isExpanded
-                  ? Icons.help
-                  : Icons.help_outline,
+              _isExpanded ? Icons.help : Icons.help_outline,
               color: AppColors.primary,
               size: 22,
             ),
             title: Text(
               widget.faq.question,
               style: AppTextStyles.bodyMedium.copyWith(
-                color: widget.isDark
-                    ? AppColors.textLight
-                    : AppColors.textPrimary,
+                color:
+                    widget.isDark ? AppColors.textLight : AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
               ),
             ),

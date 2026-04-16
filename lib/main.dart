@@ -53,6 +53,10 @@ import 'features/models/presentation/pages/edit_model_guided_page.dart';
 import 'features/models/presentation/pages/models_by_category_page.dart';
 import 'features/models/presentation/pages/admin_categoria_form_page.dart';
 import 'features/models/presentation/pages/admin_modelo_form_page.dart';
+import 'features/support/presentation/pages/admin_support_ticket_list_page.dart';
+import 'features/support/presentation/pages/support_ticket_detail_page.dart';
+import 'features/support/presentation/pages/support_ticket_list_page.dart';
+import 'features/support/presentation/pages/support_ticket_new_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -128,7 +132,8 @@ void main() async {
   if (!kIsWeb) {
     try {
       await MobileAds.instance.initialize();
-      adServiceInstance = AdService(AppSettingsDataSourceImpl(Supabase.instance.client));
+      adServiceInstance =
+          AdService(AppSettingsDataSourceImpl(Supabase.instance.client));
       unawaited(adServiceInstance.preloadInterstitial());
     } catch (e) {
       debugPrint('[Editai] AdMob init: $e');
@@ -193,8 +198,7 @@ class MyApp extends ConsumerWidget {
         '/reset-password': (context) => const ResetPasswordPage(),
         '/home': (context) {
           final args = ModalRoute.of(context)!.settings.arguments;
-          final index =
-              args is int ? args : AppBottomNav.indexEditor;
+          final index = args is int ? args : AppBottomNav.indexEditor;
           return MainShellPage(initialIndex: index);
         },
         '/editor': (context) => const EditorPage(),
@@ -243,6 +247,26 @@ class MyApp extends ConsumerWidget {
           return LegalDocumentPage(slug: slug);
         },
         '/help-center': (context) => const HelpCenterPage(),
+        '/support-tickets': (context) => const SupportTicketListPage(),
+        '/support-tickets/new': (context) => const SupportTicketNewPage(),
+        '/admin/support-tickets': (context) =>
+            const AdminSupportTicketListPage(),
+        '/support-ticket': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments;
+          String ticketId = '';
+          if (args is String) {
+            ticketId = args;
+          } else if (args is Map<String, dynamic>) {
+            ticketId = args['ticketId'] as String? ??
+                args['ticket_id'] as String? ??
+                '';
+          } else if (args is Map) {
+            ticketId = args['ticketId'] as String? ??
+                args['ticket_id'] as String? ??
+                '';
+          }
+          return SupportTicketDetailPage(ticketId: ticketId);
+        },
         '/credit-history': (context) => const CreditHistoryPage(),
         '/edit-detail': (context) {
           final editId = ModalRoute.of(context)!.settings.arguments as String?;
@@ -272,7 +296,8 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
     super.initState();
     // Web: trocar code por sessão quando usuário volta do link de recuperação de senha
     if (kIsWeb) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _handleAuthCallback());
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _handleAuthCallback());
     } else {
       // Mobile: tratar deep link manualmente (editai:// ou Universal Links)
       _initDeepLinks();

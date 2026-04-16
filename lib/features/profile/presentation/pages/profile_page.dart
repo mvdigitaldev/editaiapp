@@ -270,8 +270,8 @@ class ProfilePage extends ConsumerWidget {
                                       ),
                                       child: Text(
                                         'Recarregar Créditos',
-                                        style: AppTextStyles.labelMedium
-                                            .copyWith(
+                                        style:
+                                            AppTextStyles.labelMedium.copyWith(
                                           color: AppColors.primary,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -474,6 +474,22 @@ class ProfilePage extends ConsumerWidget {
                               Navigator.of(context).pushNamed('/help-center');
                             },
                           ),
+                          if (user?.isAdmin ?? false) ...[
+                            Divider(
+                              height: 1,
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : AppColors.border,
+                            ),
+                            _ProfileOption(
+                              icon: Icons.support_agent,
+                              label: 'Chamados',
+                              onTap: () {
+                                Navigator.of(context)
+                                    .pushNamed('/admin/support-tickets');
+                              },
+                            ),
+                          ],
                           Divider(
                             height: 1,
                             color: isDark
