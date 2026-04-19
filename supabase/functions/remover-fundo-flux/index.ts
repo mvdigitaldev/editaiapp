@@ -5,6 +5,7 @@ import {
   createEditAndReserveCredits,
   releaseReservedCredits,
 } from "../_shared/credits.ts";
+import { registerFluxTask } from "../_shared/flux_tasks.ts";
 
 const FAL_API_URL = "https://fal.run/fal-ai/birefnet";
 const BUCKET_NAME = "flux-imagens";
@@ -174,15 +175,15 @@ Deno.serve(async (req) => {
 
     const imageUrl = `data:${mime};base64,${imageBase64}`;
 
-    const { error: insertError } = await supabase.from("flux_tasks").insert({
-      task_id: taskId,
-      user_id: userId,
-      edit_id: editId,
-      status: "pending",
-    });
-
-    if (insertError) {
-      console.error("[remover-fundo-flux] Erro ao inserir flux_tasks:", insertError);
+    try {
+      await registerFluxTask(supabase, {
+        taskId,
+        userId,
+        editId,
+        provider: "fal",
+      });
+    } catch (registerError) {
+      console.error("[remover-fundo-flux] Erro ao registrar tarefa:", registerError);
       await releaseReservedCredits(supabase, reservationId, "flux_task_insert_error");
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       return jsonResponse(

@@ -4,6 +4,7 @@ import {
   createEditAndReserveCredits,
   releaseReservedCredits,
 } from "../_shared/credits.ts";
+import { registerFluxTask } from "../_shared/flux_tasks.ts";
 
 const BFL_API_URL = "https://api.bfl.ai/v1/flux-2-pro";
 const OPENAI_API_URL = "https://api.openai.com/v1";
@@ -24,6 +25,7 @@ interface RequestBody {
 
 interface AsyncWebhookResponse {
   id: string;
+  polling_url?: string;
   status?: string;
   webhook_url?: string;
 }
@@ -361,6 +363,10 @@ Deno.serve(async (req) => {
 
     const initData = (await initRes.json()) as AsyncWebhookResponse;
     const taskId = initData.id;
+    const pollingUrl =
+      typeof initData.polling_url === "string" && initData.polling_url.trim().length > 0
+        ? initData.polling_url.trim()
+        : null;
 
     if (!taskId) {
       console.error("[gerar-imagem-flux] Resposta BFL sem id:", initData);
@@ -369,17 +375,16 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: false, error: "Resposta invÃ¡lida da API" }, 502);
     }
 
-    await supabase.from("edits").update({ task_id: taskId }).eq("id", editId);
-
-    const { error: insertError } = await supabase.from("flux_tasks").insert({
-      task_id: taskId,
-      user_id: userId,
-      edit_id: editId,
-      status: "pending",
-    });
-
-    if (insertError) {
-      console.error("[gerar-imagem-flux] Erro ao inserir flux_tasks:", insertError);
+    try {
+      await registerFluxTask(supabase, {
+        taskId,
+        userId,
+        editId,
+        provider: "bfl",
+        pollingUrl,
+      });
+    } catch (registerError) {
+      console.error("[gerar-imagem-flux] Erro ao registrar tarefa:", registerError);
       await releaseReservedCredits(supabase, reservationId, "flux_task_insert_error");
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       return jsonResponse(

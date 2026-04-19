@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { releaseReservedCredits } from "./credits.ts";
+import { registerFluxTask } from "./flux_tasks.ts";
 
 const BFL_API_URL = "https://api.bfl.ai/v1/flux-2-pro";
 const OPENAI_API_URL = "https://api.openai.com/v1";
@@ -280,23 +281,27 @@ export async function processFluxEditJob(
     return { error: errText || "Erro BFL" };
   }
 
-  const initData = (await initRes.json()) as { id?: string };
+  const initData = (await initRes.json()) as { id?: string; polling_url?: string };
   const taskId = initData.id;
+  const pollingUrl =
+    typeof initData.polling_url === "string" && initData.polling_url.trim().length > 0
+      ? initData.polling_url.trim()
+      : null;
   if (!taskId) {
     await releaseReservedCredits(supabase, reservation_id, "missing_task_id");
     await supabase.from("edits").update({ status: "failed" }).eq("id", edit_id);
     return { error: "Resposta inválida da API" };
   }
 
-  await supabase.from("edits").update({ task_id: taskId }).eq("id", edit_id);
-  const { error: insertError } = await supabase.from("flux_tasks").insert({
-    task_id: taskId,
-    user_id: user_id,
-    edit_id: edit_id,
-    status: "pending",
-  });
-
-  if (insertError) {
+  try {
+    await registerFluxTask(supabase, {
+      taskId,
+      userId: user_id,
+      editId: edit_id,
+      provider: "bfl",
+      pollingUrl,
+    });
+  } catch (_) {
     await releaseReservedCredits(supabase, reservation_id, "flux_task_insert_error");
     await supabase.from("edits").update({ status: "failed" }).eq("id", edit_id);
     return { error: "Falha ao registrar tarefa" };

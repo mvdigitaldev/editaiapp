@@ -4,6 +4,7 @@ import {
   createEditAndReserveCredits,
   releaseReservedCreditsForEdit,
 } from "../_shared/credits.ts";
+import { registerFluxTask } from "../_shared/flux_tasks.ts";
 
 /**
  * Extrai o user id direto do payload do JWT (base64).
@@ -67,6 +68,7 @@ interface RequestBody {
 
 interface AsyncWebhookResponse {
   id: string;
+  polling_url?: string;
   status?: string;
   webhook_url?: string;
 }
@@ -389,23 +391,26 @@ Deno.serve(async (req) => {
 
     const initData = (await initRes.json()) as AsyncWebhookResponse;
     const taskId = initData.id;
+    const pollingUrl =
+      typeof initData.polling_url === "string" && initData.polling_url.trim().length > 0
+        ? initData.polling_url.trim()
+        : null;
 
     if (!taskId) {
       console.error("[editar-imagem-modelo] Resposta BFL sem id:", initData);
       return await abortAfterReserve("missing_task_id", "Resposta inválida da API", 502);
     }
 
-    await supabase.from("edits").update({ task_id: taskId }).eq("id", editId);
-
-    const { error: insertError } = await supabase.from("flux_tasks").insert({
-      task_id: taskId,
-      user_id: userId,
-      edit_id: editId,
-      status: "pending",
-    });
-
-    if (insertError) {
-      console.error("[editar-imagem-modelo] Erro ao inserir flux_tasks:", insertError);
+    try {
+      await registerFluxTask(supabase, {
+        taskId,
+        userId,
+        editId,
+        provider: "bfl",
+        pollingUrl,
+      });
+    } catch (registerError) {
+      console.error("[editar-imagem-modelo] Erro ao registrar tarefa:", registerError);
       return await abortAfterReserve("flux_task_insert_error", "Falha ao registrar tarefa", 500);
     }
     console.log("[editar-imagem-modelo] Tarefa criada:", { taskId, editId, webhookUrl });
