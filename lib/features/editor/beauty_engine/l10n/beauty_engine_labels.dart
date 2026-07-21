@@ -54,6 +54,9 @@ abstract final class BeautyEngineLabels {
   };
 
   static const sectionLut = 'Filtro de cor';
+  static const sectionLight = 'Luz';
+  static const sectionColor = 'Cor';
+  static const sectionEffect = 'Efeito';
   static const sectionTune = 'Cor / Ajustes';
   static const sectionFace = 'Rosto';
   static const sectionSkin = 'Pele';
@@ -68,7 +71,13 @@ abstract final class BeautyEngineLabels {
   static const linkEyesTitle = 'Olhos vinculados (simetria L/R)';
 
   static const filterCreatorTitle = 'Criar filtro custom';
+  static const filterCreatorPersonalUseBanner =
+      'Seu filtro fica disponível em Editar manualmente → Filtros (uso pessoal).';
+  static const filterCreatorPublishAdminNote =
+      'Apenas administradores podem publicar filtros no marketplace.';
   static const filterMarketplaceTitle = 'Marketplace de filtros';
+  static const manualEditorMarketplaceHint =
+      'Baixe mais filtros no Marketplace';
   static const filterInstalledHint =
       'Filtro instalado. Disponível em Editar manualmente → Filtros.';
   static const filterInstallAction = 'Instalar no editor manual';

@@ -5,11 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/credit_indicator.dart';
+import '../../../../core/widgets/hero_action_card.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../gallery/data/models/gallery_edit_model.dart';
 import '../../../gallery/presentation/providers/gallery_provider.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
-import '../../../editor/beauty_engine/di/beauty_engine_feature_flag_provider.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -26,7 +26,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
     final recentEditsAsync = ref.watch(recentEditsProvider);
-    final beautyEnabledAsync = ref.watch(beautyEngineEnabledProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -147,40 +146,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
                       children: [
-                        _HeroActionCard(
+                        HeroActionCard(
                           index: 4,
                           icon: Icons.brush_outlined,
                           title: 'Editar manualmente',
                           description:
-                              'Filtros, ajustes e recorte — sem IA, grátis.',
+                              'Filtros, retoque beauty, presets e recorte — sem IA.',
                           onTap: () => Navigator.of(context)
-                              .pushNamed('/manual-editor'),
-                        ),
-                        beautyEnabledAsync.when(
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
-                          data: (enabled) {
-                            if (!enabled) {
-                              return const SizedBox.shrink();
-                            }
-                            return Column(
-                              children: [
-                                const SizedBox(height: 12),
-                                _HeroActionCard(
-                                  index: 5,
-                                  icon: Icons.auto_fix_high,
-                                  title: 'Retoque beauty',
-                                  description:
-                                      'Presets profissionais — rosto, corpo e pele.',
-                                  onTap: () => Navigator.of(context)
-                                      .pushNamed('/beauty-editor'),
-                                ),
-                              ],
-                            );
-                          },
+                              .pushNamed('/manual-editing-hub'),
                         ),
                         const SizedBox(height: 12),
-                        _HeroActionCard(
+                        HeroActionCard(
                           index: 1,
                           icon: Icons.edit,
                           title: 'Editar imagem',
@@ -190,7 +166,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                               Navigator.of(context).pushNamed('/edit-image'),
                         ),
                         const SizedBox(height: 12),
-                        _HeroActionCard(
+                        HeroActionCard(
                           index: 0,
                           icon: Icons.text_fields,
                           title: 'Texto para imagem',
@@ -200,7 +176,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                               Navigator.of(context).pushNamed('/text-to-image'),
                         ),
                         const SizedBox(height: 12),
-                        _HeroActionCard(
+                        HeroActionCard(
                           index: 2,
                           icon: Icons.collections,
                           title: 'Unir fotos',
@@ -210,7 +186,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                               .pushNamed('/create-composition'),
                         ),
                         const SizedBox(height: 12),
-                        _HeroActionCard(
+                        HeroActionCard(
                           index: 3,
                           icon: Icons.wallpaper,
                           title: 'Remover fundo',
@@ -438,129 +414,6 @@ class _OptionCard extends StatelessWidget {
                     isDark ? AppColors.textTertiary : AppColors.textSecondary,
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HeroActionCard extends StatelessWidget {
-  final int index;
-  final IconData icon;
-  final String title;
-  final String description;
-  final VoidCallback onTap;
-
-  const _HeroActionCard({
-    required this.index,
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 350 + index * 70),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - value) * 16),
-            child: child,
-          ),
-        );
-      },
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.border,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.25 : 0.06),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.primary.withOpacity(0.22),
-                        AppColors.primary.withOpacity(0.06),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 26,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        title,
-                        style: AppTextStyles.headingSmall.copyWith(
-                          color: isDark
-                              ? AppColors.textLight
-                              : AppColors.textPrimary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        description,
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: isDark
-                              ? AppColors.textTertiary
-                              : AppColors.textSecondary,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 16,
-                  color:
-                      isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                ),
-              ],
-            ),
           ),
         ),
       ),

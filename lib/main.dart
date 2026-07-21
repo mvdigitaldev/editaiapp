@@ -22,6 +22,7 @@ import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/pages/register_page.dart';
 import 'features/auth/presentation/pages/reset_password_page.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
+import 'features/home/presentation/pages/manual_editing_hub_page.dart';
 import 'features/editor/manual_editor/presentation/pages/manual_editor_entry_page.dart';
 import 'features/editor/beauty_engine/presentation/beauty_editor_page.dart';
 import 'features/editor/beauty_engine/presentation/face_filters_demo_page.dart';
@@ -210,6 +211,7 @@ class MyApp extends ConsumerWidget {
           final index = args is int ? args : AppBottomNav.indexEditor;
           return MainShellPage(initialIndex: index);
         },
+        '/manual-editing-hub': (context) => const ManualEditingHubPage(),
         '/manual-editor': (context) => const ManualEditorEntryPage(),
         '/beauty-editor': (context) =>
             const BeautyEngineGate(child: BeautyEditorPage()),

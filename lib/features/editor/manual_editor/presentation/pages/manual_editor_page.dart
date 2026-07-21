@@ -11,6 +11,9 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../../presentation/utils/edit_submission_helpers.dart';
 import '../../config/manual_editor_config.dart';
 import '../../di/manual_editor_providers.dart';
+import '../../../filter_presets/filter_grade_provider.dart';
+import '../../../filter_presets/filter_preset.dart';
+import '../../../filter_presets/filter_preset_mapper.dart';
 import '../../../filter_presets/filter_presets_provider.dart';
 
 /// Editor manual com pro_image_editor — export → nuvem → /comparison.
@@ -30,15 +33,28 @@ class ManualEditorPage extends ConsumerStatefulWidget {
 
 class _ManualEditorPageState extends ConsumerState<ManualEditorPage> {
   bool _isSaving = false;
+  FilterPreset? _selectedEditAiPreset;
+  List<FilterPreset> _editAiPresets = const [];
 
   Future<void> _handleEditingComplete(Uint8List editedBytes) async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
 
     try {
+      var outputBytes = editedBytes;
+      final selected = _selectedEditAiPreset;
+      if (selected != null && selected.needsFullGradeExport) {
+        final engine = ref.read(filterGradeEngineProvider);
+        outputBytes = await engine.applyPresetForManualEditorExport(
+          imageBytes: editedBytes,
+          preset: selected,
+          quality: 92,
+        );
+      }
+
       final repository = ref.read(manualEditRepositoryProvider);
       final result = await repository.saveEditedImage(
-        editedJpeg: editedBytes,
+        editedJpeg: outputBytes,
         originalBytes: widget.originalBytes,
         clientRequestId: const Uuid().v4(),
       );
@@ -87,6 +103,25 @@ class _ManualEditorPageState extends ConsumerState<ManualEditorPage> {
     }
   }
 
+  ProImageEditorCallbacks _buildCallbacks() {
+    return ProImageEditorCallbacks(
+      onImageEditingComplete: _handleEditingComplete,
+      onCloseEditor: (_) {
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      filterEditorCallbacks: FilterEditorCallbacks(
+        onFilterChanged: (filter) {
+          _selectedEditAiPreset = findFilterPresetByFilterModel(
+            _editAiPresets,
+            filter,
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isSaving) {
@@ -108,39 +143,55 @@ class _ManualEditorPageState extends ConsumerState<ManualEditorPage> {
       );
     }
 
+    final presetsAsync = ref.watch(filterPresetsProvider);
     final customFiltersAsync = ref.watch(manualEditorCustomFiltersProvider);
 
-    return customFiltersAsync.when(
+    return presetsAsync.when(
       loading: () => Scaffold(
         backgroundColor: AppColors.backgroundDark,
         body: Center(
           child: CircularProgressIndicator(color: AppColors.primary),
         ),
       ),
-      error: (_, __) => ProImageEditor.file(
-        File(widget.imagePath),
-        configs: buildManualEditorConfigs(),
-        callbacks: ProImageEditorCallbacks(
-          onImageEditingComplete: _handleEditingComplete,
-          onCloseEditor: (_) {
-            if (mounted) {
-              Navigator.of(context).pop();
-            }
-          },
+      error: (_, __) => customFiltersAsync.when(
+        loading: () => Scaffold(
+          backgroundColor: AppColors.backgroundDark,
+          body: Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          ),
+        ),
+        error: (_, __) => ProImageEditor.file(
+          File(widget.imagePath),
+          configs: buildManualEditorConfigs(),
+          callbacks: _buildCallbacks(),
+        ),
+        data: (customFilters) => ProImageEditor.file(
+          File(widget.imagePath),
+          configs: buildManualEditorConfigs(extraFilters: customFilters),
+          callbacks: _buildCallbacks(),
         ),
       ),
-      data: (customFilters) => ProImageEditor.file(
-        File(widget.imagePath),
-        configs: buildManualEditorConfigs(extraFilters: customFilters),
-        callbacks: ProImageEditorCallbacks(
-          onImageEditingComplete: _handleEditingComplete,
-          onCloseEditor: (_) {
-            if (mounted) {
-              Navigator.of(context).pop();
-            }
-          },
-        ),
-      ),
+      data: (presets) {
+        _editAiPresets = presets;
+        return customFiltersAsync.when(
+          loading: () => Scaffold(
+            backgroundColor: AppColors.backgroundDark,
+            body: Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            ),
+          ),
+          error: (_, __) => ProImageEditor.file(
+            File(widget.imagePath),
+            configs: buildManualEditorConfigs(),
+            callbacks: _buildCallbacks(),
+          ),
+          data: (customFilters) => ProImageEditor.file(
+            File(widget.imagePath),
+            configs: buildManualEditorConfigs(extraFilters: customFilters),
+            callbacks: _buildCallbacks(),
+          ),
+        );
+      },
     );
   }
 }

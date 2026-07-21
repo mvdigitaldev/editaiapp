@@ -9,6 +9,8 @@ import '../../../../../core/theme/app_text_styles.dart';
 import '../../../../../core/widgets/app_button.dart';
 import '../../../../../core/widgets/upload_area.dart';
 import '../../../../subscription/presentation/providers/plan_limits_provider.dart';
+import '../../../beauty_engine/di/beauty_engine_feature_flag_provider.dart';
+import '../../../beauty_engine/l10n/beauty_engine_labels.dart';
 import 'manual_editor_page.dart';
 
 /// Entrada do editor manual — seleção de foto.
@@ -57,6 +59,7 @@ class _ManualEditorEntryPageState extends ConsumerState<ManualEditorEntryPage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final planLimitsAsync = ref.watch(planLimitsProvider);
+    final beautyEnabledAsync = ref.watch(beautyEngineEnabledProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -84,6 +87,22 @@ class _ManualEditorEntryPageState extends ConsumerState<ManualEditorEntryPage> {
                 ),
               ),
               const SizedBox(height: 24),
+              beautyEnabledAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (enabled) {
+                  if (!enabled) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: ActionChip(
+                      avatar: const Icon(Icons.storefront_outlined, size: 18),
+                      label: Text(BeautyEngineLabels.manualEditorMarketplaceHint),
+                      onPressed: () => Navigator.of(context)
+                          .pushNamed('/beauty-preset-marketplace'),
+                    ),
+                  );
+                },
+              ),
               planLimitsAsync.when(
                 data: (limits) {
                   if (limits.canAddMore) return const SizedBox.shrink();

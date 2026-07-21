@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -8,17 +9,16 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../filter_presets/filter_grade_engine.dart';
+import '../../filter_presets/filter_preset_mapper.dart';
+import '../../filter_presets/filter_presets_provider.dart';
 import '../di/beauty_engine_feature_flag_provider.dart';
 import '../di/beauty_engine_providers.dart';
-import '../../filter_presets/filter_presets_provider.dart';
 import '../l10n/beauty_engine_labels.dart';
 import '../models/beauty_preset.dart';
-import '../models/image_source.dart';
-import 'widgets/beauty_accessible_slider.dart';
-import '../models/image_source_rgba.dart';
-import '../models/processing_pipeline.dart';
 import '../models/tune_params.dart';
 import '../presets/bundled_presets.dart';
+import 'widgets/beauty_accessible_slider.dart';
 
 /// Criador de filtros custom (LUT + cor) — estilo Lightroom (Sprint 22).
 class PresetCreatorPage extends ConsumerStatefulWidget {
@@ -41,12 +41,14 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
 
   Uint8List? _imageBytes;
   Uint8List? _previewBytes;
-  ImageSource? _source;
   bool _processing = false;
   bool _saving = false;
   bool _loaded = false;
   bool _isPublic = false;
   bool _syncing = false;
+  Timer? _previewDebounce;
+
+  final _gradeEngine = FilterGradeEngine();
 
   static final _lutOptions = BeautyEngineLabels.lutOptionsPt;
 
@@ -92,6 +94,7 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
 
   @override
   void dispose() {
+    _previewDebounce?.cancel();
     _nameController.dispose();
     super.dispose();
   }
@@ -199,32 +202,42 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
     }
 
     final bytes = await file.readAsBytes();
-    final decoded = await decodeImageFromList(bytes);
     setState(() {
       _imageBytes = bytes;
       _previewBytes = bytes;
-      _source = ImageSource(
-        bytes: bytes,
-        width: decoded.width,
-        height: decoded.height,
-      );
     });
     await _runPreview();
   }
 
+  void _schedulePreview() {
+    _previewDebounce?.cancel();
+    _previewDebounce = Timer(const Duration(milliseconds: 280), () {
+      if (mounted) {
+        unawaited(_runPreview());
+      }
+    });
+  }
+
+  void _updateTune(TuneParams Function(TuneParams current) update) {
+    setState(() => _tune = update(_tune));
+    _schedulePreview();
+  }
+
   Future<void> _runPreview() async {
-    if (_source == null || _processing) {
+    if (_imageBytes == null || _processing) {
       return;
     }
 
     setState(() => _processing = true);
     try {
-      final controller = ref.read(beautyEngineControllerProvider);
-      final previewSource = ImageSourceRgba.downscaleForPreview(_source!);
-      final jpeg = await controller.exportJpeg(
-        source: previewSource,
-        pipeline: ProcessingPipeline(preset: _buildDraft()),
+      final tune = tuneParamsToFilterTune(_tune);
+      final jpeg = await _gradeEngine.applyToJpeg(
+        jpegBytes: _imageBytes!,
+        lutAssetPath: _lutAssetPath,
+        lutIntensity: _lutIntensity,
+        tune: tune,
         quality: 85,
+        maxPreviewDimension: 1280,
       );
       if (mounted) {
         setState(() => _previewBytes = jpeg);
@@ -249,7 +262,7 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
 
     setState(() => _saving = true);
     try {
-      if (_source != null && !_processing) {
+      if (_imageBytes != null && !_processing) {
         await _runPreview();
       }
 
@@ -450,7 +463,7 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
               previewBytes: _previewBytes,
               processing: _processing,
               onPickImage: _pickImage,
-              onRefreshPreview: _source == null ? null : _runPreview,
+              onRefreshPreview: _imageBytes == null ? null : _runPreview,
               compact: true,
             ),
           ),
@@ -458,6 +471,22 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Text(
+                    BeautyEngineLabels.filterCreatorPersonalUseBanner,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   controller: _nameController,
                   decoration: const InputDecoration(
@@ -469,38 +498,53 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
                   loading: () => const SizedBox.shrink(),
                   error: (_, __) => const SizedBox.shrink(),
                   data: (canPublish) {
-                    if (!canPublish) {
-                      return const SizedBox.shrink();
+                    if (canPublish) {
+                      final adminOnly = adminOnlyAsync.maybeWhen(
+                        data: (value) => value,
+                        orElse: () => false,
+                      );
+                      return Column(
+                        children: [
+                          const SizedBox(height: 12),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text(
+                              BeautyEngineLabels.marketplacePublishTitle,
+                            ),
+                            subtitle: Text(
+                              adminOnly
+                                  ? BeautyEngineLabels
+                                      .marketplacePublishSubtitleAdminOnly
+                                  : BeautyEngineLabels
+                                      .marketplacePublishSubtitleAll,
+                            ),
+                            value: _isPublic,
+                            onChanged: (value) {
+                              if (_presetId == null) {
+                                setState(() => _isPublic = value);
+                              } else {
+                                _togglePublic(value);
+                              }
+                            },
+                          ),
+                        ],
+                      );
                     }
                     final adminOnly = adminOnlyAsync.maybeWhen(
                       data: (value) => value,
                       orElse: () => false,
                     );
-                    return Column(
-                      children: [
-                        const SizedBox(height: 12),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text(
-                            BeautyEngineLabels.marketplacePublishTitle,
-                          ),
-                          subtitle: Text(
-                            adminOnly
-                                ? BeautyEngineLabels
-                                    .marketplacePublishSubtitleAdminOnly
-                                : BeautyEngineLabels
-                                    .marketplacePublishSubtitleAll,
-                          ),
-                          value: _isPublic,
-                          onChanged: (value) {
-                            if (_presetId == null) {
-                              setState(() => _isPublic = value);
-                            } else {
-                              _togglePublic(value);
-                            }
-                          },
-                        ),
-                      ],
+                    if (!adminOnly) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        BeautyEngineLabels.filterCreatorPublishAdminNote,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                      ),
                     );
                   },
                 ),
@@ -524,7 +568,7 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
                           .toList(),
                       onChanged: (value) {
                         setState(() => _lutAssetPath = value);
-                        _runPreview();
+                        _schedulePreview();
                       },
                     ),
                     _SliderRow(
@@ -532,91 +576,142 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
                       value: _lutIntensity,
                       onChanged: (value) {
                         setState(() => _lutIntensity = value);
-                        _runPreview();
+                        _schedulePreview();
                       },
                     ),
                   ],
                 ),
                 _Section(
-                  title: BeautyEngineLabels.sectionTune,
+                  title: BeautyEngineLabels.sectionLight,
                   children: [
-                    _SliderRow(
-                      label: 'Brilho',
-                      value: _tune.brightness,
-                      min: -0.5,
-                      max: 0.5,
-                      onChanged: (v) {
-                        setState(() => _tune = TuneParams(
-                              brightness: v,
-                              contrast: _tune.contrast,
-                              saturation: _tune.saturation,
-                              exposure: _tune.exposure,
-                              temperature: _tune.temperature,
-                            ));
-                        _runPreview();
-                      },
-                    ),
-                    _SliderRow(
-                      label: 'Contraste',
-                      value: _tune.contrast,
-                      onChanged: (v) {
-                        setState(() => _tune = TuneParams(
-                              brightness: _tune.brightness,
-                              contrast: v,
-                              saturation: _tune.saturation,
-                              exposure: _tune.exposure,
-                              temperature: _tune.temperature,
-                            ));
-                        _runPreview();
-                      },
-                    ),
-                    _SliderRow(
-                      label: 'Saturação',
-                      value: _tune.saturation,
-                      min: -0.5,
-                      max: 0.5,
-                      onChanged: (v) {
-                        setState(() => _tune = TuneParams(
-                              brightness: _tune.brightness,
-                              contrast: _tune.contrast,
-                              saturation: v,
-                              exposure: _tune.exposure,
-                              temperature: _tune.temperature,
-                            ));
-                        _runPreview();
-                      },
-                    ),
-                    _SliderRow(
+                    _TuneSlider(
                       label: 'Exposição',
                       value: _tune.exposure,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) {
-                        setState(() => _tune = TuneParams(
-                              brightness: _tune.brightness,
-                              contrast: _tune.contrast,
-                              saturation: _tune.saturation,
-                              exposure: v,
-                              temperature: _tune.temperature,
-                            ));
-                        _runPreview();
-                      },
+                      onChanged: (v) => _updateTune((t) => t.copyWith(exposure: v)),
                     ),
-                    _SliderRow(
+                    _TuneSlider(
+                      label: 'Contraste',
+                      value: _tune.contrast,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(contrast: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Brilho',
+                      value: _tune.brightness,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(brightness: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Realces',
+                      value: _tune.highlights,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(highlights: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Sombras',
+                      value: _tune.shadows,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(shadows: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Brancos',
+                      value: _tune.whites,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(whites: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Pretos',
+                      value: _tune.blacks,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(blacks: v)),
+                    ),
+                  ],
+                ),
+                _Section(
+                  title: BeautyEngineLabels.sectionColor,
+                  children: [
+                    _TuneSlider(
                       label: 'Temperatura',
                       value: _tune.temperature,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) {
-                        setState(() => _tune = TuneParams(
-                              brightness: _tune.brightness,
-                              contrast: _tune.contrast,
-                              saturation: _tune.saturation,
-                              exposure: _tune.exposure,
-                              temperature: v,
-                            ));
-                        _runPreview();
-                      },
+                      onChanged: (v) => _updateTune((t) => t.copyWith(temperature: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Matiz (tint)',
+                      value: _tune.tint,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(tint: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Vibrance',
+                      value: _tune.vibrance,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(vibrance: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Saturação',
+                      value: _tune.saturation,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(saturation: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Matiz (hue)',
+                      value: _tune.hue,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(hue: v)),
+                    ),
+                  ],
+                ),
+                _Section(
+                  title: BeautyEngineLabels.sectionEffect,
+                  children: [
+                    _TuneSlider(
+                      label: 'Fade',
+                      value: _tune.fade,
+                      min: 0,
+                      max: 1,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(fade: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Nitidez',
+                      value: _tune.sharpness,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(sharpness: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Luminância',
+                      value: _tune.luminance,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(luminance: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Vinheta',
+                      value: _tune.vignette,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(vignette: v)),
+                    ),
+                    _TuneSlider(
+                      label: 'Gamma',
+                      value: _tune.gamma,
+                      min: -0.5,
+                      max: 0.5,
+                      onChanged: (v) => _updateTune((t) => t.copyWith(gamma: v)),
                     ),
                   ],
                 ),
@@ -733,8 +828,8 @@ class _Section extends StatelessWidget {
   }
 }
 
-class _SliderRow extends StatelessWidget {
-  const _SliderRow({
+class _TuneSlider extends StatelessWidget {
+  const _TuneSlider({
     required this.label,
     required this.value,
     required this.onChanged,
@@ -755,6 +850,29 @@ class _SliderRow extends StatelessWidget {
       value: value,
       min: min,
       max: max,
+      onChanged: onChanged,
+    );
+  }
+}
+
+class _SliderRow extends StatelessWidget {
+  const _SliderRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return BeautyAccessibleSlider(
+      label: label,
+      value: value,
+      min: 0,
+      max: 1,
       onChanged: onChanged,
     );
   }

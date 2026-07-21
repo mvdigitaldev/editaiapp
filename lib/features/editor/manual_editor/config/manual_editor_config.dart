@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../filter_presets/filter_preset_mapper.dart';
 import '../data/filter_presets.dart';
 
 /// Traduções PT-BR do editor manual.
@@ -208,9 +209,65 @@ ProImageEditorConfigs buildManualEditorConfigs({
         appBarBackground: AppColors.backgroundDarkSecondary,
         appBarColor: AppColors.textLight,
         background: AppColors.backgroundDark,
+        previewSelectedTextColor: AppColors.primary,
+        previewTextColor: AppColors.textTertiary,
       ),
       icons: const FilterEditorIcons(
         bottomNavBar: Icons.filter_vintage_outlined,
+      ),
+      widgets: FilterEditorWidgets(
+        filterButton: (
+          filter,
+          isSelected,
+          scaleFactor,
+          onSelectFilter,
+          editorImage,
+          filterKey,
+        ) {
+          final label = filterPresetDisplayLabel(filter.name);
+          return GestureDetector(
+            key: filterKey,
+            onTap: onSelectFilter,
+            child: Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: isSelected
+                          ? AppColors.primary
+                          : const Color(0xFF242424),
+                      width: isSelected ? 2 : 1,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: SizedBox(
+                      width: 64,
+                      height: 64,
+                      child: editorImage,
+                    ),
+                  ),
+                ),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 64),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.textTertiary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     ),
   );
