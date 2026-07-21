@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +22,12 @@ import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/pages/register_page.dart';
 import 'features/auth/presentation/pages/reset_password_page.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
+import 'features/editor/manual_editor/presentation/pages/manual_editor_entry_page.dart';
+import 'features/editor/beauty_engine/presentation/beauty_editor_page.dart';
+import 'features/editor/beauty_engine/presentation/face_filters_demo_page.dart';
+import 'features/editor/beauty_engine/presentation/preset_creator_page.dart';
+import 'features/editor/beauty_engine/presentation/preset_marketplace_page.dart';
+import 'features/editor/beauty_engine/presentation/preset_sync_bootstrap.dart';
 import 'features/editor/presentation/pages/editor_page.dart';
 import 'features/gallery/presentation/pages/gallery_page.dart';
 import 'features/editor/presentation/pages/pre_evaluation_page.dart';
@@ -175,13 +181,15 @@ class MyApp extends ConsumerWidget {
 
     return MaterialApp(
       builder: (context, child) {
-        return ActiveEditsCoordinator(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: () {
-              FocusManager.instance.primaryFocus?.unfocus();
-            },
-            child: child ?? const SizedBox.shrink(),
+        return PresetSyncBootstrap(
+          child: ActiveEditsCoordinator(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () {
+                FocusManager.instance.primaryFocus?.unfocus();
+              },
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
         );
       },
@@ -200,6 +208,17 @@ class MyApp extends ConsumerWidget {
           final args = ModalRoute.of(context)!.settings.arguments;
           final index = args is int ? args : AppBottomNav.indexEditor;
           return MainShellPage(initialIndex: index);
+        },
+        '/manual-editor': (context) => const ManualEditorEntryPage(),
+        if (kDebugMode) ...{
+          '/dev/face-filters': (context) => const FaceFiltersDemoPage(),
+          '/beauty-editor': (context) => const BeautyEditorPage(),
+          '/beauty-preset-creator': (context) {
+            final editId = ModalRoute.of(context)?.settings.arguments as String?;
+            return PresetCreatorPage(editPresetId: editId);
+          },
+          '/beauty-preset-marketplace': (context) =>
+              const PresetMarketplacePage(),
         },
         '/editor': (context) => const EditorPage(),
         '/gallery': (context) => const GalleryPage(),

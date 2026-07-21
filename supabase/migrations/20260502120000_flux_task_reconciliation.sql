@@ -59,7 +59,7 @@ RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, net, vault
-AS $$
+AS $function$
 DECLARE
   fn_url text;
   invocation_secret text;
@@ -87,16 +87,17 @@ BEGIN
 
   BEGIN
     PERFORM net.http_post(
-      url := fn_url,
-      body := '{}'::jsonb,
-      headers := req_headers,
-      timeout_milliseconds := 60000
+      fn_url,
+      '{}'::jsonb,
+      '{}'::jsonb,
+      req_headers,
+      60000
     );
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'invoke_flux_task_reconciler: falha ao chamar reconciler: %', SQLERRM;
   END;
 END;
-$$;
+$function$;
 
 COMMENT ON FUNCTION public.invoke_flux_task_reconciler() IS
   'Invoca a Edge Function flux-task-reconciler. Chamado pelo cron a cada minuto.';
@@ -119,5 +120,5 @@ $$;
 SELECT cron.schedule(
   'invoke-flux-task-reconciler',
   '* * * * *',
-  $$SELECT public.invoke_flux_task_reconciler();$$
+  'SELECT public.invoke_flux_task_reconciler();'
 );

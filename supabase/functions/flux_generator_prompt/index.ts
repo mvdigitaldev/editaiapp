@@ -1,5 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
+import {
+  EDIT_PROMPT_OPTIMIZER_SYSTEM,
+  INTENT_CLASSIFIER_SYSTEM_SINGLE,
+  MINIMAL_EDIT_PROMPT_SYSTEM,
+  buildMinimalEditUserMessage,
+  buildOptimizerUserMessage,
+  ensureSubjectPreservation,
+} from "../_shared/flux_prompt_optimizer.ts";
 
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -74,17 +82,7 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `
-Classify the editing intent into ONE of the following categories:
-- subject_removal
-- lighting_adjustment
-- color_grading
-- typography
-- composition
-- general_edit
-
-Output only the category name.
-`
+            content: INTENT_CLASSIFIER_SYSTEM_SINGLE,
           },
           { role: "user", content: translated_prompt }
         ]
@@ -108,6 +106,7 @@ ${image_context || "Unknown image context."}
 Intent category: ${intent}
 
 Focus on relevant FLUX official documentation, especially:
+- intentional subject/color preservation when relocating products
 - replacement strategy for negative prompts
 - structured prompting
 - subject + action + style + context
@@ -184,9 +183,12 @@ Focus on relevant FLUX official documentation, especially:
           messages: [
             {
               role: "system",
-              content: "Output ONLY a short English phrase (10-30 words) that describes this edit: 'Same scene, with: [user request]'. Do NOT describe the full scene.",
+              content: MINIMAL_EDIT_PROMPT_SYSTEM,
             },
-            { role: "user", content: `User request: ${translated_prompt}` },
+            {
+              role: "user",
+              content: buildMinimalEditUserMessage(translated_prompt, image_context),
+            },
           ],
         }),
       });
@@ -201,39 +203,21 @@ Focus on relevant FLUX official documentation, especially:
         },
         body: JSON.stringify({
           model: "gpt-4o-mini",
-          temperature: 0.2,
+          temperature: 0,
           messages: [
             {
               role: "system",
-              content: `
-You are a FLUX image editing prompt optimizer.
-
-STRICT RULES:
-- OUTPUT ONLY the final improved English prompt.
-- This is IMAGE EDITING: describe ONLY the change to apply. The input image already provides the scene.
-- For simple edits (add/remove/change one thing): keep prompt SHORT (10-50 words). Do NOT re-describe clothing, background, or objects.
-- PRESERVE the original scene. ONLY modify what the user requested.
-- NEVER use negative prompts.
-- Use positive visual replacement strategy.
-- If the user asks for a minimal change (e.g. "add pregnant belly"), output something like: "Same woman, same pose and setting, with a visibly pregnant belly" — NOT a full scene description.
-`
+              content: EDIT_PROMPT_OPTIMIZER_SYSTEM,
             },
             {
               role: "user",
-              content: `
-Original editing request:
-${translated_prompt}
-
-Image context:
-${image_context || "Preserve the existing scene."}
-
-Detected intent:
-${intent}
-
-Relevant FLUX documentation:
-${contextString}
-`
-            }
+              content: buildOptimizerUserMessage({
+                translated: translated_prompt,
+                imageContext: image_context,
+                intent,
+                contextString,
+              }),
+            },
           ],
         }),
       });
@@ -246,6 +230,12 @@ ${contextString}
 
       improved_prompt = chatData.choices[0].message.content.trim();
     }
+
+    improved_prompt = ensureSubjectPreservation(improved_prompt || translated_prompt, {
+      intent,
+      imageContext: image_context,
+      translatedUserPrompt: translated_prompt,
+    });
 
     // =========================
     // 7️⃣ LOGGING

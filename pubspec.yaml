@@ -56,12 +56,19 @@ dependencies:
   google_fonts: ^6.1.0
   flutter_animate: ^4.5.0
   share_plus: ^12.0.1
+  file_picker: ^8.0.0
   path_provider: ^2.1.1
   url_launcher: ^6.2.5
   equatable: any
   webview_flutter: any
   saver_gallery: ^4.1.0
   google_mobile_ads: ^5.1.0
+
+  # Beauty Engine — MediaPipe Face/Pose (Sprint 03+)
+  beauty_mediapipe:
+    path: packages/beauty_mediapipe
+  pro_image_editor: 11.3.0
+  flutter_image_filters: 0.0.28
 
 dev_dependencies:
   flutter_test:
@@ -78,4 +85,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/animations/
+    - assets/filters/lut/
+    - assets/beauty/presets/
     - assets/logo.png
+    - assets/mediapipe/face_landmarker.task
+    - assets/mediapipe/pose_landmarker_lite.task

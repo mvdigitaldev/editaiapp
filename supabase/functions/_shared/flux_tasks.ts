@@ -28,6 +28,30 @@ export async function registerFluxTask(
     throw new Error(`flux_tasks_insert_failed:${taskError.message}`);
   }
 
+  if (provider === "bfl" && !pollingUrl) {
+    console.warn("[flux_tasks] Registrando task BFL sem polling_url:", {
+      taskId,
+      editId,
+      userId,
+    });
+  }
+
+  if (pollingUrl) {
+    const { error: pollingUpdateError } = await supabase
+      .from("flux_tasks")
+      .update({ polling_url: pollingUrl })
+      .eq("task_id", taskId)
+      .or("polling_url.is.null,polling_url.eq.");
+
+    if (pollingUpdateError) {
+      console.warn("[flux_tasks] Falha ao reforcar polling_url:", {
+        taskId,
+        editId,
+        error: pollingUpdateError.message,
+      });
+    }
+  }
+
   const { error: editError } = await supabase
     .from("edits")
     .update({ task_id: taskId })

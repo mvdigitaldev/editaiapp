@@ -12,6 +12,7 @@ interface WebhookPayload {
   task_id?: string;
   status?: string;
   progress?: number;
+  polling_url?: string;
   result?: { sample?: string };
 }
 
@@ -32,6 +33,10 @@ Deno.serve(async (req) => {
     const payload = (await req.json()) as WebhookPayload;
     const taskId = resolveFluxTaskId(payload);
     const { status, result } = payload;
+    const pollingUrl =
+      typeof payload.polling_url === "string" && payload.polling_url.trim().length > 0
+        ? payload.polling_url.trim()
+        : null;
 
     console.log("[flux-webhook] Recebido:", {
       taskId,
@@ -52,6 +57,20 @@ Deno.serve(async (req) => {
     if (!currentTask) {
       console.warn("[flux-webhook] task_id nao encontrado em flux_tasks nem edits:", taskId);
       return new Response(null, { status: 200 });
+    }
+
+    if (pollingUrl && !currentTask.polling_url) {
+      const { error: pollingUpdateError } = await supabase
+        .from("flux_tasks")
+        .update({ polling_url: pollingUrl })
+        .eq("task_id", taskId);
+
+      if (pollingUpdateError) {
+        console.warn("[flux-webhook] Falha ao backfill de polling_url:", {
+          taskId,
+          error: pollingUpdateError.message,
+        });
+      }
     }
 
     if (currentTask.status === "ready" && currentTask.image_url) {

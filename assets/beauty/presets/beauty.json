@@ -1,0 +1,28 @@
+{
+  "id": "bundled_beauty",
+  "name": "Beauty",
+  "lutIntensity": 1,
+  "tune": {
+    "brightness": 0.02,
+    "contrast": 0.12,
+    "saturation": 0.08,
+    "exposure": 0,
+    "temperature": 0
+  },
+  "face": {
+    "faceSlim": 0.35,
+    "noseSlim": 0.22,
+    "noseBridge": 0.1,
+    "eyeScale": 0.12,
+    "cheekbone": 0.18,
+    "chin": 0.08
+  },
+  "body": {},
+  "skin": {
+    "smooth": 0.48,
+    "whitening": 0.18,
+    "removeDarkCircles": 0.15,
+    "blush": 0.1
+  },
+  "version": 2
+}

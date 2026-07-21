@@ -1,0 +1,33 @@
+{
+  "id": "bundled_influencer",
+  "name": "Influencer",
+  "lutAssetPath": "assets/filters/lut/natural.png",
+  "lutIntensity": 0.55,
+  "tune": {
+    "brightness": 0.06,
+    "contrast": 0.22,
+    "saturation": 0.28,
+    "exposure": 0.05,
+    "temperature": 0.1
+  },
+  "face": {
+    "faceSlim": 0.32,
+    "vFace": 0.15,
+    "eyeScale": 0.18,
+    "eyeHeight": 0.1,
+    "cheekbone": 0.2,
+    "jaw": 0.12
+  },
+  "body": {
+    "waistSlim": 0.12,
+    "legLength": 0.08
+  },
+  "skin": {
+    "smooth": 0.42,
+    "whitening": 0.12,
+    "blush": 0.18,
+    "contour": 0.1,
+    "eyelashes": 0.15
+  },
+  "version": 2
+}

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:editaiapp/features/subscription/presentation/providers/credits_usage_provider.dart';
@@ -448,6 +449,58 @@ class ProfilePage extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    if (kDebugMode) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 4, bottom: 8),
+                          child: Text(
+                            'DESENVOLVIMENTO',
+                            style: AppTextStyles.overline.copyWith(
+                              color: isDark
+                                  ? AppColors.textTertiary
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                      AppCard(
+                        padding: EdgeInsets.zero,
+                        child: Column(
+                          children: [
+                            _ProfileOption(
+                              icon: Icons.auto_fix_high,
+                              label: 'Beauty Editor (presets)',
+                              onTap: () {
+                                Navigator.of(context).pushNamed('/beauty-editor');
+                              },
+                            ),
+                            _ProfileOption(
+                              icon: Icons.tune,
+                              label: 'Criar preset custom',
+                              onTap: () {
+                                Navigator.of(context).pushNamed('/beauty-preset-creator');
+                              },
+                            ),
+                            _ProfileOption(
+                              icon: Icons.storefront_outlined,
+                              label: 'Marketplace de presets',
+                              onTap: () {
+                                Navigator.of(context).pushNamed('/beauty-preset-marketplace');
+                              },
+                            ),
+                            _ProfileOption(
+                              icon: Icons.face_retouching_natural,
+                              label: 'Testar filtros faciais (Beauty Engine)',
+                              onTap: () {
+                                Navigator.of(context).pushNamed('/dev/face-filters');
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
                     // Support Section
                     Align(
                       alignment: Alignment.centerLeft,

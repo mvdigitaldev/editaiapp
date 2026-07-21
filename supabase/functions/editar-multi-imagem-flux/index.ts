@@ -1,15 +1,20 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { createEditAndReserveCredits } from "../_shared/credits.ts";
+import {
+  enforceBflUserJobLimit,
+  enqueueBflInitJob,
+} from "../_shared/bfl_queue.ts";
+import {
+  createEditAndReserveCredits,
+  releaseReservedCredits,
+} from "../_shared/credits.ts";
+import { triggerBflInitWorker } from "../_shared/bfl_init_invoke.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
-
-const MAX_JOBS_PER_USER = 5;
-const JOB_LIMIT_WINDOW_HOURS = 1;
 
 interface RequestBody {
   client_request_id: string;
@@ -32,53 +37,33 @@ Deno.serve(async (req) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse({ success: false, error: "Método não permitido" }, 405);
+    return jsonResponse({ success: false, error: "Metodo nao permitido" }, 405);
   }
 
   try {
     const body = (await req.json()) as Partial<RequestBody>;
-    const { client_request_id, user_prompt, storage_paths, width, height } =
-      body;
+    const { client_request_id, user_prompt, storage_paths, width, height } = body;
 
-    if (
-      !client_request_id ||
-      typeof client_request_id !== "string" ||
-      client_request_id.trim().length === 0
-    ) {
-      return jsonResponse(
-        { success: false, error: "Campo 'client_request_id' é obrigatório" },
-        422,
-      );
+    if (!client_request_id || typeof client_request_id !== "string" || client_request_id.trim().length === 0) {
+      return jsonResponse({ success: false, error: "Campo 'client_request_id' e obrigatorio" }, 422);
     }
 
     if (!user_prompt || typeof user_prompt !== "string" || user_prompt.trim().length === 0) {
-      return jsonResponse(
-        { success: false, error: "Campo 'user_prompt' é obrigatório e não pode estar vazio" },
-        422
-      );
+      return jsonResponse({ success: false, error: "Campo 'user_prompt' e obrigatorio" }, 422);
     }
 
     if (!Array.isArray(storage_paths) || storage_paths.length < 1 || storage_paths.length > 8) {
-      return jsonResponse(
-        { success: false, error: "Campo 'storage_paths' deve ser um array com 1 a 8 paths" },
-        422
-      );
+      return jsonResponse({ success: false, error: "Campo 'storage_paths' deve ter de 1 a 8 paths" }, 422);
     }
 
     if (typeof width !== "number" || typeof height !== "number") {
-      return jsonResponse(
-        { success: false, error: "Campos 'width' e 'height' são obrigatórios e devem ser números" },
-        422
-      );
+      return jsonResponse({ success: false, error: "Campos 'width' e 'height' sao obrigatorios" }, 422);
     }
 
     const outW = Math.floor(width) & ~15;
     const outH = Math.floor(height) & ~15;
     if (outW < 64 || outH < 64) {
-      return jsonResponse(
-        { success: false, error: "width e height devem ser múltiplos de 16 e >= 64" },
-        422
-      );
+      return jsonResponse({ success: false, error: "width e height devem ser multiplos de 16 e >= 64" }, 422);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -87,7 +72,7 @@ Deno.serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
+      return jsonResponse({ success: false, error: "Autenticacao obrigatoria" }, 401);
     }
     const authClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
@@ -95,45 +80,24 @@ Deno.serve(async (req) => {
     const { data: { user } } = await authClient.auth.getUser();
     const userId = user?.id ?? null;
     if (!userId) {
-      return jsonResponse({ success: false, error: "Autenticação obrigatória" }, 401);
+      return jsonResponse({ success: false, error: "Autenticacao obrigatoria" }, 401);
     }
 
-    // Validação: todos os paths devem pertencer ao user_id
-    for (let i = 0; i < storage_paths.length; i++) {
-      const path = storage_paths[i];
+    for (let index = 0; index < storage_paths.length; index++) {
+      const path = storage_paths[index];
       if (typeof path !== "string" || path.trim().length === 0) {
-        return jsonResponse({ success: false, error: `Path ${i + 1} inválido` }, 422);
+        return jsonResponse({ success: false, error: `Path ${index + 1} invalido` }, 422);
       }
       if (!path.startsWith(`${userId}/`)) {
-        return jsonResponse(
-          { success: false, error: "Paths inválidos: não pertencem ao usuário" },
-          403
-        );
+        return jsonResponse({ success: false, error: "Paths invalidos: nao pertencem ao usuario" }, 403);
       }
     }
 
-    // Limite de jobs por usuário (queued + processing)
-    const since = new Date(Date.now() - JOB_LIMIT_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
-    const { count, error: countErr } = await supabase
-      .from("edits")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .in("status", ["queued", "processing"])
-      .gte("created_at", since);
-
-    if (countErr || (count ?? 0) >= MAX_JOBS_PER_USER) {
-      return jsonResponse(
-        {
-          success: false,
-          error: `Máximo de ${MAX_JOBS_PER_USER} jobs simultâneos. Aguarde a conclusão de algum antes de enviar outro.`,
-        },
-        429
-      );
-    }
+    await enforceBflUserJobLimit(supabase, userId);
 
     const creditsMulti = 7 + (storage_paths.length - 1) * 3;
-    let editId: string;
-    let reservationId: string;
+    let editId = "";
+    let reservationId = "";
     let acceptedAt = new Date().toISOString();
 
     try {
@@ -147,7 +111,7 @@ Deno.serve(async (req) => {
         {
           promptTextOriginal: user_prompt.trim(),
           clientRequestId: client_request_id.trim(),
-        }
+        },
       );
       editId = result.editId;
       reservationId = result.reservationId;
@@ -163,32 +127,34 @@ Deno.serve(async (req) => {
     } catch (creditErr) {
       const err = creditErr as Error & { status?: number };
       if (err.status === 402) {
-        return jsonResponse({ success: false, error: "Créditos insuficientes" }, 402);
+        return jsonResponse({ success: false, error: "Creditos insuficientes" }, 402);
+      }
+      if (err.status === 429) {
+        return jsonResponse({ success: false, error: err.message }, 429);
       }
       throw creditErr;
     }
 
-    // Enfileirar job
-    const { error: enqueueErr } = await supabase.rpc("enqueue_flux_edit_job", {
-      p_msg: {
+    try {
+      await enqueueBflInitJob(supabase, {
         edit_id: editId,
         user_id: userId,
         reservation_id: reservationId,
+        operation_type: "multi_image",
+        prompt_text: user_prompt.trim(),
         storage_paths,
-        user_prompt: user_prompt.trim(),
         width: outW,
         height: outH,
-        operation_type: "multi_image",
-      },
-    });
-
-    if (enqueueErr) {
-      const { releaseReservedCredits } = await import("../_shared/credits.ts");
+        enqueued_at: new Date().toISOString(),
+      });
+    } catch (enqueueErr) {
       await releaseReservedCredits(supabase, reservationId, "enqueue_failed");
       await supabase.from("edits").update({ status: "failed" }).eq("id", editId);
       console.error("[editar-multi-imagem-flux] Erro ao enfileirar:", enqueueErr);
       return jsonResponse({ success: false, error: "Falha ao enfileirar job" }, 500);
     }
+
+    await triggerBflInitWorker(supabaseUrl);
 
     return jsonResponse({
       edit_id: editId,
@@ -197,9 +163,10 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("[editar-multi-imagem-flux] Erro:", error);
+    const err = error as Error & { status?: number };
     return jsonResponse(
       { success: false, error: error instanceof Error ? error.message : "Erro interno" },
-      500
+      err.status ?? 500,
     );
   }
 });

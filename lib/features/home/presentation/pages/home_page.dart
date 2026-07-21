@@ -146,6 +146,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                     child: Column(
                       children: [
                         _HeroActionCard(
+                          index: 4,
+                          icon: Icons.brush_outlined,
+                          title: 'Editar manualmente',
+                          description:
+                              'Filtros, ajustes e recorte — sem IA, grátis.',
+                          onTap: () => Navigator.of(context)
+                              .pushNamed('/manual-editor'),
+                        ),
+                        const SizedBox(height: 12),
+                        _HeroActionCard(
                           index: 1,
                           icon: Icons.edit,
                           title: 'Editar imagem',

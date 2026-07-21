@@ -1,0 +1,23 @@
+name: beauty_mediapipe
+description: FFI bridge para MediaPipe Face Landmarker e Pose Landmarker (Sprint 03+).
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  path: ^1.9.0
+  path_provider: ^2.1.1
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.editaiapp.beauty_mediapipe
+        pluginClass: BeautyMediapipePlugin
+      ios:
+        pluginClass: BeautyMediapipePlugin

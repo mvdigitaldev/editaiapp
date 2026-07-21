@@ -6,6 +6,7 @@ enum OperationType {
   removeBackground('remove_background', 'Remover Fundo'),
   multiImage('multi_image', 'Múltiplas Imagens'),
   editModel('edit_model', 'Editar com Modelo'),
+  manualEdit('manual_edit', 'Edição Manual'),
   unknown('', '—');
 
   final String value;

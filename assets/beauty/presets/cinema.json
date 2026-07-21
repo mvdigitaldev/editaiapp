@@ -1,0 +1,22 @@
+{
+  "id": "bundled_cinema",
+  "name": "Cinema",
+  "lutAssetPath": "assets/filters/lut/cinema_teal_orange.png",
+  "lutIntensity": 0.85,
+  "tune": {
+    "brightness": -0.02,
+    "contrast": 0.25,
+    "saturation": -0.12,
+    "exposure": -0.08,
+    "temperature": -0.18
+  },
+  "face": {
+    "jaw": 0.06
+  },
+  "body": {},
+  "skin": {
+    "smooth": 0.12,
+    "contour": 0.08
+  },
+  "version": 2
+}

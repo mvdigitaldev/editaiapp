@@ -1,0 +1,27 @@
+{
+  "id": "bundled_studio",
+  "name": "Studio",
+  "lutIntensity": 1,
+  "tune": {
+    "brightness": 0,
+    "contrast": 0.2,
+    "saturation": -0.04,
+    "exposure": 0,
+    "temperature": -0.05
+  },
+  "face": {
+    "cheekbone": 0.28,
+    "jaw": 0.1,
+    "forehead": 0.06
+  },
+  "body": {
+    "shoulderWidth": 0.08,
+    "neckSlim": 0.1
+  },
+  "skin": {
+    "smooth": 0.22,
+    "contour": 0.22,
+    "eyebrows": 0.12
+  },
+  "version": 2
+}

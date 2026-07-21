@@ -1,0 +1,25 @@
+{
+  "id": "bundled_instagram",
+  "name": "Instagram",
+  "lutAssetPath": "assets/filters/lut/natural.png",
+  "lutIntensity": 0.75,
+  "tune": {
+    "brightness": 0.04,
+    "contrast": 0.18,
+    "saturation": 0.12,
+    "exposure": 0.03,
+    "temperature": 0.22
+  },
+  "face": {
+    "faceSlim": 0.18,
+    "cheekbone": 0.1,
+    "smile": 0.08
+  },
+  "body": {},
+  "skin": {
+    "smooth": 0.25,
+    "whitening": 0.08,
+    "blush": 0.12
+  },
+  "version": 2
+}

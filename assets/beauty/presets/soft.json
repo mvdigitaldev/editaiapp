@@ -1,0 +1,23 @@
+{
+  "id": "bundled_soft",
+  "name": "Soft",
+  "lutAssetPath": "assets/filters/lut/natural.png",
+  "lutIntensity": 0.4,
+  "tune": {
+    "brightness": 0.08,
+    "contrast": -0.06,
+    "saturation": -0.18,
+    "exposure": 0.04,
+    "temperature": 0.08
+  },
+  "face": {
+    "faceSlim": 0.08
+  },
+  "body": {},
+  "skin": {
+    "smooth": 0.55,
+    "whitening": 0.08,
+    "removeWrinkles": 0.1
+  },
+  "version": 2
+}

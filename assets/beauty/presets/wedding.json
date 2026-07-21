@@ -1,0 +1,26 @@
+{
+  "id": "bundled_wedding",
+  "name": "Wedding",
+  "lutAssetPath": "assets/filters/lut/natural.png",
+  "lutIntensity": 0.5,
+  "tune": {
+    "brightness": 0.1,
+    "contrast": 0.06,
+    "saturation": -0.05,
+    "exposure": 0.08,
+    "temperature": 0.12
+  },
+  "face": {
+    "faceSlim": 0.12,
+    "smile": 0.1
+  },
+  "body": {},
+  "skin": {
+    "smooth": 0.38,
+    "whitening": 0.15,
+    "teethWhitening": 0.35,
+    "removeWrinkles": 0.12,
+    "blush": 0.14
+  },
+  "version": 2
+}

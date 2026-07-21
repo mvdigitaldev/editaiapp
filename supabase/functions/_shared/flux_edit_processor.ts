@@ -1,6 +1,14 @@
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { releaseReservedCredits } from "./credits.ts";
 import { registerFluxTask } from "./flux_tasks.ts";
+import {
+  INTENT_CLASSIFIER_SYSTEM_MULTI,
+  MINIMAL_EDIT_PROMPT_SYSTEM,
+  MULTI_REF_PROMPT_OPTIMIZER_SYSTEM,
+  buildMinimalEditUserMessage,
+  buildOptimizerUserMessage,
+  ensureSubjectPreservation,
+} from "./flux_prompt_optimizer.ts";
 
 const BFL_API_URL = "https://api.bfl.ai/v1/flux-2-pro";
 const OPENAI_API_URL = "https://api.openai.com/v1";
@@ -66,25 +74,18 @@ export async function optimizePromptMultiRef(
 
   const intent = await openaiChat(
     "gpt-4o-mini",
-    `Classify the editing intent into ONE of the following categories:
-- multi_reference_composite
-- subject_removal
-- lighting_adjustment
-- color_grading
-- typography
-- composition
-- general_edit
-Output only the category name.`,
+    INTENT_CLASSIFIER_SYSTEM_MULTI,
     translated
   );
 
-  const imageContext = `Multi-reference: combining ${imageCount} reference images into one cohesive scene.`;
+  const imageContext = `Multi-reference: combining ${imageCount} reference images into one cohesive scene. Preserve exact original colors, materials, and branding from each reference unless the user asks to change them.`;
   const expandedQuery = `
 User editing request: ${translated}
 Image context: ${imageContext}
 Intent category: ${intent}
 Focus on relevant FLUX official documentation, especially:
 - multi-reference image editing
+- intentional subject/color preservation
 - replacement strategy for negative prompts
 - structured prompting
 - subject + action + style + context`;
@@ -124,41 +125,32 @@ Focus on relevant FLUX official documentation, especially:
       : 0;
   const matchedIds = matchedDocs?.map((d: { id: string }) => String(d.id)) ?? [];
 
+  let improvedPrompt: string;
   if (avgSimilarity < 0.5 && translated.split(/\s+/).length <= 15) {
-    const minimalPrompt = await openaiChat(
+    improvedPrompt = await openaiChat(
       "gpt-4o-mini",
-      "Output ONLY a short English phrase (10-30 words) that describes this multi-reference edit. Keep it concise.",
-      `User request: ${translated}`
+      MINIMAL_EDIT_PROMPT_SYSTEM,
+      buildMinimalEditUserMessage(translated, imageContext),
     );
-    return { improvedPrompt: minimalPrompt || translated, intent, avgSimilarity, matchedIds };
+    improvedPrompt = improvedPrompt || translated;
+  } else {
+    improvedPrompt = await openaiChat(
+      "gpt-4o-mini",
+      MULTI_REF_PROMPT_OPTIMIZER_SYSTEM,
+      buildOptimizerUserMessage({
+        translated,
+        imageContext,
+        intent,
+        contextString,
+      }),
+    );
   }
 
-  const improvedPrompt = await openaiChat(
-    "gpt-4o-mini",
-    `You are a professional FLUX multi-reference image editing prompt optimizer.
-STRICT RULES:
-- OUTPUT ONLY the final improved English prompt.
-- This is MULTI-REFERENCE editing: combine reference images (clothing, accessories, objects) into a cohesive scene.
-- Describe how each input should be used in the final composition.
-- Keep prompts concise when the request is simple. Do NOT over-describe.
-- NEVER use negative prompts.
-- Use positive visual replacement strategy.
-- Follow: Subject + Action + Style + Context.
-- Reference the FLUX Fashion Editorial Example: model wearing outfit, positioned in scene, combining items from references.`,
-    `
-Original editing request:
-${translated}
-
-Image context:
-${imageContext}
-
-Detected intent:
-${intent}
-
-Relevant FLUX documentation:
-${contextString}
-`
-  );
+  improvedPrompt = ensureSubjectPreservation(improvedPrompt || translated, {
+    intent,
+    imageContext,
+    translatedUserPrompt: translated,
+  });
 
   return { improvedPrompt, intent, avgSimilarity, matchedIds };
 }
@@ -281,12 +273,38 @@ export async function processFluxEditJob(
     return { error: errText || "Erro BFL" };
   }
 
-  const initData = (await initRes.json()) as { id?: string; polling_url?: string };
+  const rawResponseText = await initRes.text();
+  console.log("[flux-edit-processor] BFL init raw response:", {
+    editId: edit_id,
+    httpStatus: initRes.status,
+    body: rawResponseText,
+  });
+
+  let initData: { id?: string; polling_url?: string };
+  try {
+    initData = JSON.parse(rawResponseText) as { id?: string; polling_url?: string };
+  } catch (error) {
+    await releaseReservedCredits(supabase, reservation_id, "bfl_invalid_json");
+    await supabase.from("edits").update({ status: "failed" }).eq("id", edit_id);
+    return {
+      error: error instanceof Error
+        ? `Resposta BFL invalida: ${error.message}`
+        : "Resposta BFL invalida",
+    };
+  }
   const taskId = initData.id;
   const pollingUrl =
     typeof initData.polling_url === "string" && initData.polling_url.trim().length > 0
       ? initData.polling_url.trim()
       : null;
+
+  console.log("[flux-edit-processor] BFL init response:", {
+    editId: edit_id,
+    taskId: taskId ?? null,
+    hasPollingUrl: !!pollingUrl,
+    responseKeys: Object.keys(initData ?? {}),
+  });
+
   if (!taskId) {
     await releaseReservedCredits(supabase, reservation_id, "missing_task_id");
     await supabase.from("edits").update({ status: "failed" }).eq("id", edit_id);

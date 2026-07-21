@@ -224,7 +224,12 @@ class _EditDetailPageState extends ConsumerState<EditDetailPage> {
     const noComparisonTypes = ['text_to_image', 'multi_image'];
     if (noComparisonTypes.contains(edit.operationType)) return false;
 
-    const comparisonTypes = ['edit_image', 'remove_background', 'edit_model'];
+    const comparisonTypes = [
+      'edit_image',
+      'remove_background',
+      'edit_model',
+      'manual_edit',
+    ];
     final hasOriginal = edit.originalImageUrl != null &&
         edit.originalImageUrl!.isNotEmpty;
     final hasEdited = edit.imageUrl != null && edit.imageUrl!.isNotEmpty;
