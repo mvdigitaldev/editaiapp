@@ -33,6 +33,8 @@ class BeautyMediapipeMethodChannel implements BeautyMediapipeBindings {
 
     final dynamic raw = await _channel.invokeMethod<dynamic>('detectFace', {
       'bytes': buffer.bytes,
+      'width': buffer.width,
+      'height': buffer.height,
       'rotation': buffer.rotation,
     });
 
@@ -51,6 +53,8 @@ class BeautyMediapipeMethodChannel implements BeautyMediapipeBindings {
 
     final dynamic raw = await _channel.invokeMethod<dynamic>('detectPose', {
       'bytes': buffer.bytes,
+      'width': buffer.width,
+      'height': buffer.height,
       'rotation': buffer.rotation,
     });
 

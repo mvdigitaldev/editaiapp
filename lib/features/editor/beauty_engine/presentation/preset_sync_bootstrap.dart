@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../filter_presets/filter_presets_provider.dart';
+import '../di/beauty_engine_feature_flag_provider.dart';
 import '../di/beauty_engine_providers.dart';
 
 /// Dispara sync de presets quando o usuário autentica (Sprint 23).
@@ -23,6 +25,11 @@ class _PresetSyncBootstrapState extends ConsumerState<PresetSyncBootstrap> {
       return;
     }
 
+    final enabled = await ref.read(beautyEngineEnabledProvider.future);
+    if (!enabled) {
+      return;
+    }
+
     _syncing = true;
     try {
       await ref.read(beautyPresetRepositoryProvider).syncWithRemote();
@@ -30,6 +37,8 @@ class _PresetSyncBootstrapState extends ConsumerState<PresetSyncBootstrap> {
       ref.invalidate(userBeautyPresetsProvider);
       ref.invalidate(allBeautyPresetsProvider);
       ref.invalidate(marketplacePresetsProvider);
+      ref.invalidate(filterPresetsProvider);
+      ref.invalidate(manualEditorCustomFiltersProvider);
     } catch (_) {
       // Sync falhou — presets locais continuam disponíveis.
     } finally {

@@ -18,11 +18,11 @@ void main() {
         containsAll([
           'Natural',
           'Instagram',
-          'Influencer',
-          'Beauty',
-          'Wedding',
-          'Studio',
-          'Soft',
+          'Influenciador',
+          'Beleza',
+          'Casamento',
+          'Estúdio',
+          'Suave',
           'Cinema',
         ]),
       );
@@ -39,7 +39,7 @@ void main() {
       await BundledBeautyPresets.loadAll();
       final preset = BundledBeautyPresets.findById('bundled_wedding');
       expect(preset, isNotNull);
-      expect(preset!.name, 'Wedding');
+      expect(preset!.name, 'Casamento');
     });
   });
 }

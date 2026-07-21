@@ -11,6 +11,7 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../../presentation/utils/edit_submission_helpers.dart';
 import '../../config/manual_editor_config.dart';
 import '../../di/manual_editor_providers.dart';
+import '../../../filter_presets/filter_presets_provider.dart';
 
 /// Editor manual com pro_image_editor — export → nuvem → /comparison.
 class ManualEditorPage extends ConsumerStatefulWidget {
@@ -107,16 +108,38 @@ class _ManualEditorPageState extends ConsumerState<ManualEditorPage> {
       );
     }
 
-    return ProImageEditor.file(
-      File(widget.imagePath),
-      configs: buildManualEditorConfigs(),
-      callbacks: ProImageEditorCallbacks(
-        onImageEditingComplete: _handleEditingComplete,
-        onCloseEditor: (_) {
-          if (mounted) {
-            Navigator.of(context).pop();
-          }
-        },
+    final customFiltersAsync = ref.watch(manualEditorCustomFiltersProvider);
+
+    return customFiltersAsync.when(
+      loading: () => Scaffold(
+        backgroundColor: AppColors.backgroundDark,
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      ),
+      error: (_, __) => ProImageEditor.file(
+        File(widget.imagePath),
+        configs: buildManualEditorConfigs(),
+        callbacks: ProImageEditorCallbacks(
+          onImageEditingComplete: _handleEditingComplete,
+          onCloseEditor: (_) {
+            if (mounted) {
+              Navigator.of(context).pop();
+            }
+          },
+        ),
+      ),
+      data: (customFilters) => ProImageEditor.file(
+        File(widget.imagePath),
+        configs: buildManualEditorConfigs(extraFilters: customFilters),
+        callbacks: ProImageEditorCallbacks(
+          onImageEditingComplete: _handleEditingComplete,
+          onCloseEditor: (_) {
+            if (mounted) {
+              Navigator.of(context).pop();
+            }
+          },
+        ),
       ),
     );
   }

@@ -66,7 +66,7 @@ Ver plano principal: [`editor_manual_meitu_19741884.plan.md`](../../.cursor/plan
 | 24 | Marketplace (MVP) |
 | 25 | Performance hardening |
 | 26 | QA matrix |
-| 27 | Release |
+| 27 | Release ✅ |
 
 ---
 

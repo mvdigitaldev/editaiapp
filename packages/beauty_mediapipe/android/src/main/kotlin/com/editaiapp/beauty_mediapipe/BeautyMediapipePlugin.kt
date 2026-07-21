@@ -53,13 +53,15 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
                     return
                 }
                 val bytes = call.argument<ByteArray>("bytes")
+                val width = call.argument<Int>("width") ?: 0
+                val height = call.argument<Int>("height") ?: 0
                 val rotation = call.argument<Int>("rotation") ?: 0
                 if (bytes == null || bytes.isEmpty()) {
                     result.error("invalid_args", "bytes is required", null)
                     return
                 }
                 try {
-                    val mapped = bridge.detectFace(bytes, rotation)
+                    val mapped = bridge.detectFace(bytes, width, height, rotation)
                     result.success(mapped)
                 } catch (e: Throwable) {
                     result.error("detect_failed", e.message ?: e.toString(), null)
@@ -73,13 +75,15 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
                     return
                 }
                 val bytes = call.argument<ByteArray>("bytes")
+                val width = call.argument<Int>("width") ?: 0
+                val height = call.argument<Int>("height") ?: 0
                 val rotation = call.argument<Int>("rotation") ?: 0
                 if (bytes == null || bytes.isEmpty()) {
                     result.error("invalid_args", "bytes is required", null)
                     return
                 }
                 try {
-                    val mapped = bridge.detectPose(bytes, rotation)
+                    val mapped = bridge.detectPose(bytes, width, height, rotation)
                     result.success(mapped)
                 } catch (e: Throwable) {
                     result.error("detect_failed", e.message ?: e.toString(), null)

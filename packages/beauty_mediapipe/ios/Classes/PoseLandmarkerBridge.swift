@@ -26,9 +26,13 @@ final class PoseLandmarkerBridge {
     poseLandmarker = try PoseLandmarker(options: options)
   }
 
-  func detectPose(imageBytes: Data, rotation: Int) throws -> [String: Any]? {
+  func detectPose(imageBytes: Data, width: Int, height: Int, rotation: Int) throws -> [String: Any]? {
     guard let landmarker = poseLandmarker else { return nil }
-    guard let image = UIImage(data: imageBytes) else { return nil }
+    guard let image = Self.decodeImage(
+      imageBytes: imageBytes,
+      width: width,
+      height: height
+    ) else { return nil }
 
     let oriented = rotate(image: image, degrees: rotation)
     guard let cgImage = oriented.cgImage else { return nil }
@@ -72,6 +76,35 @@ final class PoseLandmarkerBridge {
 
   func dispose() {
     poseLandmarker = nil
+  }
+
+  private static func decodeImage(imageBytes: Data, width: Int, height: Int) -> UIImage? {
+    let rgbaSize = width * height * 4
+    if width > 0 && height > 0 && imageBytes.count == rgbaSize {
+      return rgbaToImage(bytes: [UInt8](imageBytes), width: width, height: height)
+    }
+    return UIImage(data: imageBytes)
+  }
+
+  private static func rgbaToImage(bytes: [UInt8], width: Int, height: Int) -> UIImage? {
+    let bytesPerPixel = 4
+    let bytesPerRow = width * bytesPerPixel
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    guard let provider = CGDataProvider(data: Data(bytes) as CFData) else { return nil }
+    guard let cgImage = CGImage(
+      width: width,
+      height: height,
+      bitsPerComponent: 8,
+      bitsPerPixel: 32,
+      bytesPerRow: bytesPerRow,
+      space: colorSpace,
+      bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+      provider: provider,
+      decode: nil,
+      shouldInterpolate: false,
+      intent: .defaultIntent
+    ) else { return nil }
+    return UIImage(cgImage: cgImage)
   }
 
   private func rotate(image: UIImage, degrees: Int) -> UIImage {

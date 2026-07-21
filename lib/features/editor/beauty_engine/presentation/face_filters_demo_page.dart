@@ -9,6 +9,7 @@ import '../di/beauty_engine_providers.dart';
 import '../filters/body/body_filter_pipeline.dart';
 import '../filters/face/face_filter_pipeline.dart';
 import '../filters/face/skin_filter_pipeline.dart';
+import '../l10n/beauty_engine_labels.dart';
 import '../models/image_source.dart';
 import '../models/processing_pipeline.dart';
 import 'widgets/beauty_accessible_slider.dart';
@@ -32,49 +33,6 @@ class _FaceFiltersDemoPageState extends ConsumerState<FaceFiltersDemoPage> {
     for (final key in BodyFilterPipeline.bodyWarpParameterKeys) key: 0,
     for (final key in SkinFilterPipeline.skinParameterKeys) key: 0,
     'link_eyes': 1,
-  };
-
-  static const _labels = {
-    'face_slim': 'Face Slim',
-    'narrow_face': 'Narrow Face',
-    'v_face': 'V Face',
-    'nose_slim': 'Nose Slim',
-    'nose_length': 'Nose Length',
-    'nose_height': 'Nose Height',
-    'nose_tip': 'Nose Tip',
-    'nose_bridge': 'Nose Bridge',
-    'eye_scale': 'Eye Scale',
-    'eye_distance': 'Eye Distance',
-    'eye_height': 'Eye Height',
-    'eye_rotation': 'Eye Rotation',
-    'double_eyelid': 'Double Eyelid',
-    'jaw': 'Jaw',
-    'chin': 'Chin',
-    'head_size': 'Head Size',
-    'cheekbone': 'Cheekbone',
-    'forehead': 'Forehead',
-    'temple': 'Temple',
-    'mouth_width': 'Mouth Width',
-    'lip_thickness': 'Lip Thickness',
-    'smile': 'Smile',
-    'skin_smooth': 'Skin Smooth',
-    'skin_whitening': 'Skin Whitening',
-    'remove_acne': 'Remove Acne',
-    'remove_wrinkles': 'Remove Wrinkles',
-    'remove_dark_circles': 'Dark Circles',
-    'teeth_whitening': 'Teeth Whitening',
-    'blush': 'Blush',
-    'contour': 'Contour',
-    'eyebrows': 'Eyebrows',
-    'eyelashes': 'Eyelashes',
-    'waist_slim': 'Waist Slim',
-    'hip': 'Hip',
-    'body_slim': 'Body Slim',
-    'leg_length': 'Leg Length',
-    'leg_slim': 'Leg Slim',
-    'arm_slim': 'Arm Slim',
-    'neck_slim': 'Neck Slim',
-    'shoulder_width': 'Shoulder Width',
   };
 
   Iterable<String> get _allKeys => [
@@ -167,7 +125,7 @@ class _FaceFiltersDemoPageState extends ConsumerState<FaceFiltersDemoPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Beauty Filters (dev)'),
+        title: const Text(BeautyEngineLabels.faceFiltersDevTitle),
         actions: [
           IconButton(
             onPressed: _pickImage,
@@ -194,7 +152,7 @@ class _FaceFiltersDemoPageState extends ConsumerState<FaceFiltersDemoPage> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   SwitchListTile(
-                    title: const Text('Link Eyes (simetria L/R)'),
+                    title: const Text(BeautyEngineLabels.linkEyesTitle),
                     value: _linkEyes,
                     onChanged: _imageBytes == null
                         ? null
@@ -205,7 +163,7 @@ class _FaceFiltersDemoPageState extends ConsumerState<FaceFiltersDemoPage> {
                   ),
                   for (final key in _allKeys)
                     BeautyAccessibleSlider(
-                      label: _labels[key] ?? key,
+                      label: BeautyEngineLabels.parameterLabel(key),
                       value: _params[key] ?? 0,
                       enabled: _imageBytes != null,
                       onChanged: _imageBytes == null

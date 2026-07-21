@@ -2,7 +2,6 @@ package com.editaiapp.beauty_mediapipe
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -37,10 +36,10 @@ class PoseLandmarkerBridge(private val context: Context) {
         poseLandmarker = PoseLandmarker.createFromOptions(context, options)
     }
 
-    fun detectPose(imageBytes: ByteArray, rotation: Int): Map<String, Any?>? {
+    fun detectPose(imageBytes: ByteArray, width: Int, height: Int, rotation: Int): Map<String, Any?>? {
         val landmarker = poseLandmarker ?: return null
 
-        val bitmap = decodeBitmap(imageBytes, rotation) ?: return null
+        val bitmap = ImageBitmapDecoder.decode(imageBytes, width, height, rotation) ?: return null
         val mpImage = BitmapImageBuilder(bitmap).build()
 
         return try {
@@ -59,26 +58,6 @@ class PoseLandmarkerBridge(private val context: Context) {
     fun dispose() {
         poseLandmarker?.close()
         poseLandmarker = null
-    }
-
-    private fun decodeBitmap(imageBytes: ByteArray, rotation: Int): Bitmap? {
-        val options = BitmapFactory.Options().apply {
-            inPreferredConfig = Bitmap.Config.ARGB_8888
-        }
-        var bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, options)
-            ?: return null
-
-        if (rotation != 0) {
-            val matrix = android.graphics.Matrix().apply {
-                postRotate(rotation.toFloat())
-            }
-            val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-            if (rotated != bitmap) {
-                bitmap.recycle()
-            }
-            bitmap = rotated
-        }
-        return bitmap
     }
 
     private fun mapResult(result: PoseLandmarkerResult): Map<String, Any?>? {

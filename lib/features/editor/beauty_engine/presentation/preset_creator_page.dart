@@ -8,19 +8,19 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../di/beauty_engine_feature_flag_provider.dart';
 import '../di/beauty_engine_providers.dart';
+import '../../filter_presets/filter_presets_provider.dart';
+import '../l10n/beauty_engine_labels.dart';
 import '../models/beauty_preset.dart';
-import '../models/body_params.dart';
-import '../models/face_params.dart';
 import '../models/image_source.dart';
 import 'widgets/beauty_accessible_slider.dart';
 import '../models/image_source_rgba.dart';
 import '../models/processing_pipeline.dart';
-import '../models/skin_params.dart';
 import '../models/tune_params.dart';
 import '../presets/bundled_presets.dart';
 
-/// Criador de presets custom — sliders + save/export/import (Sprint 22).
+/// Criador de filtros custom (LUT + cor) — estilo Lightroom (Sprint 22).
 class PresetCreatorPage extends ConsumerStatefulWidget {
   const PresetCreatorPage({super.key, this.editPresetId});
 
@@ -36,9 +36,6 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
 
   String? _presetId;
   TuneParams _tune = const TuneParams();
-  FaceParams _face = const FaceParams();
-  BodyParams _body = const BodyParams();
-  SkinParams _skin = const SkinParams();
   String? _lutAssetPath;
   double _lutIntensity = 1;
 
@@ -51,11 +48,7 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
   bool _isPublic = false;
   bool _syncing = false;
 
-  static const _lutOptions = {
-    'Nenhum': null,
-    'Natural': 'assets/filters/lut/natural.png',
-    'Cinema': 'assets/filters/lut/cinema_teal_orange.png',
-  };
+  static final _lutOptions = BeautyEngineLabels.lutOptionsPt;
 
   @override
   void initState() {
@@ -83,9 +76,6 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
     _presetId = preset.id;
     _nameController.text = preset.name;
     _tune = preset.tune;
-    _face = preset.face;
-    _body = preset.body;
-    _skin = preset.skin;
     _lutAssetPath = preset.lutAssetPath;
     _lutIntensity = preset.lutIntensity;
     _isPublic = preset.isPublic;
@@ -110,14 +100,11 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
     return BeautyPreset(
       id: id ?? _presetId ?? 'user_${_uuid.v4()}',
       name: _nameController.text.trim().isEmpty
-          ? 'Meu preset'
+          ? 'Meu filtro'
           : _nameController.text.trim(),
       lutAssetPath: _lutAssetPath,
       lutIntensity: _lutIntensity,
       tune: _tune,
-      face: _face,
-      body: _body,
-      skin: _skin,
       version: 2,
       isPublic: _isPublic,
     );
@@ -132,7 +119,7 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
     if (!auth.isAuthenticated) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Entre na conta para sincronizar presets')),
+          const SnackBar(content: Text('Entre na conta para sincronizar filtros')),
         );
       }
       return;
@@ -148,7 +135,7 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Presets sincronizados')),
+          const SnackBar(content: Text('Filtros sincronizados')),
         );
       }
     } catch (error) {
@@ -179,21 +166,26 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
       ref.invalidate(userBeautyPresetsProvider);
       ref.invalidate(allBeautyPresetsProvider);
       ref.invalidate(marketplacePresetsProvider);
+      ref.invalidate(filterPresetsProvider);
+      ref.invalidate(manualEditorCustomFiltersProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               value
-                  ? 'Preset publicado no marketplace'
-                  : 'Preset removido do marketplace',
+                  ? 'Filtro publicado no marketplace'
+                  : 'Filtro removido do marketplace',
             ),
           ),
         );
       }
     } catch (error) {
       if (mounted) {
+        final message = error.toString().contains('administradores')
+            ? BeautyEngineLabels.marketplacePublishDenied
+            : 'Erro ao publicar: $error';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao publicar: $error')),
+          SnackBar(content: Text(message)),
         );
       }
     }
@@ -278,12 +270,14 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
       _presetId = saved.id;
       ref.invalidate(userBeautyPresetsProvider);
       ref.invalidate(allBeautyPresetsProvider);
+      ref.invalidate(filterPresetsProvider);
+      ref.invalidate(manualEditorCustomFiltersProvider);
 
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Preset "${saved.name}" salvo')),
+        SnackBar(content: Text('Filtro "${saved.name}" salvo')),
       );
     } catch (error) {
       if (mounted) {
@@ -397,9 +391,16 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
       );
     }
 
+    final canPublishAsync = ref.watch(canPublishBeautyPresetProvider);
+    final adminOnlyAsync = ref.watch(beautyMarketplacePublishAdminOnlyProvider);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_presetId == null ? 'Criar preset' : 'Editar preset'),
+        title: Text(
+          _presetId == null
+              ? BeautyEngineLabels.filterCreatorTitle
+              : 'Editar filtro',
+        ),
         actions: [
           IconButton(
             tooltip: 'Sincronizar nuvem',
@@ -443,43 +444,69 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: _PreviewCard(
+              previewBytes: _previewBytes,
+              processing: _processing,
+              onPickImage: _pickImage,
+              onRefreshPreview: _source == null ? null : _runPreview,
+              compact: true,
+            ),
+          ),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _PreviewCard(
-                  previewBytes: _previewBytes,
-                  processing: _processing,
-                  onPickImage: _pickImage,
-                  onRefreshPreview: _source == null ? null : _runPreview,
-                ),
-                const SizedBox(height: 16),
                 TextField(
                   controller: _nameController,
                   decoration: const InputDecoration(
-                    labelText: 'Nome do preset',
+                    labelText: 'Nome do filtro',
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 12),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Publicar no marketplace'),
-                  subtitle: const Text(
-                    'Outros usuários logados poderão instalar uma cópia deste preset.',
-                  ),
-                  value: _isPublic,
-                  onChanged: (value) {
-                    if (_presetId == null) {
-                      setState(() => _isPublic = value);
-                    } else {
-                      _togglePublic(value);
+                canPublishAsync.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (canPublish) {
+                    if (!canPublish) {
+                      return const SizedBox.shrink();
                     }
+                    final adminOnly = adminOnlyAsync.maybeWhen(
+                      data: (value) => value,
+                      orElse: () => false,
+                    );
+                    return Column(
+                      children: [
+                        const SizedBox(height: 12),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            BeautyEngineLabels.marketplacePublishTitle,
+                          ),
+                          subtitle: Text(
+                            adminOnly
+                                ? BeautyEngineLabels
+                                    .marketplacePublishSubtitleAdminOnly
+                                : BeautyEngineLabels
+                                    .marketplacePublishSubtitleAll,
+                          ),
+                          value: _isPublic,
+                          onChanged: (value) {
+                            if (_presetId == null) {
+                              setState(() => _isPublic = value);
+                            } else {
+                              _togglePublic(value);
+                            }
+                          },
+                        ),
+                      ],
+                    );
                   },
                 ),
                 const SizedBox(height: 16),
                 _Section(
-                  title: 'LUT',
+                  title: BeautyEngineLabels.sectionLut,
                   children: [
                     DropdownButtonFormField<String?>(
                       value: _lutAssetPath,
@@ -511,7 +538,7 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
                   ],
                 ),
                 _Section(
-                  title: 'Cor / Tune',
+                  title: BeautyEngineLabels.sectionTune,
                   children: [
                     _SliderRow(
                       label: 'Brilho',
@@ -559,114 +586,35 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
                         _runPreview();
                       },
                     ),
-                  ],
-                ),
-                _Section(
-                  title: 'Rosto',
-                  children: [
                     _SliderRow(
-                      label: 'Face slim',
-                      value: _face.faceSlim,
+                      label: 'Exposição',
+                      value: _tune.exposure,
+                      min: -0.5,
+                      max: 0.5,
                       onChanged: (v) {
-                        setState(() => _face = FaceParams(
-                              faceSlim: v,
-                              noseSlim: _face.noseSlim,
-                              eyeScale: _face.eyeScale,
-                              cheekbone: _face.cheekbone,
+                        setState(() => _tune = TuneParams(
+                              brightness: _tune.brightness,
+                              contrast: _tune.contrast,
+                              saturation: _tune.saturation,
+                              exposure: v,
+                              temperature: _tune.temperature,
                             ));
                         _runPreview();
                       },
                     ),
                     _SliderRow(
-                      label: 'Nose slim',
-                      value: _face.noseSlim,
+                      label: 'Temperatura',
+                      value: _tune.temperature,
+                      min: -0.5,
+                      max: 0.5,
                       onChanged: (v) {
-                        setState(() => _face = FaceParams(
-                              faceSlim: _face.faceSlim,
-                              noseSlim: v,
-                              eyeScale: _face.eyeScale,
-                              cheekbone: _face.cheekbone,
+                        setState(() => _tune = TuneParams(
+                              brightness: _tune.brightness,
+                              contrast: _tune.contrast,
+                              saturation: _tune.saturation,
+                              exposure: _tune.exposure,
+                              temperature: v,
                             ));
-                        _runPreview();
-                      },
-                    ),
-                    _SliderRow(
-                      label: 'Eye scale',
-                      value: _face.eyeScale,
-                      onChanged: (v) {
-                        setState(() => _face = FaceParams(
-                              faceSlim: _face.faceSlim,
-                              noseSlim: _face.noseSlim,
-                              eyeScale: v,
-                              cheekbone: _face.cheekbone,
-                            ));
-                        _runPreview();
-                      },
-                    ),
-                    _SliderRow(
-                      label: 'Cheekbone',
-                      value: _face.cheekbone,
-                      onChanged: (v) {
-                        setState(() => _face = FaceParams(
-                              faceSlim: _face.faceSlim,
-                              noseSlim: _face.noseSlim,
-                              eyeScale: _face.eyeScale,
-                              cheekbone: v,
-                            ));
-                        _runPreview();
-                      },
-                    ),
-                  ],
-                ),
-                _Section(
-                  title: 'Pele',
-                  children: [
-                    _SliderRow(
-                      label: 'Skin smooth',
-                      value: _skin.smooth,
-                      onChanged: (v) {
-                        setState(() => _skin = SkinParams(
-                              smooth: v,
-                              whitening: _skin.whitening,
-                              blush: _skin.blush,
-                            ));
-                        _runPreview();
-                      },
-                    ),
-                    _SliderRow(
-                      label: 'Whitening',
-                      value: _skin.whitening,
-                      onChanged: (v) {
-                        setState(() => _skin = SkinParams(
-                              smooth: _skin.smooth,
-                              whitening: v,
-                              blush: _skin.blush,
-                            ));
-                        _runPreview();
-                      },
-                    ),
-                    _SliderRow(
-                      label: 'Blush',
-                      value: _skin.blush,
-                      onChanged: (v) {
-                        setState(() => _skin = SkinParams(
-                              smooth: _skin.smooth,
-                              whitening: _skin.whitening,
-                              blush: v,
-                            ));
-                        _runPreview();
-                      },
-                    ),
-                  ],
-                ),
-                _Section(
-                  title: 'Corpo',
-                  children: [
-                    _SliderRow(
-                      label: 'Waist slim',
-                      value: _body.waistSlim,
-                      onChanged: (v) {
-                        setState(() => _body = BodyParams(waistSlim: v));
                         _runPreview();
                       },
                     ),
@@ -687,44 +635,55 @@ class _PreviewCard extends StatelessWidget {
     required this.processing,
     required this.onPickImage,
     this.onRefreshPreview,
+    this.compact = false,
   });
 
   final Uint8List? previewBytes;
   final bool processing;
   final VoidCallback onPickImage;
   final VoidCallback? onRefreshPreview;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    final preview = AspectRatio(
+      aspectRatio: compact ? 16 / 9 : 4 / 5,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (previewBytes == null)
+            Center(
+              child: TextButton.icon(
+                onPressed: onPickImage,
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+                label: const Text('Foto para preview'),
+              ),
+            )
+          else
+            Image.memory(previewBytes!, fit: BoxFit.cover),
+          if (processing)
+            const ColoredBox(
+              color: Color(0x44000000),
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
+            ),
+        ],
+      ),
+    );
+
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          AspectRatio(
-            aspectRatio: 4 / 5,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (previewBytes == null)
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: onPickImage,
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                      label: const Text('Foto para preview'),
-                    ),
-                  )
-                else
-                  Image.memory(previewBytes!, fit: BoxFit.cover),
-                if (processing)
-                  const ColoredBox(
-                    color: Color(0x44000000),
-                    child: Center(
-                      child: CircularProgressIndicator(color: AppColors.primary),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          if (compact)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220),
+              child: preview,
+            )
+          else
+            preview,
           Padding(
             padding: const EdgeInsets.all(8),
             child: Row(

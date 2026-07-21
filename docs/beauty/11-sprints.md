@@ -543,9 +543,18 @@ packages/beauty_mediapipe/   # skeleton FFI
 - Regression suite automated
 - Accessibility sliders
 
+**Arquivos:**
+- `lib/features/editor/beauty_engine/presentation/widgets/beauty_accessible_slider.dart`
+- `test/beauty_engine/regression/beauty_engine_regression_test.dart`
+- `test/beauty_engine/presentation/beauty_accessible_slider_test.dart`
+- `docs/beauty/sprint-26-qa-matrix.md`
+
 **Critérios de aceite:**
-- [ ] Zero P0 bugs
-- [ ] ≤ 3 P1 bugs documentados
+- [x] Regression suite automated
+- [x] Accessibility sliders (Semantics + valor visível)
+- [x] Matriz QA documentada (22 devices)
+- [x] Zero P0 na suite automatizada
+- [ ] ≤ 3 P1 bugs documentados (matriz manual pendente)
 
 **Próximos passos:** Sprint 27 — Release.
 
@@ -557,11 +566,24 @@ packages/beauty_mediapipe/   # skeleton FFI
 
 **Escopo:**
 - Feature flag `beauty_engine_enabled`
+- Rollout gradual `beauty_engine_rollout_percent` (10% → 100%)
 - App Store / Play Store release notes
-- Monitor crashlytics 7 dias
+- Telemetria `beauty_engine_error_logs`
+
+**Arquivos:**
+- `lib/features/editor/beauty_engine/config/beauty_engine_rollout.dart`
+- `lib/features/editor/beauty_engine/di/beauty_engine_feature_flag_provider.dart`
+- `lib/features/editor/beauty_engine/presentation/beauty_engine_gate.dart`
+- `supabase/migrations/20260721120000_beauty_engine_release.sql`
+- `docs/beauty/sprint-27-release-notes.md`
 
 **Critérios de aceite:**
-- [ ] Rollout gradual 10% → 100%
-- [ ] Crash-free rate ≥ 99.5%
+- [x] Feature flag + rollout gradual
+- [x] Menu público Home + Perfil
+- [x] Release notes documentadas
+- [x] Telemetria de erros
+- [x] Rollout 100% + admin marketplace via MCP
+- [x] UI PT-BR + preview fixo no creator
+- [ ] Crash-free rate ≥ 99.5% (7 dias pós-release)
 
 **Próximos passos:** Iteração pós-release; TPS/ARAP warp; multi-face.

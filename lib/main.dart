@@ -27,6 +27,7 @@ import 'features/editor/beauty_engine/presentation/beauty_editor_page.dart';
 import 'features/editor/beauty_engine/presentation/face_filters_demo_page.dart';
 import 'features/editor/beauty_engine/presentation/preset_creator_page.dart';
 import 'features/editor/beauty_engine/presentation/preset_marketplace_page.dart';
+import 'features/editor/beauty_engine/presentation/beauty_engine_gate.dart';
 import 'features/editor/beauty_engine/presentation/preset_sync_bootstrap.dart';
 import 'features/editor/presentation/pages/editor_page.dart';
 import 'features/gallery/presentation/pages/gallery_page.dart';
@@ -210,16 +211,19 @@ class MyApp extends ConsumerWidget {
           return MainShellPage(initialIndex: index);
         },
         '/manual-editor': (context) => const ManualEditorEntryPage(),
-        if (kDebugMode) ...{
-          '/dev/face-filters': (context) => const FaceFiltersDemoPage(),
-          '/beauty-editor': (context) => const BeautyEditorPage(),
-          '/beauty-preset-creator': (context) {
-            final editId = ModalRoute.of(context)?.settings.arguments as String?;
-            return PresetCreatorPage(editPresetId: editId);
-          },
-          '/beauty-preset-marketplace': (context) =>
-              const PresetMarketplacePage(),
+        '/beauty-editor': (context) =>
+            const BeautyEngineGate(child: BeautyEditorPage()),
+        '/beauty-preset-creator': (context) {
+          final editId = ModalRoute.of(context)?.settings.arguments as String?;
+          return BeautyEngineGate(
+            child: PresetCreatorPage(editPresetId: editId),
+          );
         },
+        '/beauty-preset-marketplace': (context) => const BeautyEngineGate(
+              child: PresetMarketplacePage(),
+            ),
+        if (kDebugMode)
+          '/dev/face-filters': (context) => const FaceFiltersDemoPage(),
         '/editor': (context) => const EditorPage(),
         '/gallery': (context) => const GalleryPage(),
         '/pre-evaluation': (context) {

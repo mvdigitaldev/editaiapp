@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:async' show Timer, unawaited;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -7,13 +7,14 @@ import 'package:image_picker/image_picker.dart' as image_picker;
 
 import '../../../../core/theme/app_colors.dart';
 import '../di/beauty_engine_providers.dart';
-import '../models/beauty_preset.dart';
-import '../presets/bundled_presets.dart';
+import '../diagnostics/beauty_engine_error_reporter.dart';
+import '../l10n/beauty_engine_labels.dart';
 import '../models/image_source.dart';
 import '../models/image_source_rgba.dart';
 import '../models/processing_pipeline.dart';
+import 'widgets/beauty_adjustments_panel.dart';
 
-/// Editor Beauty MVP — aplica preset completo em 1 toque (Sprint 21).
+/// Editor de retoque beauty — ajustes manuais rosto/nariz/corpo/pele.
 class BeautyEditorPage extends ConsumerStatefulWidget {
   const BeautyEditorPage({super.key});
 
@@ -22,20 +23,32 @@ class BeautyEditorPage extends ConsumerStatefulWidget {
 }
 
 class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
+  static final _errorReporter = BeautyEngineErrorReporter();
+
   Uint8List? _imageBytes;
   Uint8List? _previewBytes;
   ImageSource? _source;
-  ImageSource? _fullResSource;
-  String? _selectedPresetId;
   bool _processing = false;
   bool _showOriginal = false;
+  bool _linkEyes = true;
   int? _lastApplyMs;
   bool _prewarmed = false;
+  Timer? _debounceTimer;
+  bool _previewQueued = false;
+
+  late Map<String, double> _params =
+      BeautyAdjustmentsPanel.initialParams(linkEyes: true);
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _prewarmShaders());
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _prewarmShaders() async {
@@ -71,23 +84,46 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       _imageBytes = bytes;
       _previewBytes = bytes;
       _source = source;
-      _fullResSource = source;
-      _selectedPresetId = null;
       _lastApplyMs = null;
       _showOriginal = false;
+      _params = BeautyAdjustmentsPanel.initialParams(linkEyes: _linkEyes);
+    });
+    _schedulePreview();
+  }
+
+  void _onParamChanged(String key, double value) {
+    setState(() => _params[key] = value);
+    _schedulePreview();
+  }
+
+  void _onLinkEyesChanged(bool value) {
+    setState(() {
+      _linkEyes = value;
+      _params['link_eyes'] = value ? 1 : 0;
+    });
+    _schedulePreview();
+  }
+
+  void _schedulePreview() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 150), () {
+      if (_source == null) {
+        return;
+      }
+      if (_processing) {
+        _previewQueued = true;
+        return;
+      }
+      unawaited(_processPreview());
     });
   }
 
-  Future<void> _applyPreset(BeautyPreset preset) async {
-    if (_source == null || _processing) {
+  Future<void> _processPreview() async {
+    if (_source == null) {
       return;
     }
 
-    setState(() {
-      _processing = true;
-      _selectedPresetId = preset.id;
-      _showOriginal = false;
-    });
+    setState(() => _processing = true);
 
     final stopwatch = Stopwatch()..start();
 
@@ -95,9 +131,11 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       final controller = ref.read(beautyEngineControllerProvider);
       final previewSource = ImageSourceRgba.downscaleForPreview(_source!);
 
+      final face = await controller.detectFace(previewSource);
+
       final jpeg = await controller.exportJpeg(
         source: previewSource,
-        pipeline: ProcessingPipeline(preset: preset),
+        pipeline: ProcessingPipeline(overrides: Map<String, double>.of(_params)),
         quality: 85,
       );
 
@@ -107,20 +145,64 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       if (!mounted) {
         return;
       }
+
+      final needsFace = _paramsNeedFaceOrSkin(_params);
+      if (face == null && needsFace) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(BeautyEngineLabels.faceNotDetectedHint),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+
       setState(() {
         _previewBytes = jpeg;
-        _lastApplyMs = profile.totalMs > 0 ? profile.totalMs : stopwatch.elapsedMilliseconds;
-        _processing = false;
+        _lastApplyMs =
+            profile.totalMs > 0 ? profile.totalMs : stopwatch.elapsedMilliseconds;
+        _showOriginal = false;
       });
-    } catch (error) {
-      if (!mounted) {
-        return;
+    } catch (error, stackTrace) {
+      unawaited(_errorReporter.report(
+        error,
+        context: 'adjustments_preview',
+        stackTrace: stackTrace,
+      ));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_friendlyError(error))),
+        );
       }
-      setState(() => _processing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_friendlyError(error))),
-      );
+    } finally {
+      if (mounted) {
+        setState(() => _processing = false);
+        if (_previewQueued) {
+          _previewQueued = false;
+          _schedulePreview();
+        }
+      } else {
+        _processing = false;
+        _previewQueued = false;
+      }
     }
+  }
+
+  bool _paramsNeedFaceOrSkin(Map<String, double> params) {
+    const faceAndSkinKeys = {
+      'face_slim', 'narrow_face', 'v_face', 'nose_slim', 'nose_length',
+      'nose_height', 'nose_tip', 'nose_bridge', 'eye_scale', 'eye_distance',
+      'eye_height', 'eye_rotation', 'double_eyelid', 'jaw', 'chin',
+      'cheekbone', 'forehead', 'temple', 'mouth_width', 'lip_thickness',
+      'smile', 'head_size', 'skin_smooth', 'skin_whitening', 'remove_acne',
+      'remove_wrinkles', 'remove_dark_circles', 'teeth_whitening', 'blush',
+      'contour', 'eyebrows', 'eyelashes',
+    };
+    for (final key in faceAndSkinKeys) {
+      if ((params[key] ?? 0) > 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   String _friendlyError(Object error) {
@@ -132,31 +214,15 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     if (text.contains('detect_failed') || text.contains('image_decode_failed')) {
       return 'Não foi possível processar esta foto.';
     }
-    return 'Erro ao aplicar preset: $error';
+    return 'Erro ao aplicar ajuste: $error';
   }
 
   @override
   Widget build(BuildContext context) {
-    final presetsAsync = ref.watch(allBeautyPresetsProvider);
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Beauty Editor'),
+        title: const Text(BeautyEngineLabels.beautyEditorTitle),
         actions: [
-          IconButton(
-            tooltip: 'Marketplace',
-            onPressed: () {
-              Navigator.of(context).pushNamed('/beauty-preset-marketplace');
-            },
-            icon: const Icon(Icons.storefront_outlined),
-          ),
-          IconButton(
-            tooltip: 'Criar preset',
-            onPressed: () {
-              Navigator.of(context).pushNamed('/beauty-preset-creator');
-            },
-            icon: const Icon(Icons.tune),
-          ),
           if (_imageBytes != null)
             IconButton(
               tooltip: _showOriginal ? 'Ver editada' : 'Ver original',
@@ -164,6 +230,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
               icon: Icon(_showOriginal ? Icons.auto_fix_high : Icons.compare),
             ),
           IconButton(
+            tooltip: 'Selecionar foto',
             onPressed: _pickImage,
             icon: const Icon(Icons.photo_library_outlined),
           ),
@@ -180,7 +247,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                     child: Padding(
                       padding: EdgeInsets.all(24),
                       child: Text(
-                        'Selecione uma foto e toque em um preset para aplicar em 1 toque.',
+                        BeautyEngineLabels.beautyEditorEmptyHint,
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -196,7 +263,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                           fit: BoxFit.contain,
                           gaplessPlayback: true,
                           key: ValueKey(
-                            _showOriginal ? 'original' : 'preview_$_selectedPresetId',
+                            _showOriginal ? 'original' : 'preview_${_params.hashCode}',
                           ),
                         ),
                       ),
@@ -221,27 +288,12 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
               ],
             ),
           ),
-          presetsAsync.when(
-            loading: () => const SizedBox(
-              height: 96,
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-            ),
-            error: (error, _) => SizedBox(
-              height: 96,
-              child: Center(child: Text('Erro ao carregar presets: $error')),
-            ),
-            data: (presets) => _PresetStrip(
-              presets: presets,
-              selectedId: _selectedPresetId,
-              enabled: _source != null && !_processing,
-              onSelected: _applyPreset,
-              onEditUserPreset: (preset) {
-                Navigator.of(context).pushNamed(
-                  '/beauty-preset-creator',
-                  arguments: preset.id,
-                );
-              },
-            ),
+          BeautyAdjustmentsPanel(
+            params: _params,
+            enabled: _source != null && !_processing,
+            linkEyes: _linkEyes,
+            onParamChanged: _onParamChanged,
+            onLinkEyesChanged: _onLinkEyesChanged,
           ),
         ],
       ),
@@ -259,7 +311,9 @@ class _ApplyTimeBadge extends StatelessWidget {
     final fast = milliseconds < 500;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: fast ? AppColors.success.withValues(alpha: 0.9) : AppColors.warning.withValues(alpha: 0.9),
+        color: fast
+            ? AppColors.success.withValues(alpha: 0.9)
+            : AppColors.warning.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Padding(
@@ -270,137 +324,6 @@ class _ApplyTimeBadge extends StatelessWidget {
             color: Colors.white,
             fontWeight: FontWeight.w600,
             fontSize: 12,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PresetStrip extends StatelessWidget {
-  const _PresetStrip({
-    required this.presets,
-    required this.selectedId,
-    required this.enabled,
-    required this.onSelected,
-    this.onEditUserPreset,
-  });
-
-  final List<BeautyPreset> presets;
-  final String? selectedId;
-  final bool enabled;
-  final ValueChanged<BeautyPreset> onSelected;
-  final ValueChanged<BeautyPreset>? onEditUserPreset;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 108,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-        itemCount: presets.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (context, index) {
-          final preset = presets[index];
-          final selected = preset.id == selectedId;
-          final isUser = !BundledBeautyPresets.isBundled(preset.id);
-          return _PresetChip(
-            label: preset.name,
-            selected: selected,
-            enabled: enabled,
-            isUser: isUser,
-            thumbnailPath: preset.thumbnailPath,
-            onTap: () => onSelected(preset),
-            onLongPress: isUser ? () => onEditUserPreset?.call(preset) : null,
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _PresetChip extends StatelessWidget {
-  const _PresetChip({
-    required this.label,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-    this.isUser = false,
-    this.thumbnailPath,
-    this.onLongPress,
-  });
-
-  final String label;
-  final bool selected;
-  final bool enabled;
-  final bool isUser;
-  final String? thumbnailPath;
-  final VoidCallback onTap;
-  final VoidCallback? onLongPress;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        onLongPress: enabled ? onLongPress : null,
-        borderRadius: BorderRadius.circular(14),
-        child: Ink(
-          width: 92,
-          height: 72,
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.primary
-                : (isDark ? AppColors.surfaceDarkSecondary : AppColors.surfaceLight),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: selected
-                  ? AppColors.primary
-                  : (isUser
-                      ? AppColors.success.withValues(alpha: 0.6)
-                      : (isDark ? AppColors.borderDark : AppColors.border)),
-              width: isUser ? 2 : 1,
-            ),
-            image: thumbnailPath != null
-                ? DecorationImage(
-                    image: FileImage(File(thumbnailPath!)),
-                    fit: BoxFit.cover,
-                    colorFilter: selected
-                        ? ColorFilter.mode(
-                            AppColors.primary.withValues(alpha: 0.35),
-                            BlendMode.srcOver,
-                          )
-                        : null,
-                  )
-                : null,
-          ),
-          child: Center(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: selected
-                    ? Colors.white
-                    : (enabled
-                        ? theme.colorScheme.onSurface
-                        : theme.disabledColor),
-                shadows: thumbnailPath != null
-                    ? const [
-                        Shadow(
-                          blurRadius: 4,
-                          color: Colors.black54,
-                        ),
-                      ]
-                    : null,
-              ),
-            ),
           ),
         ),
       ),

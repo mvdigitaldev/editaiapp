@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:editaiapp/features/subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../../core/providers/enable_plans_provider.dart';
+import '../../../editor/beauty_engine/di/beauty_engine_feature_flag_provider.dart';
 import '../../../../core/utils/server_date_utils.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -27,6 +28,7 @@ class ProfilePage extends ConsumerWidget {
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
     final enablePlansAsync = ref.watch(enablePlansProvider);
+    final beautyEnabledAsync = ref.watch(beautyEngineEnabledProvider);
 
     String? renewalText;
     if (user != null &&
@@ -449,6 +451,67 @@ class ProfilePage extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    beautyEnabledAsync.when(
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
+                      data: (enabled) {
+                        if (!enabled) {
+                          return const SizedBox.shrink();
+                        }
+                        return Column(
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 4, bottom: 8),
+                                child: Text(
+                                  'RETOQUE & FILTROS',
+                                  style: AppTextStyles.overline.copyWith(
+                                    color: isDark
+                                        ? AppColors.textTertiary
+                                        : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            AppCard(
+                              padding: EdgeInsets.zero,
+                              child: Column(
+                                children: [
+                                  _ProfileOption(
+                                    icon: Icons.auto_fix_high,
+                                    label: 'Retoque beauty',
+                                    onTap: () {
+                                      Navigator.of(context)
+                                          .pushNamed('/beauty-editor');
+                                    },
+                                  ),
+                                  _ProfileOption(
+                                    icon: Icons.tune,
+                                    label: 'Criar filtro custom',
+                                    onTap: () {
+                                      Navigator.of(context).pushNamed(
+                                        '/beauty-preset-creator',
+                                      );
+                                    },
+                                  ),
+                                  _ProfileOption(
+                                    icon: Icons.storefront_outlined,
+                                    label: 'Marketplace de filtros',
+                                    onTap: () {
+                                      Navigator.of(context).pushNamed(
+                                        '/beauty-preset-marketplace',
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                        );
+                      },
+                    ),
                     if (kDebugMode) ...[
                       Align(
                         alignment: Alignment.centerLeft,
@@ -469,31 +532,11 @@ class ProfilePage extends ConsumerWidget {
                         child: Column(
                           children: [
                             _ProfileOption(
-                              icon: Icons.auto_fix_high,
-                              label: 'Beauty Editor (presets)',
-                              onTap: () {
-                                Navigator.of(context).pushNamed('/beauty-editor');
-                              },
-                            ),
-                            _ProfileOption(
-                              icon: Icons.tune,
-                              label: 'Criar preset custom',
-                              onTap: () {
-                                Navigator.of(context).pushNamed('/beauty-preset-creator');
-                              },
-                            ),
-                            _ProfileOption(
-                              icon: Icons.storefront_outlined,
-                              label: 'Marketplace de presets',
-                              onTap: () {
-                                Navigator.of(context).pushNamed('/beauty-preset-marketplace');
-                              },
-                            ),
-                            _ProfileOption(
                               icon: Icons.face_retouching_natural,
                               label: 'Testar filtros faciais (Beauty Engine)',
                               onTap: () {
-                                Navigator.of(context).pushNamed('/dev/face-filters');
+                                Navigator.of(context)
+                                    .pushNamed('/dev/face-filters');
                               },
                             ),
                           ],

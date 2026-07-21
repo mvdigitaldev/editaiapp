@@ -47,8 +47,15 @@ public class BeautyMediapipePlugin: NSObject, FlutterPlugin {
         return
       }
       let rotation = args["rotation"] as? Int ?? 0
+      let width = args["width"] as? Int ?? 0
+      let height = args["height"] as? Int ?? 0
       do {
-        let mapped = try bridge.detectFace(imageBytes: bytes.data, rotation: rotation)
+        let mapped = try bridge.detectFace(
+          imageBytes: bytes.data,
+          width: width,
+          height: height,
+          rotation: rotation
+        )
         result(mapped)
       } catch {
         result(FlutterError(code: "detect_failed", message: error.localizedDescription, details: nil))
@@ -65,8 +72,15 @@ public class BeautyMediapipePlugin: NSObject, FlutterPlugin {
         return
       }
       let rotation = args["rotation"] as? Int ?? 0
+      let width = args["width"] as? Int ?? 0
+      let height = args["height"] as? Int ?? 0
       do {
-        let mapped = try bridge.detectPose(imageBytes: bytes.data, rotation: rotation)
+        let mapped = try bridge.detectPose(
+          imageBytes: bytes.data,
+          width: width,
+          height: height,
+          rotation: rotation
+        )
         result(mapped)
       } catch {
         result(FlutterError(code: "detect_failed", message: error.localizedDescription, details: nil))

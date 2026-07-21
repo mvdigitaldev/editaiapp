@@ -9,6 +9,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../gallery/data/models/gallery_edit_model.dart';
 import '../../../gallery/presentation/providers/gallery_provider.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
+import '../../../editor/beauty_engine/di/beauty_engine_feature_flag_provider.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -25,6 +26,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
     final recentEditsAsync = ref.watch(recentEditsProvider);
+    final beautyEnabledAsync = ref.watch(beautyEngineEnabledProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -153,6 +155,29 @@ class _HomePageState extends ConsumerState<HomePage> {
                               'Filtros, ajustes e recorte — sem IA, grátis.',
                           onTap: () => Navigator.of(context)
                               .pushNamed('/manual-editor'),
+                        ),
+                        beautyEnabledAsync.when(
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                          data: (enabled) {
+                            if (!enabled) {
+                              return const SizedBox.shrink();
+                            }
+                            return Column(
+                              children: [
+                                const SizedBox(height: 12),
+                                _HeroActionCard(
+                                  index: 5,
+                                  icon: Icons.auto_fix_high,
+                                  title: 'Retoque beauty',
+                                  description:
+                                      'Presets profissionais — rosto, corpo e pele.',
+                                  onTap: () => Navigator.of(context)
+                                      .pushNamed('/beauty-editor'),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                         const SizedBox(height: 12),
                         _HeroActionCard(

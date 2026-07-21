@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:postgrest/postgrest.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/utils/postgrest_user_message.dart';
 import '../models/beauty_preset.dart';
 import '../models/beauty_preset_marketplace_entry.dart';
 import 'beauty_preset_local_store.dart';
@@ -113,7 +115,11 @@ class BeautyPresetRepositoryImpl implements BeautyPresetRepository {
     user.removeWhere((entry) => entry.id == stamped.id);
 
     if (_remote != null && userId != null) {
-      stamped = await _pushPresetToRemote(stamped, userId);
+      try {
+        stamped = await _pushPresetToRemote(stamped, userId);
+      } on PostgrestException catch (e) {
+        throw Exception(_marketplacePublishErrorMessage(e, preset: stamped));
+      }
     }
 
     user.add(stamped);
@@ -373,4 +379,20 @@ class BeautyPresetRepositoryImpl implements BeautyPresetRepository {
     }
     return hydrated;
   }
+}
+
+String _marketplacePublishErrorMessage(
+  PostgrestException e, {
+  required BeautyPreset preset,
+}) {
+  if (!preset.isPublic) {
+    return postgrestUserMessage(e);
+  }
+  final msg = postgrestUserMessage(e);
+  if (msg.contains('Sem permissão') ||
+      e.code == '42501' ||
+      e.message.toLowerCase().contains('policy')) {
+    return 'Apenas administradores podem publicar presets no marketplace.';
+  }
+  return msg;
 }

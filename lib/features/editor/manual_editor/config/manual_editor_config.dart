@@ -90,7 +90,14 @@ const manualEditorI18n = I18n(
 );
 
 /// Configuração do pro_image_editor — tune, crop e filtros apenas.
-ProImageEditorConfigs buildManualEditorConfigs() {
+ProImageEditorConfigs buildManualEditorConfigs({
+  List<FilterModel> extraFilters = const [],
+}) {
+  final filterList = [
+    ...manualEditorFilterPresets,
+    ...extraFilters,
+  ];
+
   return ProImageEditorConfigs(
     designMode: ImageEditorDesignMode.material,
     i18n: manualEditorI18n,
@@ -196,7 +203,7 @@ ProImageEditorConfigs buildManualEditorConfigs() {
     ),
     filterEditor: FilterEditorConfigs(
       enabled: true,
-      filterList: manualEditorFilterPresets,
+      filterList: filterList,
       style: const FilterEditorStyle(
         appBarBackground: AppColors.backgroundDarkSecondary,
         appBarColor: AppColors.textLight,

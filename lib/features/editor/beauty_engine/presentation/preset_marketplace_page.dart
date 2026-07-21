@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../filter_presets/filter_presets_provider.dart';
 import '../di/beauty_engine_providers.dart';
+import '../l10n/beauty_engine_labels.dart';
 import '../models/beauty_preset_marketplace_entry.dart';
 
-/// Browse e instalação de presets públicos (Sprint 24).
+/// Browse e instalação de filtros públicos (Sprint 24).
 class PresetMarketplacePage extends ConsumerStatefulWidget {
   const PresetMarketplacePage({super.key});
 
@@ -36,13 +38,19 @@ class _PresetMarketplacePageState extends ConsumerState<PresetMarketplacePage> {
 
       ref.invalidate(userBeautyPresetsProvider);
       ref.invalidate(allBeautyPresetsProvider);
+      ref.invalidate(filterPresetsProvider);
+      ref.invalidate(manualEditorCustomFiltersProvider);
 
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Preset "${installed.name}" instalado')),
+        SnackBar(
+          content: Text(
+            '${installed.name}: ${BeautyEngineLabels.filterInstalledHint}',
+          ),
+        ),
       );
     } catch (error) {
       if (mounted) {
@@ -64,7 +72,7 @@ class _PresetMarketplacePageState extends ConsumerState<PresetMarketplacePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Marketplace de Presets'),
+        title: const Text(BeautyEngineLabels.filterMarketplaceTitle),
         actions: [
           IconButton(
             tooltip: 'Atualizar',
@@ -99,7 +107,7 @@ class _PresetMarketplacePageState extends ConsumerState<PresetMarketplacePage> {
                         Icon(Icons.storefront_outlined, size: 56),
                         SizedBox(height: 16),
                         Text(
-                          'Nenhum preset público ainda.\nPublique o seu no Criador de Presets.',
+                          'Nenhum filtro público ainda.\nPublique o seu em Criar filtro custom.',
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -145,7 +153,7 @@ class _LoginRequired extends StatelessWidget {
             const Icon(Icons.lock_outline, size: 56),
             const SizedBox(height: 16),
             const Text(
-              'Entre na sua conta para explorar e instalar presets públicos.',
+              'Entre na sua conta para explorar e instalar filtros públicos.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
@@ -218,7 +226,7 @@ class _MarketplaceCard extends StatelessWidget {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Instalar'),
+                  : const Text(BeautyEngineLabels.filterInstallAction),
             ),
           ],
         ),

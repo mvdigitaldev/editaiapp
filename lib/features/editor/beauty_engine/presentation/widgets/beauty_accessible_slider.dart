@@ -37,15 +37,14 @@ class BeautyAccessibleSlider extends StatelessWidget {
     final display = _formatValue(clamped);
     final theme = Theme.of(context);
 
-    return Semantics(
-      label: label,
-      value: display,
-      slider: true,
-      enabled: enabled,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          label: label,
+          value: display,
+          excludeSemantics: true,
+          child: Row(
             children: [
               Expanded(
                 child: Text(
@@ -64,23 +63,23 @@ class BeautyAccessibleSlider extends StatelessWidget {
               ),
             ],
           ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
-              trackHeight: 4,
-            ),
-            child: Slider(
-              value: clamped,
-              min: min,
-              max: max,
-              divisions: divisions,
-              label: display,
-              onChanged: enabled ? onChanged : null,
-              semanticFormatterCallback: (raw) => '$label, $display',
-            ),
+        ),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
+            trackHeight: 4,
           ),
-        ],
-      ),
+          child: Slider(
+            value: clamped,
+            min: min,
+            max: max,
+            divisions: divisions,
+            label: display,
+            onChanged: enabled ? onChanged : null,
+            semanticFormatterCallback: (raw) => '$label, $display',
+          ),
+        ),
+      ],
     );
   }
 }

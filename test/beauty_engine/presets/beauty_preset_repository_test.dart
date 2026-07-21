@@ -28,11 +28,11 @@ void main() {
         containsAll([
           'Natural',
           'Instagram',
-          'Influencer',
-          'Beauty',
-          'Wedding',
-          'Studio',
-          'Soft',
+          'Influenciador',
+          'Beleza',
+          'Casamento',
+          'Estúdio',
+          'Suave',
           'Cinema',
         ]),
       );
