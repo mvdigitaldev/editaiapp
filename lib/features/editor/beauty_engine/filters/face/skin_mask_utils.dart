@@ -1,7 +1,12 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
+import '../../models/face_landmark.dart';
 import '../../models/face_mesh_result.dart';
 import 'face_warp_utils.dart';
+import 'skin_soft_region.dart';
+
+export 'skin_soft_region.dart';
 
 /// Máscaras faciais para skin engine (face oval − olhos/boca).
 class SkinProcessingMask {
@@ -10,9 +15,11 @@ class SkinProcessingMask {
     required this.protectedRegions,
     required this.cheekRegions,
     required this.underEyeRegions,
+    required this.underEyeEllipses,
     required this.eyebrowRegions,
     required this.eyelashRegions,
     required this.innerMouthRegions,
+    required this.innerMouthEllipse,
     required this.foreheadRegions,
     required this.contourRegions,
   });
@@ -21,9 +28,11 @@ class SkinProcessingMask {
   final List<Rect> protectedRegions;
   final List<Rect> cheekRegions;
   final List<Rect> underEyeRegions;
+  final List<NormalizedEllipse> underEyeEllipses;
   final List<Rect> eyebrowRegions;
   final List<Rect> eyelashRegions;
   final List<Rect> innerMouthRegions;
+  final NormalizedEllipse? innerMouthEllipse;
   final List<Rect> foreheadRegions;
   final List<Rect> contourRegions;
 
@@ -80,6 +89,24 @@ abstract final class SkinMaskUtils {
       pad: 0.12,
     );
 
+    final leftEyeEllipse = _ellipseForIndices(
+      face,
+      _leftEyeIndices,
+      padX: 0.012,
+      padY: 0.010,
+    );
+    final rightEyeEllipse = _ellipseForIndices(
+      face,
+      _rightEyeIndices,
+      padX: 0.012,
+      padY: 0.010,
+    );
+
+    final underEyeEllipses = [
+      if (leftEyeEllipse != null) _underEyeEllipse(leftEyeEllipse),
+      if (rightEyeEllipse != null) _underEyeEllipse(rightEyeEllipse),
+    ].where((e) => e.isValid).toList();
+
     final underEyeLeft = _underEyeRegion(leftEye);
     final underEyeRight = _underEyeRegion(rightEye);
 
@@ -101,6 +128,12 @@ abstract final class SkinMaskUtils {
       imageSize,
       _innerMouthIndices,
       pad: 0.02,
+    );
+    final innerMouthEllipse = _ellipseForIndices(
+      face,
+      _innerMouthIndices,
+      padX: 0.028,
+      padY: 0.022,
     );
 
     final forehead = _boundsForIndices(
@@ -128,9 +161,11 @@ abstract final class SkinMaskUtils {
       protectedRegions: protected,
       cheekRegions: [leftCheek, rightCheek].where((r) => !r.isEmpty).toList(),
       underEyeRegions: [underEyeLeft, underEyeRight].where((r) => !r.isEmpty).toList(),
+      underEyeEllipses: underEyeEllipses,
       eyebrowRegions: [leftBrow, rightBrow].where((r) => !r.isEmpty).toList(),
       eyelashRegions: [lashLeft, lashRight].where((r) => !r.isEmpty).toList(),
       innerMouthRegions: innerMouth.isEmpty ? const [] : [innerMouth],
+      innerMouthEllipse: innerMouthEllipse,
       foreheadRegions: forehead.isEmpty ? const [] : [forehead],
       contourRegions: [contourLeft, contourRight].where((r) => !r.isEmpty).toList(),
     );
@@ -152,6 +187,146 @@ abstract final class SkinMaskUtils {
       }
     }
     return false;
+  }
+
+  static double underEyeWeight(double nx, double ny, SkinProcessingMask mask) {
+    var weight = 0.0;
+    for (final ellipse in mask.underEyeEllipses) {
+      weight = math.max(weight, ellipse.weight(nx, ny, edgeFeather: 0.055));
+    }
+    for (final region in mask.underEyeRegions) {
+      weight = math.max(weight, softRectWeight(nx, ny, region, edgeFeather: 0.045));
+    }
+    return weight;
+  }
+
+  static double teethWhiteningWeight(
+    double nx,
+    double ny,
+    SkinProcessingMask mask,
+    int r,
+    int g,
+    int b,
+  ) {
+    final region = teethRegionWeight(nx, ny, mask);
+    if (region <= 0) {
+      return 0;
+    }
+    return region * teethPixelWeight(r, g, b);
+  }
+
+  static double teethRegionWeight(double nx, double ny, SkinProcessingMask mask) {
+    var weight = 0.0;
+    final ellipse = mask.innerMouthEllipse;
+    if (ellipse != null && ellipse.isValid) {
+      weight = math.max(weight, ellipse.weight(nx, ny, edgeFeather: 0.055));
+    }
+    for (final region in mask.innerMouthRegions) {
+      weight = math.max(
+        weight,
+        softRectWeight(nx, ny, region, edgeFeather: 0.045),
+      );
+    }
+    return weight;
+  }
+
+  /// Preferência por pixels claros; reduz lábios avermelhados sem bloquear dentes.
+  static double teethPixelWeight(int r, int g, int b) {
+    final luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+    final maxChannel = math.max(r, math.max(g, b));
+    final minChannel = math.min(r, math.min(g, b));
+    final saturation =
+        maxChannel == 0 ? 0.0 : (maxChannel - minChannel) / maxChannel;
+
+    if (r > g + 35 && r > b + 25 && luminance < 190) {
+      return 0.3;
+    }
+
+    final lumFactor = ((luminance - 35) / 185).clamp(0.0, 1.0);
+    final satFactor = ((0.72 - saturation) / 0.72).clamp(0.0, 1.0);
+    return (0.55 + 0.45 * lumFactor * satFactor).clamp(0.55, 1.0);
+  }
+
+  static double softRegionsWeight(
+    double nx,
+    double ny,
+    List<Rect> regions, {
+    double edgeFeather = 0.025,
+  }) {
+    var weight = 0.0;
+    for (final region in regions) {
+      weight = math.max(
+        weight,
+        softRectWeight(nx, ny, region, edgeFeather: edgeFeather),
+      );
+    }
+    return weight;
+  }
+
+  static NormalizedEllipse? _ellipseForIndices(
+    FaceMeshResult face,
+    Set<int> indices, {
+    double padX = 0.015,
+    double padY = 0.015,
+    double shrinkX = 1.0,
+    double shrinkY = 1.0,
+  }) {
+    final points = <Offset>[];
+    for (final index in indices) {
+      final landmark = _landmarkAt(face, index);
+      if (landmark != null) {
+        points.add(landmark.normalized);
+      }
+    }
+    if (points.length < 2) {
+      return null;
+    }
+
+    var minX = points.first.dx;
+    var maxX = points.first.dx;
+    var minY = points.first.dy;
+    var maxY = points.first.dy;
+    for (final point in points) {
+      minX = math.min(minX, point.dx);
+      maxX = math.max(maxX, point.dx);
+      minY = math.min(minY, point.dy);
+      maxY = math.max(maxY, point.dy);
+    }
+
+    final center = Offset((minX + maxX) / 2, (minY + maxY) / 2);
+    final radiusX = (((maxX - minX) / 2) + padX) * shrinkX;
+    final radiusY = (((maxY - minY) / 2) + padY) * shrinkY;
+
+    return NormalizedEllipse(
+      center: center,
+      radiusX: radiusX.clamp(0.008, 0.28),
+      radiusY: radiusY.clamp(0.005, 0.22),
+    );
+  }
+
+  static NormalizedEllipse _underEyeEllipse(NormalizedEllipse eye) {
+    return NormalizedEllipse(
+      center: Offset(
+        eye.center.dx,
+        eye.center.dy + eye.radiusY * 0.65,
+      ),
+      radiusX: eye.radiusX * 1.08,
+      radiusY: eye.radiusY * 0.62,
+    );
+  }
+
+  static FaceLandmark? _landmarkAt(FaceMeshResult face, int index) {
+    if (index >= 0 &&
+        index < face.landmarks.length &&
+        face.landmarks[index].index == index) {
+      return face.landmarks[index];
+    }
+    for (final landmark in face.landmarks) {
+      if (landmark.index == index) {
+        return landmark;
+      }
+    }
+    return null;
   }
 
   static Rect _boundsForIndices(

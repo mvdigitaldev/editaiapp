@@ -7,6 +7,7 @@ import '../../models/face_mesh_result.dart';
 import '../../models/mesh_region.dart';
 import '../../models/tri_mesh.dart';
 import '../../warp/models/control_point.dart';
+import 'skin_soft_region.dart';
 
 /// Utilitários compartilhados pelos filtros warp faciais (Sprint 10–13).
 abstract final class FaceWarpUtils {
@@ -264,7 +265,48 @@ abstract final class FaceWarpUtils {
     return points;
   }
 
+  /// Elipses normalizadas (0–1) para overlay de pálpebra dupla.
+  static List<NormalizedEllipse> eyeOverlayEllipses(
+    FaceMeshResult face,
+    Size imageSize,
+  ) {
+    final ellipses = <NormalizedEllipse>[];
+    for (final eyeIndices in [upperEyelidLeft, upperEyelidRight]) {
+      final points = <Offset>[];
+      for (final index in eyeIndices) {
+        final landmark = _landmark(face, index);
+        if (landmark != null) {
+          points.add(landmark.normalized);
+        }
+      }
+      if (points.length < 2) {
+        continue;
+      }
+
+      var minX = points.first.dx;
+      var maxX = points.first.dx;
+      var minY = points.first.dy;
+      var maxY = points.first.dy;
+      for (final point in points) {
+        minX = math.min(minX, point.dx);
+        maxX = math.max(maxX, point.dx);
+        minY = math.min(minY, point.dy);
+        maxY = math.max(maxY, point.dy);
+      }
+
+      ellipses.add(
+        NormalizedEllipse(
+          center: Offset((minX + maxX) / 2, (minY + maxY) / 2),
+          radiusX: (((maxX - minX) / 2) + 0.012).clamp(0.012, 0.18),
+          radiusY: (((maxY - minY) / 2) + 0.008).clamp(0.006, 0.12),
+        ),
+      );
+    }
+    return ellipses;
+  }
+
   /// Regiões normalizadas (0–1) para overlay de pálpebra dupla.
+  @Deprecated('Use eyeOverlayEllipses for soft feathering')
   static List<Rect> eyeOverlayRegions(FaceMeshResult face, Size imageSize) {
     final regions = <Rect>[];
     for (final eyeIndices in [upperEyelidLeft, upperEyelidRight]) {

@@ -98,45 +98,85 @@ class PassSkinEngine implements RenderPass {
           b = (b + (255 - b) * w).round();
         }
 
-        if (darkCircles > 0 && _inAny(nx, ny, mask.underEyeRegions)) {
-          final lift = darkCircles * 0.15;
-          r = (r + (255 - r) * lift).round();
-          g = (g + (255 - g) * lift).round();
-          b = (b + (255 - b) * lift).round();
+        if (darkCircles > 0) {
+          final weight = SkinMaskUtils.underEyeWeight(nx, ny, mask);
+          if (weight > 0) {
+            final lift = darkCircles * 0.15 * weight;
+            r = (r + (255 - r) * lift).round();
+            g = (g + (255 - g) * lift).round();
+            b = (b + (255 - b) * lift).round();
+          }
         }
 
-        if (teeth > 0 && _inAny(nx, ny, mask.innerMouthRegions)) {
-          final t = teeth * 0.22;
-          r = (r + (255 - r) * t).round();
-          g = (g + (255 - g) * t).round();
-          b = (b + (255 - b) * t).round();
+        if (teeth > 0) {
+          final weight = SkinMaskUtils.teethWhiteningWeight(
+            nx,
+            ny,
+            mask,
+            r,
+            g,
+            b,
+          );
+          if (weight > 0) {
+            final t = teeth * 0.28 * weight;
+            r = (r + (255 - r) * t).round();
+            g = (g + (255 - g) * t).round();
+            b = (b + (255 - b) * t).round();
+          }
         }
 
-        if (blush > 0 && _inAny(nx, ny, mask.cheekRegions)) {
-          r = (r + 28 * blush).round().clamp(0, 255);
-          g = (g + 8 * blush).round().clamp(0, 255);
-          b = (b + 4 * blush).round().clamp(0, 255);
+        if (blush > 0) {
+          final weight = SkinMaskUtils.softRegionsWeight(nx, ny, mask.cheekRegions);
+          if (weight > 0) {
+            r = (r + 28 * blush * weight).round().clamp(0, 255);
+            g = (g + 8 * blush * weight).round().clamp(0, 255);
+            b = (b + 4 * blush * weight).round().clamp(0, 255);
+          }
         }
 
-        if (contour > 0 && _inAny(nx, ny, mask.contourRegions)) {
-          final c = contour * 0.12;
-          r = (r * (1 - c)).round();
-          g = (g * (1 - c)).round();
-          b = (b * (1 - c)).round();
+        if (contour > 0) {
+          final weight = SkinMaskUtils.softRegionsWeight(
+            nx,
+            ny,
+            mask.contourRegions,
+            edgeFeather: 0.03,
+          );
+          if (weight > 0) {
+            final c = contour * 0.12 * weight;
+            r = (r * (1 - c)).round();
+            g = (g * (1 - c)).round();
+            b = (b * (1 - c)).round();
+          }
         }
 
-        if (eyebrows > 0 && _inAny(nx, ny, mask.eyebrowRegions)) {
-          final e = eyebrows * 0.18;
-          r = (r * (1 - e)).round();
-          g = (g * (1 - e)).round();
-          b = (b * (1 - e)).round();
+        if (eyebrows > 0) {
+          final weight = SkinMaskUtils.softRegionsWeight(
+            nx,
+            ny,
+            mask.eyebrowRegions,
+            edgeFeather: 0.02,
+          );
+          if (weight > 0) {
+            final e = eyebrows * 0.18 * weight;
+            r = (r * (1 - e)).round();
+            g = (g * (1 - e)).round();
+            b = (b * (1 - e)).round();
+          }
         }
 
-        if (eyelashes > 0 && _inAny(nx, ny, mask.eyelashRegions)) {
-          final e = eyelashes * 0.15;
-          r = (r * (1 - e)).round();
-          g = (g * (1 - e)).round();
-          b = (b * (1 - e)).round();
+        if (eyelashes > 0) {
+          final weight = SkinMaskUtils.softRegionsWeight(
+            nx,
+            ny,
+            mask.eyelashRegions,
+            edgeFeather: 0.02,
+          );
+          if (weight > 0) {
+            final e = eyelashes * 0.15 * weight;
+            r = (r * (1 - e)).round();
+            g = (g * (1 - e)).round();
+            b = (b * (1 - e)).round();
+          }
         }
 
         output[i] = r.clamp(0, 255);
@@ -155,15 +195,6 @@ class PassSkinEngine implements RenderPass {
 
   static double _f(RenderPassContext context, String key) {
     return ((context.uniforms[key] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0);
-  }
-
-  static bool _inAny(double nx, double ny, List<Rect> regions) {
-    for (final region in regions) {
-      if (SkinMaskUtils.isInNormalizedRect(nx, ny, region)) {
-        return true;
-      }
-    }
-    return false;
   }
 
   static void _applySkinBlur({

@@ -33,10 +33,43 @@ void main() {
       final mask = SkinMaskUtils.build(face, imageSize);
       expect(mask.isEmpty, isFalse);
       expect(mask.protectedRegions, isNotEmpty);
+      expect(mask.innerMouthEllipse, isNotNull);
+      expect(mask.innerMouthEllipse!.isValid, isTrue);
 
       final eye = mask.protectedRegions.first;
       final center = eye.center;
       expect(SkinMaskUtils.isProtected(center.dx, center.dy, mask), isTrue);
+    });
+
+    test('teeth mask uses soft ellipse and color gating', () {
+      final mask = SkinMaskUtils.build(face, imageSize);
+      final mouthCenter = mask.innerMouthEllipse?.center ??
+          mask.innerMouthRegions.first.center;
+
+      expect(
+        SkinMaskUtils.teethRegionWeight(
+          mouthCenter.dx,
+          mouthCenter.dy,
+          mask,
+        ),
+        greaterThan(0),
+      );
+      expect(
+        SkinMaskUtils.teethPixelWeight(220, 215, 210),
+        greaterThan(0.5),
+      );
+      expect(SkinMaskUtils.teethPixelWeight(180, 90, 90), lessThan(0.5));
+      expect(
+        SkinMaskUtils.teethWhiteningWeight(
+          mouthCenter.dx,
+          mouthCenter.dy,
+          mask,
+          220,
+          215,
+          210,
+        ),
+        greaterThan(0),
+      );
     });
 
     test('buildPostStages returns skin engine stage', () {
