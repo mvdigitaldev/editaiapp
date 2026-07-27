@@ -39,6 +39,7 @@ import 'features/editor/presentation/pages/processing_page.dart';
 import 'features/editor/presentation/pages/text_to_image_page.dart';
 import 'features/editor/presentation/pages/edit_image_page.dart';
 import 'features/editor/presentation/pages/create_composition_page.dart';
+import 'features/editor/presentation/pages/seamless_collage_page.dart';
 import 'features/editor/presentation/pages/remove_background_page.dart';
 import 'features/editor/presentation/pages/text_to_image_result_page.dart';
 import 'features/editor/presentation/widgets/active_edits_coordinator.dart';
@@ -212,6 +213,7 @@ class MyApp extends ConsumerWidget {
           return MainShellPage(initialIndex: index);
         },
         '/manual-editing-hub': (context) => const ManualEditingHubPage(),
+        '/seamless-collage': (context) => const SeamlessCollagePage(),
         '/manual-editor': (context) => const ManualEditorEntryPage(),
         '/beauty-editor': (context) =>
             const BeautyEngineGate(child: BeautyEditorPage()),

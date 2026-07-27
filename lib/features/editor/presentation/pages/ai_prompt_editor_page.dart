@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_button.dart';
+import '../../../../core/widgets/prompt_input_field.dart';
 
 class AIPromptEditorPage extends StatefulWidget {
   final String? imagePath;
@@ -181,103 +182,36 @@ class _AIPromptEditorPageState extends State<AIPromptEditorPage> {
                       ),
                       const SizedBox(height: 24),
                       // Prompt input
-                      Container(
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.surfaceDark
-                              : AppColors.surfaceLight,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark
-                                ? AppColors.borderDark
-                                : AppColors.border,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4, bottom: 8),
+                            child: Text(
+                              'PROMPT DE EDIÇÃO',
+                              style: AppTextStyles.overline.copyWith(
+                                color: isDark
+                                    ? AppColors.textTertiary
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
                           ),
-                        ),
-                        child: Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'PROMPT DE EDIÇÃO',
-                                    style: AppTextStyles.overline.copyWith(
-                                      color: isDark
-                                          ? AppColors.textTertiary
-                                          : AppColors.textSecondary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  TextField(
-                                    controller: _promptController,
-                                    maxLines: 4,
-                                    style: AppTextStyles.bodyLarge.copyWith(
-                                      color: isDark
-                                          ? AppColors.textLight
-                                          : AppColors.textPrimary,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText:
-                                          'Descreva sua edição... (ex: Deixe a iluminação mais quente e remova o fundo)',
-                                      hintStyle: AppTextStyles.bodyLarge.copyWith(
-                                        color: isDark
-                                            ? AppColors.textTertiary
-                                            : AppColors.textSecondary,
-                                      ),
-                                      border: InputBorder.none,
-                                    ),
-                                  ),
-                                ],
+                          PromptInputField(
+                            controller: _promptController,
+                            maxLines: 4,
+                            micInFooter: true,
+                            hintText:
+                                'Descreva sua edição... (ex: Deixe a iluminação mais quente e remova o fundo)',
+                            footerLeading: Text(
+                              'AI v4.2 Pro',
+                              style: AppTextStyles.labelSmall.copyWith(
+                                color: isDark
+                                    ? AppColors.textTertiary
+                                    : AppColors.textSecondary,
                               ),
                             ),
-                            Divider(
-                              height: 1,
-                              color: isDark ? AppColors.borderDark : AppColors.border,
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'AI v4.2 Pro',
-                                    style: AppTextStyles.labelSmall.copyWith(
-                                      color: isDark
-                                          ? AppColors.textTertiary
-                                          : AppColors.textSecondary,
-                                    ),
-                                  ),
-                                  Row(
-                                    children: [
-                                      IconButton(
-                                        icon: Icon(
-                                          Icons.mic,
-                                          color: isDark
-                                              ? AppColors.textTertiary
-                                              : AppColors.textSecondary,
-                                        ),
-                                        onPressed: () {},
-                                      ),
-                                      IconButton(
-                                        icon: Icon(
-                                          Icons.attachment,
-                                          color: isDark
-                                              ? AppColors.textTertiary
-                                              : AppColors.textSecondary,
-                                        ),
-                                        onPressed: () {},
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 24),
                     ],

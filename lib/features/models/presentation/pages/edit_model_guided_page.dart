@@ -12,6 +12,7 @@ import '../../../subscription/presentation/providers/credits_usage_provider.dart
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_button.dart';
+import '../../../../core/widgets/prompt_input_field.dart';
 import '../../../../core/widgets/upload_area.dart';
 import '../../../editor/presentation/utils/edit_submission_helpers.dart';
 
@@ -583,18 +584,12 @@ class _EditModelGuidedPageState extends ConsumerState<EditModelGuidedPage> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              TextField(
+                              PromptInputField(
                                 controller: _notesController,
                                 maxLines: 4,
                                 onChanged: (_) => setState(() {}),
-                                decoration: InputDecoration(
-                                  hintText:
-                                      'Ex.: deixar o pão mais dourado, menos sombra…',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  alignLabelWithHint: true,
-                                ),
+                                hintText:
+                                    'Ex.: deixar o pão mais dourado, menos sombra…',
                               ),
                             ],
                           ],

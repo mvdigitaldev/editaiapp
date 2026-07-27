@@ -13,6 +13,7 @@ import '../../../../core/utils/aspect_ratio_utils.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/multi_upload_area.dart';
 import '../../../../core/widgets/aspect_ratio_selector.dart';
+import '../../../../core/widgets/prompt_input_field.dart';
 import '../utils/edit_submission_helpers.dart';
 
 class CreateCompositionPage extends ConsumerStatefulWidget {
@@ -223,38 +224,10 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.surfaceDark
-                              : AppColors.surfaceLight,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark
-                                ? AppColors.borderDark
-                                : AppColors.border,
-                          ),
-                        ),
-                        child: TextField(
-                          controller: _promptController,
-                          maxLines: 4,
-                          style: AppTextStyles.bodyLarge.copyWith(
-                            color: isDark
-                                ? AppColors.textLight
-                                : AppColors.textPrimary,
-                          ),
-                          decoration: InputDecoration(
-                            hintText:
-                                'Ex: Montagem criativa com todas as fotos',
-                            hintStyle: AppTextStyles.bodyLarge.copyWith(
-                              color: isDark
-                                  ? AppColors.textTertiary
-                                  : AppColors.textSecondary,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.all(16),
-                          ),
-                        ),
+                      PromptInputField(
+                        controller: _promptController,
+                        maxLines: 4,
+                        hintText: 'Ex: Montagem criativa com todas as fotos',
                       ),
                       const SizedBox(height: 24),
                       Text(

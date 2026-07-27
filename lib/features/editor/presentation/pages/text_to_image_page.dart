@@ -9,6 +9,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/aspect_ratio_utils.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/aspect_ratio_selector.dart';
+import '../../../../core/widgets/prompt_input_field.dart';
 import '../utils/edit_submission_helpers.dart';
 
 class TextToImagePage extends ConsumerStatefulWidget {
@@ -173,29 +174,10 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isDark ? AppColors.borderDark : AppColors.border,
-                        ),
-                      ),
-                      child: TextField(
-                        controller: _promptController,
-                        maxLines: 6,
-                        style: AppTextStyles.bodyLarge.copyWith(
-                          color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Ex: Um gato astronauta em Marte, estilo cartoon',
-                          hintStyle: AppTextStyles.bodyLarge.copyWith(
-                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.all(16),
-                        ),
-                      ),
+                    PromptInputField(
+                      controller: _promptController,
+                      maxLines: 6,
+                      hintText: 'Ex: Um gato astronauta em Marte, estilo cartoon',
                     ),
                     const SizedBox(height: 24),
                     Text(

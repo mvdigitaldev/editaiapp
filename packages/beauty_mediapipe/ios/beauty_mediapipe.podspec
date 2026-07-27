@@ -12,4 +12,7 @@ Pod::Spec.new do |s|
   s.dependency 'MediaPipeTasksVision', '0.10.21'
   s.platform         = :ios, '13.0'
   s.swift_version    = '5.0'
+  # MediaPipe Tasks vem como xcframework estático; sem isso o linker
+  # falha (MPPFaceLandmarker) ou conflita com flutter_local_notifications
+  s.static_framework = true
 end

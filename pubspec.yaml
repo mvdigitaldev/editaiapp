@@ -1,7 +1,7 @@
 name: editaiapp
 description: App nativo de edição de fotos com IA
 publish_to: 'none'
-version: 1.0.6+7
+version: 1.0.7+8
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -64,6 +64,9 @@ dependencies:
   saver_gallery: ^4.1.0
   google_mobile_ads: ^5.1.0
 
+  # Voice prompt (speech-to-text)
+  speech_to_text: ^7.0.0
+
   # Beauty Engine — MediaPipe Face/Pose (Sprint 03+)
   beauty_mediapipe:
     path: packages/beauty_mediapipe
@@ -82,6 +85,8 @@ dev_dependencies:
   riverpod_generator: ^2.3.9
 
 flutter:
+  config:
+    enable-swift-package-manager: false
   uses-material-design: true
   assets:
     - assets/animations/

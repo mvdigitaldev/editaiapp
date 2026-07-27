@@ -49,6 +49,16 @@ class ManualEditingHubPage extends ConsumerWidget {
                 onTap: () =>
                     Navigator.of(context).pushNamed('/manual-editor'),
               ),
+              const SizedBox(height: 12),
+              HeroActionCard(
+                index: 1,
+                icon: Icons.view_agenda_outlined,
+                title: 'Colagem sem emenda',
+                description:
+                    'Empilhe até 12 fotos com transição suave — sem IA, grátis.',
+                onTap: () =>
+                    Navigator.of(context).pushNamed('/seamless-collage'),
+              ),
               beautyEnabledAsync.when(
                 loading: () => const SizedBox.shrink(),
                 error: (_, __) => const SizedBox.shrink(),
@@ -58,7 +68,7 @@ class ManualEditingHubPage extends ConsumerWidget {
                     children: [
                       const SizedBox(height: 12),
                       HeroActionCard(
-                        index: 1,
+                        index: 2,
                         icon: Icons.auto_fix_high,
                         title: 'Retoque beauty',
                         description:
@@ -68,7 +78,7 @@ class ManualEditingHubPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: 12),
                       HeroActionCard(
-                        index: 2,
+                        index: 3,
                         icon: Icons.tune_outlined,
                         title: 'Criar filtro custom',
                         description:
@@ -78,7 +88,7 @@ class ManualEditingHubPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: 12),
                       HeroActionCard(
-                        index: 3,
+                        index: 4,
                         icon: Icons.storefront_outlined,
                         title: 'Marketplace de filtros',
                         description:
