@@ -8,10 +8,14 @@ import 'package:image_picker/image_picker.dart' as image_picker;
 import '../../../../core/theme/app_colors.dart';
 import '../di/beauty_engine_providers.dart';
 import '../diagnostics/beauty_engine_error_reporter.dart';
+import '../filters/body/body_filter_pipeline.dart';
 import '../l10n/beauty_engine_labels.dart';
+import '../models/face_mesh_result.dart';
 import '../models/image_source.dart';
 import '../models/image_source_rgba.dart';
+import '../models/pose_result.dart';
 import '../models/processing_pipeline.dart';
+import '../performance/adaptive_preview_policy.dart';
 import 'widgets/beauty_adjustments_panel.dart';
 
 /// Editor de retoque beauty — ajustes manuais rosto/nariz/corpo/pele.
@@ -28,6 +32,10 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   Uint8List? _imageBytes;
   Uint8List? _previewBytes;
   ImageSource? _source;
+  ImageSource? _previewSource;
+  FaceMeshResult? _cachedFace;
+  PoseResult? _cachedPose;
+  bool _landmarksReady = false;
   bool _processing = false;
   bool _showOriginal = false;
   bool _linkEyes = true;
@@ -80,10 +88,19 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       height: decoded.height,
     );
 
+    final previewSource = ImageSourceRgba.downscaleForPreview(
+      source,
+      maxEdge: AdaptivePreviewPolicy.maxEdgeForBodyWarpPreview(source),
+    );
+
     setState(() {
       _imageBytes = bytes;
       _previewBytes = bytes;
       _source = source;
+      _previewSource = previewSource;
+      _cachedFace = null;
+      _cachedPose = null;
+      _landmarksReady = false;
       _lastApplyMs = null;
       _showOriginal = false;
       _params = BeautyAdjustmentsPanel.initialParams(linkEyes: _linkEyes);
@@ -106,7 +123,9 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   void _schedulePreview() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 150), () {
+    _debounceTimer = Timer(
+      Duration(milliseconds: _hasActiveBodyWarp(_params) ? 120 : 100),
+      () {
       if (_source == null) {
         return;
       }
@@ -118,8 +137,22 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     });
   }
 
+  Future<void> _ensureLandmarks() async {
+    if (_landmarksReady || _previewSource == null) {
+      return;
+    }
+    final controller = ref.read(beautyEngineControllerProvider);
+    controller.faceLandmarkThrottle.reset();
+    controller.poseLandmarkThrottle.reset();
+    final face = await controller.detectFace(_previewSource!);
+    final pose = await controller.detectPose(_previewSource!);
+    _cachedFace = face;
+    _cachedPose = pose;
+    _landmarksReady = true;
+  }
+
   Future<void> _processPreview() async {
-    if (_source == null) {
+    if (_source == null || _previewSource == null) {
       return;
     }
 
@@ -129,14 +162,16 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
     try {
       final controller = ref.read(beautyEngineControllerProvider);
-      final previewSource = ImageSourceRgba.downscaleForPreview(_source!);
-
-      final face = await controller.detectFace(previewSource);
+      final bodyActive = _hasActiveBodyWarp(_params);
+      await _ensureLandmarks();
 
       final jpeg = await controller.exportJpeg(
-        source: previewSource,
+        source: _previewSource!,
         pipeline: ProcessingPipeline(overrides: Map<String, double>.of(_params)),
-        quality: 85,
+        quality: bodyActive ? 82 : 85,
+        face: _cachedFace,
+        pose: _cachedPose,
+        interactivePreview: bodyActive,
       );
 
       stopwatch.stop();
@@ -147,7 +182,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       }
 
       final needsFace = _paramsNeedFaceOrSkin(_params);
-      if (face == null && needsFace) {
+      if (_cachedFace == null && needsFace) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(BeautyEngineLabels.faceNotDetectedHint),
@@ -185,6 +220,15 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         _previewQueued = false;
       }
     }
+  }
+
+  bool _hasActiveBodyWarp(Map<String, double> params) {
+    for (final key in BodyFilterPipeline.bodyWarpParameterKeys) {
+      if ((params[key] ?? 0) > 0.001) {
+        return true;
+      }
+    }
+    return false;
   }
 
   bool _paramsNeedFaceOrSkin(Map<String, double> params) {
@@ -308,7 +352,7 @@ class _ApplyTimeBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fast = milliseconds < 500;
+    final fast = milliseconds < 250;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: fast

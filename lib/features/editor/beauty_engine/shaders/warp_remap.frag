@@ -22,9 +22,7 @@ void main() {
 
   vec2 dispNorm = texture(uDisplacementMap, vTexCoord).rg;
   vec2 dispPx = dispNorm * uImageSize;
-  vec2 srcCoord = vTexCoord + dispPx / uImageSize;
-
-  vec4 warped = texture(uInputTexture, srcCoord);
-  vec4 original = texture(uInputTexture, vTexCoord);
-  fragColor = mix(original, warped, mask);
+  // Liquify-style: scale displacement by mask — NEVER color-mix (avoids ghosting).
+  vec2 srcCoord = vTexCoord + (dispPx * mask) / uImageSize;
+  fragColor = texture(uInputTexture, srcCoord);
 }

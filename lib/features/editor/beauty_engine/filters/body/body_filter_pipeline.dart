@@ -20,11 +20,7 @@ import 'waist_slim.dart';
 
 /// Pipeline composável de filtros corporais (Sprint 18–20).
 class BodyFilterPipeline {
-  const BodyFilterPipeline({
-    WarpFieldBuilder fieldBuilder = const WarpFieldBuilder(),
-  }) : _fieldBuilder = fieldBuilder;
-
-  final WarpFieldBuilder _fieldBuilder;
+  const BodyFilterPipeline();
 
   static final allFilters = <BodyWarpFilter>[
     WaistSlimFilter(),
@@ -90,6 +86,7 @@ class BodyFilterPipeline {
     required PoseResult pose,
     required Size imageSize,
     required Map<String, double> parameters,
+    bool interactive = false,
   }) {
     if (!canApply(pose, parameters)) {
       return WarpField.identity(imageSize: imageSize, region: MeshRegion.torso);
@@ -126,7 +123,17 @@ class BodyFilterPipeline {
       return WarpField.identity(imageSize: imageSize, region: MeshRegion.torso);
     }
 
-    return _fieldBuilder.build(
+    final quality = interactive
+        ? WarpFieldQuality.interactive
+        : (imageSize.width * imageSize.height >= 700000
+            ? WarpFieldQuality.export
+            : WarpFieldQuality.preview);
+    final builder = WarpFieldBuilder.forImageSize(
+      imageSize,
+      quality: quality,
+    );
+
+    return builder.build(
       controlPoints: controlPoints,
       imageSize: imageSize,
       region: MeshRegion.torso,

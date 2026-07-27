@@ -1,12 +1,11 @@
 import 'dart:ui';
 
-import '../../models/mesh_region.dart';
 import '../../warp/models/control_point.dart';
 import 'body_warp_context.dart';
 import 'body_warp_filter.dart';
 import 'body_warp_utils.dart';
 
-/// Emagrece torso globalmente.
+/// Emagrece torso globalmente puxando a silhueta lateral para o centro.
 class BodySlimFilter extends BodyWarpFilter {
   BodySlimFilter();
 
@@ -29,28 +28,39 @@ class BodySlimFilter extends BodyWarpFilter {
       return const [];
     }
 
-    final points = BodyWarpUtils.anchorPoints(context.mesh);
-    final maxShift = context.imageSize.width * 0.06 * intensity;
-
-    for (final region in [MeshRegion.torso, MeshRegion.waist]) {
-      for (final index in BodyWarpUtils.regionIndices(region)) {
-        final source = BodyWarpUtils.vertexAt(context.mesh, index);
-        if (source == null) {
-          continue;
-        }
-        final towardCenter = context.centerX - source.dx;
-        points.add(
-          ControlPoint(
-            source: source,
-            target: Offset(
-              source.dx + towardCenter.sign * maxShift * 0.85,
-              source.dy,
-            ),
-          ),
-        );
-      }
+    final t = intensity * intensity * (3 - 2 * intensity);
+    final leftTop = BodyWarpUtils.vertexAt(context.mesh, 11);
+    final rightTop = BodyWarpUtils.vertexAt(context.mesh, 12);
+    final leftBottom = BodyWarpUtils.vertexAt(context.mesh, 23);
+    final rightBottom = BodyWarpUtils.vertexAt(context.mesh, 24);
+    if (leftTop == null ||
+        rightTop == null ||
+        leftBottom == null ||
+        rightBottom == null) {
+      return const [];
     }
 
-    return points;
+    final shiftPx = context.imageSize.width * 0.055 * t;
+    final movable = BodyWarpUtils.slimTorsoSides(
+      leftTop: leftTop,
+      rightTop: rightTop,
+      leftBottom: leftBottom,
+      rightBottom: rightBottom,
+      imageSize: context.imageSize,
+      shiftPx: shiftPx,
+    );
+
+    return [
+      ...BodyWarpUtils.anchorPoints(
+        context.mesh,
+        excludeIndices: {11, 12, 23, 24},
+      ),
+      ...movable,
+      ...BodyWarpUtils.backgroundFreezeRing(
+        movable: movable,
+        imageSize: context.imageSize,
+        ringScale: 1.7,
+      ),
+    ];
   }
 }

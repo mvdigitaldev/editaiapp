@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -5,7 +6,10 @@ import '../models/warp_field.dart';
 
 /// Aplica [WarpField] em CPU (preview/testes ate GPURenderer Sprint 07).
 class WarpCpuRemap {
-  const WarpCpuRemap();
+  const WarpCpuRemap({this.fastMode = false});
+
+  /// Mantido por compatibilidade; o remap liquify já é rápido.
+  final bool fastMode;
 
   Uint8List apply({
     required Uint8List rgba,
@@ -25,34 +29,36 @@ class WarpCpuRemap {
     }
 
     final output = Uint8List.fromList(rgba);
+    final bounds = field.activePixelBounds();
+    final x0 = bounds == null ? 0 : bounds.left.floor().clamp(0, width - 1);
+    final y0 = bounds == null ? 0 : bounds.top.floor().clamp(0, height - 1);
+    final x1 = bounds == null
+        ? width
+        : (bounds.right.ceil() + 1).clamp(0, width);
+    final y1 = bounds == null
+        ? height
+        : (bounds.bottom.ceil() + 1).clamp(0, height);
 
-    for (var y = 0; y < height; y++) {
-      for (var x = 0; x < width; x++) {
-        final normalized = Offset(x / width, y / height);
-        final mask = field.sampleMask(normalized);
-        if (mask <= 0.001) {
-          continue;
-        }
-
-        final disp = field.sampleDisplacement(normalized);
-        final srcX = x + disp.dx;
-        final srcY = y + disp.dy;
-
-        final warped = _sampleBilinear(rgba, width, height, srcX, srcY);
-        final dstIdx = (y * width + x) * 4;
-
-        for (var c = 0; c < 4; c++) {
-          final original = rgba[dstIdx + c];
-          final blended = (original * (1 - mask) + warped[c] * mask).round();
-          output[dstIdx + c] = blended.clamp(0, 255);
-        }
+    for (var y = y0; y < y1; y++) {
+      for (var x = x0; x < x1; x++) {
+        _remapPixel(
+          rgba: rgba,
+          output: output,
+          width: width,
+          height: height,
+          x: x,
+          y: y,
+          field: field,
+          sampleRgba: rgba,
+          sampleWidth: width,
+          sampleHeight: height,
+        );
       }
     }
 
     return output;
   }
 
-  /// Aplica warp em um tile usando coordenadas normalizadas da imagem completa.
   Uint8List applyRegion({
     required Uint8List tileRgba,
     required int tileWidth,
@@ -76,36 +82,28 @@ class WarpCpuRemap {
 
     for (var y = 0; y < tileHeight; y++) {
       for (var x = 0; x < tileWidth; x++) {
-        final globalX = offsetX + x;
-        final globalY = offsetY + y;
-        final normalized = Offset(
-          globalX / fullWidth,
-          globalY / fullHeight,
+        _remapPixel(
+          rgba: tileRgba,
+          output: output,
+          width: tileWidth,
+          height: tileHeight,
+          x: x,
+          y: y,
+          field: field,
+          sampleRgba: tileRgba,
+          sampleWidth: tileWidth,
+          sampleHeight: tileHeight,
+          globalX: offsetX + x,
+          globalY: offsetY + y,
+          fullWidth: fullWidth,
+          fullHeight: fullHeight,
         );
-        final mask = field.sampleMask(normalized);
-        if (mask <= 0.001) {
-          continue;
-        }
-
-        final disp = field.sampleDisplacement(normalized);
-        final srcX = globalX + disp.dx;
-        final srcY = globalY + disp.dy;
-
-        final warped = _sampleBilinear(tileRgba, tileWidth, tileHeight, srcX - offsetX, srcY - offsetY);
-        final dstIdx = (y * tileWidth + x) * 4;
-
-        for (var c = 0; c < 4; c++) {
-          final original = tileRgba[dstIdx + c];
-          final blended = (original * (1 - mask) + warped[c] * mask).round();
-          output[dstIdx + c] = blended.clamp(0, 255);
-        }
       }
     }
 
     return output;
   }
 
-  /// Versão global — amostra deslocamento na imagem completa.
   Uint8List applyGlobal({
     required Uint8List tileRgba,
     required int tileWidth,
@@ -125,33 +123,75 @@ class WarpCpuRemap {
 
     for (var y = 0; y < tileHeight; y++) {
       for (var x = 0; x < tileWidth; x++) {
-        final globalX = offsetX + x;
-        final globalY = offsetY + y;
-        final normalized = Offset(
-          globalX / fullWidth,
-          globalY / fullHeight,
+        _remapPixel(
+          rgba: tileRgba,
+          output: output,
+          width: tileWidth,
+          height: tileHeight,
+          x: x,
+          y: y,
+          field: field,
+          sampleRgba: fullRgba,
+          sampleWidth: fullWidth,
+          sampleHeight: fullHeight,
+          globalX: offsetX + x,
+          globalY: offsetY + y,
+          fullWidth: fullWidth,
+          fullHeight: fullHeight,
         );
-        final mask = field.sampleMask(normalized);
-        if (mask <= 0.001) {
-          continue;
-        }
-
-        final disp = field.sampleDisplacement(normalized);
-        final srcX = globalX + disp.dx;
-        final srcY = globalY + disp.dy;
-
-        final warped = _sampleBilinear(fullRgba, fullWidth, fullHeight, srcX, srcY);
-        final dstIdx = (y * tileWidth + x) * 4;
-
-        for (var c = 0; c < 4; c++) {
-          final original = tileRgba[dstIdx + c];
-          final blended = (original * (1 - mask) + warped[c] * mask).round();
-          output[dstIdx + c] = blended.clamp(0, 255);
-        }
       }
     }
 
     return output;
+  }
+
+  void _remapPixel({
+    required Uint8List rgba,
+    required Uint8List output,
+    required int width,
+    required int height,
+    required int x,
+    required int y,
+    required WarpField field,
+    required Uint8List sampleRgba,
+    required int sampleWidth,
+    required int sampleHeight,
+    int? globalX,
+    int? globalY,
+    int? fullWidth,
+    int? fullHeight,
+  }) {
+    final gx = globalX ?? x;
+    final gy = globalY ?? y;
+    final fw = fullWidth ?? width;
+    final fh = fullHeight ?? height;
+
+    final normalized = Offset(gx / fw, gy / fh);
+    final rawMask = field.sampleMask(normalized);
+    if (rawMask <= 0.001) {
+      return;
+    }
+
+    final mask = rawMask.clamp(0.0, 1.0);
+    final disp = field.sampleDisplacement(normalized);
+    // Liquify-style: atenuar o deslocamento pela máscara.
+    // NÃO misturar cores original↔warped — isso cria fantasma (double exposure).
+    final srcX = gx + disp.dx * mask;
+    final srcY = gy + disp.dy * mask;
+
+    final warped = _sampleBilinear(
+      sampleRgba,
+      sampleWidth,
+      sampleHeight,
+      srcX,
+      srcY,
+    );
+    final dstIdx = (y * width + x) * 4;
+
+    output[dstIdx] = warped[0];
+    output[dstIdx + 1] = warped[1];
+    output[dstIdx + 2] = warped[2];
+    output[dstIdx + 3] = rgba[dstIdx + 3];
   }
 
   List<int> _sampleBilinear(

@@ -69,13 +69,18 @@ abstract class MlsSolver {
   }
 
   /// Inverso aproximado: encontra source tal que forward(source) ≈ [target].
-  static Offset inverse(List<ControlPoint> points, Offset target) {
+  static Offset inverse(
+    List<ControlPoint> points,
+    Offset target, {
+    int iterations = _inverseIterations,
+  }) {
     if (points.isEmpty) {
       return target;
     }
 
+    final steps = iterations.clamp(1, _inverseIterations);
     var guess = target;
-    for (var i = 0; i < _inverseIterations; i++) {
+    for (var i = 0; i < steps; i++) {
       final mapped = forward(points, guess);
       guess = Offset(
         guess.dx + target.dx - mapped.dx,

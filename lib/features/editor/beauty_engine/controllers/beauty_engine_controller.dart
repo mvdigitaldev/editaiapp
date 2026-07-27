@@ -94,13 +94,17 @@ class BeautyEngineController {
     required ProcessingPipeline pipeline,
     int quality = 90,
     bool forceTiledExport = false,
+    FaceMeshResult? face,
+    PoseResult? pose,
+    bool interactivePreview = false,
   }) async {
     profiler.beginFrame();
 
-    if (forceTiledExport ||
-        tiledExportEngine.shouldUseTiledExport(
-          ImageSourceRgba.ensureRgba(source),
-        )) {
+    if (!interactivePreview &&
+        (forceTiledExport ||
+            tiledExportEngine.shouldUseTiledExport(
+              ImageSourceRgba.ensureRgba(source),
+            ))) {
       return tiledExportEngine.exportJpeg(
         controller: this,
         source: source,
@@ -111,13 +115,14 @@ class BeautyEngineController {
     }
 
     profiler.start('export_total');
-    final face = await detectFace(source);
-    final pose = await detectPose(source);
+    final resolvedFace = face ?? await detectFace(source);
+    final resolvedPose = pose ?? await detectPose(source);
     final output = await _renderTexture(
       source: source,
       pipeline: pipeline,
-      face: face,
-      pose: pose,
+      face: resolvedFace,
+      pose: resolvedPose,
+      interactivePreview: interactivePreview,
     );
 
     final jpeg = await gpuRenderer.exportJpeg(output, quality: quality);
@@ -138,6 +143,7 @@ class BeautyEngineController {
     required PoseResult? pose,
     required Size imageSize,
     required Map<String, double> parameters,
+    bool interactive = false,
   }) {
     if (pose == null || !bodyFilterPipeline.hasActiveBodyWarp(parameters)) {
       return null;
@@ -152,6 +158,7 @@ class BeautyEngineController {
       pose: pose,
       imageSize: imageSize,
       parameters: parameters,
+      interactive: interactive,
     );
   }
 
@@ -221,6 +228,7 @@ class BeautyEngineController {
     required ProcessingPipeline pipeline,
     required FaceMeshResult? face,
     PoseResult? pose,
+    bool interactivePreview = false,
   }) async {
     profiler.start('render_texture');
     final rgbaSource = ImageSourceRgba.ensureRgba(source);
@@ -243,6 +251,7 @@ class BeautyEngineController {
       pose: pose,
       imageSize: imageSize,
       parameters: params,
+      interactive: interactivePreview,
     );
     if (bodyField != null && !bodyField.isIdentity) {
       output = await gpuRenderer.runPipeline(
@@ -250,7 +259,10 @@ class BeautyEngineController {
         stages: [
           RenderPipelineStage(
             shaderName: WarpEngine.warpRemapShader,
-            uniforms: {'warpField': bodyField},
+            uniforms: {
+              'warpField': bodyField,
+              if (interactivePreview) 'fastMode': true,
+            },
           ),
         ],
       );
@@ -272,7 +284,10 @@ class BeautyEngineController {
         stages: [
           RenderPipelineStage(
             shaderName: WarpEngine.warpRemapShader,
-            uniforms: {'warpField': faceField},
+            uniforms: {
+              'warpField': faceField,
+              if (interactivePreview) 'fastMode': true,
+            },
           ),
         ],
       );
@@ -381,4 +396,4 @@ class BeautyEngineController {
     return stages;
   }
 }
-
+

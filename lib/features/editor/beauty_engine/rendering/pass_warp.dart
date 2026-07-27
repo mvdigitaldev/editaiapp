@@ -6,9 +6,9 @@ import 'texture_handle.dart';
 
 /// Pass 1: warp remap (MLS field).
 class PassWarp implements RenderPass {
-  const PassWarp({WarpCpuRemap? remapper}) : _remapper = remapper ?? const WarpCpuRemap();
+  const PassWarp({WarpCpuRemap? remapper}) : _remapper = remapper;
 
-  final WarpCpuRemap _remapper;
+  final WarpCpuRemap? _remapper;
 
   @override
   String get shaderName => RenderShaders.warpRemap;
@@ -25,7 +25,10 @@ class PassWarp implements RenderPass {
       return context.pool.acquireCopy(context.input);
     }
 
-    final warped = _remapper.apply(
+    final fastMode = context.uniforms['fastMode'] == true;
+    final remapper = _remapper ?? WarpCpuRemap(fastMode: fastMode);
+
+    final warped = remapper.apply(
       rgba: source.rgba,
       width: source.width,
       height: source.height,

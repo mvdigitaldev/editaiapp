@@ -5,7 +5,7 @@ import 'body_warp_context.dart';
 import 'body_warp_filter.dart';
 import 'body_warp_utils.dart';
 
-/// Ajusta largura do quadril (landmarks 23/24).
+/// Ajusta largura do quadril (landmarks 23/24 + borda estimada).
 class HipFilter extends BodyWarpFilter {
   HipFilter();
 
@@ -28,23 +28,53 @@ class HipFilter extends BodyWarpFilter {
       return const [];
     }
 
-    final points = BodyWarpUtils.anchorPoints(context.mesh);
-    final shift = context.imageSize.width * 0.035 * intensity;
-
-    for (final index in [23, 24]) {
-      final source = BodyWarpUtils.vertexAt(context.mesh, index);
-      if (source == null) {
-        continue;
-      }
-      final away = index == 23 ? -1.0 : 1.0;
-      points.add(
-        ControlPoint(
-          source: source,
-          target: Offset(source.dx + away * shift, source.dy),
-        ),
-      );
+    final t = intensity * intensity * (3 - 2 * intensity);
+    final left = BodyWarpUtils.vertexAt(context.mesh, 23);
+    final right = BodyWarpUtils.vertexAt(context.mesh, 24);
+    if (left == null || right == null) {
+      return const [];
     }
 
-    return points;
+    final shift = context.imageSize.width * 0.04 * t;
+    final pad = context.imageSize.width * 0.03;
+    final movable = <ControlPoint>[
+      ControlPoint(
+        source: BodyWarpUtils.clampToFrame(
+          Offset(left.dx - pad, left.dy),
+          context.imageSize,
+        ),
+        target: BodyWarpUtils.clampToFrame(
+          Offset(left.dx - pad - shift, left.dy),
+          context.imageSize,
+        ),
+      ),
+      ControlPoint(
+        source: BodyWarpUtils.clampToFrame(
+          Offset(right.dx + pad, right.dy),
+          context.imageSize,
+        ),
+        target: BodyWarpUtils.clampToFrame(
+          Offset(right.dx + pad + shift, right.dy),
+          context.imageSize,
+        ),
+      ),
+      // Âncora no meio do quadril.
+      ControlPoint(
+        source: Offset((left.dx + right.dx) * 0.5, left.dy),
+        target: Offset((left.dx + right.dx) * 0.5, left.dy),
+      ),
+    ];
+
+    return [
+      ...BodyWarpUtils.anchorPoints(
+        context.mesh,
+        excludeIndices: {23, 24},
+      ),
+      ...movable,
+      ...BodyWarpUtils.backgroundFreezeRing(
+        movable: movable,
+        imageSize: context.imageSize,
+      ),
+    ];
   }
 }

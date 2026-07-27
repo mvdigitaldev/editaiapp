@@ -46,6 +46,7 @@ abstract final class ImageSourceRgba {
   static ImageSource downscaleForPreview(
     ImageSource source, {
     int? maxEdge,
+    bool highQuality = false,
   }) {
     final rgbaSource = ensureRgba(source);
     final edgeLimit = maxEdge ?? AdaptivePreviewPolicy.maxEdgeForSource(rgbaSource);
@@ -73,7 +74,8 @@ abstract final class ImageSourceRgba {
       decoded,
       width: targetWidth,
       height: targetHeight,
-      interpolation: img.Interpolation.linear,
+      interpolation:
+          highQuality ? img.Interpolation.cubic : img.Interpolation.linear,
     );
 
     final rgba = Uint8List(targetWidth * targetHeight * 4);

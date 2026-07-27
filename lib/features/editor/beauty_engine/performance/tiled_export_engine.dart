@@ -64,22 +64,21 @@ class TiledExportEngine {
       parameters: params,
     );
 
-    final output = Uint8List.fromList(rgbaSource.bytes);
+    var warpBuffer = Uint8List.fromList(rgbaSource.bytes);
     final tiles = ImageTileGrid.specsFor(
       fullWidth: rgbaSource.width,
       fullHeight: rgbaSource.height,
     );
 
-    for (final tile in tiles) {
-      profiler?.start('tile');
-      var tileRgba = ImageTileGrid.extractTile(
-        fullRgba: rgbaSource.bytes,
-        fullWidth: rgbaSource.width,
-        fullHeight: rgbaSource.height,
-        tile: tile,
-      );
-
-      if (bodyField != null && !bodyField.isIdentity) {
+    if (bodyField != null && !bodyField.isIdentity) {
+      profiler?.start('body_warp_tiles');
+      for (final tile in tiles) {
+        var tileRgba = ImageTileGrid.extractTile(
+          fullRgba: rgbaSource.bytes,
+          fullWidth: rgbaSource.width,
+          fullHeight: rgbaSource.height,
+          tile: tile,
+        );
         tileRgba = warpRemap.applyGlobal(
           tileRgba: tileRgba,
           tileWidth: tile.width,
@@ -91,7 +90,26 @@ class TiledExportEngine {
           field: bodyField,
           fullRgba: rgbaSource.bytes,
         );
+        ImageTileGrid.writeTile(
+          fullRgba: warpBuffer,
+          fullWidth: rgbaSource.width,
+          tile: tile,
+          tileRgba: tileRgba,
+        );
       }
+      profiler?.end('body_warp_tiles');
+    }
+
+    final output = Uint8List.fromList(warpBuffer);
+
+    for (final tile in tiles) {
+      profiler?.start('tile');
+      var tileRgba = ImageTileGrid.extractTile(
+        fullRgba: warpBuffer,
+        fullWidth: rgbaSource.width,
+        fullHeight: rgbaSource.height,
+        tile: tile,
+      );
 
       if (faceField != null && !faceField.isIdentity) {
         tileRgba = warpRemap.applyGlobal(
@@ -103,7 +121,7 @@ class TiledExportEngine {
           fullWidth: rgbaSource.width,
           fullHeight: rgbaSource.height,
           field: faceField,
-          fullRgba: rgbaSource.bytes,
+          fullRgba: warpBuffer,
         );
       }
 

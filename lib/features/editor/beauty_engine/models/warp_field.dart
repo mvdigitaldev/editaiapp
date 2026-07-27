@@ -104,6 +104,46 @@ class WarpField {
 
   double _cellMask(int x, int y) => mask[y * gridWidth + x];
 
+  /// Retângulo em pixels onde a máscara é não-zero (com margem de 1 célula).
+  Rect? activePixelBounds() {
+    if (isIdentity) {
+      return null;
+    }
+
+    var minGx = gridWidth;
+    var minGy = gridHeight;
+    var maxGx = -1;
+    var maxGy = -1;
+
+    for (var gy = 0; gy < gridHeight; gy++) {
+      for (var gx = 0; gx < gridWidth; gx++) {
+        if (mask[gy * gridWidth + gx] <= 0.001) {
+          continue;
+        }
+        if (gx < minGx) minGx = gx;
+        if (gy < minGy) minGy = gy;
+        if (gx > maxGx) maxGx = gx;
+        if (gy > maxGy) maxGy = gy;
+      }
+    }
+
+    if (maxGx < 0) {
+      return null;
+    }
+
+    minGx = (minGx - 1).clamp(0, gridWidth - 1);
+    minGy = (minGy - 1).clamp(0, gridHeight - 1);
+    maxGx = (maxGx + 1).clamp(0, gridWidth - 1);
+    maxGy = (maxGy + 1).clamp(0, gridHeight - 1);
+
+    final left = (minGx / (gridWidth - 1)) * imageSize.width;
+    final top = (minGy / (gridHeight - 1)) * imageSize.height;
+    final right = (maxGx / (gridWidth - 1)) * imageSize.width;
+    final bottom = (maxGy / (gridHeight - 1)) * imageSize.height;
+
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
+
   double _lerp(double a, double b, double t) => a + (b - a) * t;
 }
 

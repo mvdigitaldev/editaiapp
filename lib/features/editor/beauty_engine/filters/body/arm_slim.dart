@@ -1,12 +1,11 @@
 import 'dart:ui';
 
-import '../../models/mesh_region.dart';
 import '../../warp/models/control_point.dart';
 import 'body_warp_context.dart';
 import 'body_warp_filter.dart';
 import 'body_warp_utils.dart';
 
-/// Estreita braços (ombro → punho).
+/// Estreita braços ao longo do eixo do osso (silhueta → eixo).
 class ArmSlimFilter extends BodyWarpFilter {
   ArmSlimFilter();
 
@@ -29,34 +28,85 @@ class ArmSlimFilter extends BodyWarpFilter {
       return const [];
     }
 
-    final points = BodyWarpUtils.anchorPoints(context.mesh);
-    final maxShift = context.imageSize.width * 0.035 * intensity;
+    // Suaviza extremos — evita over-slim que rasga textura.
+    final t = intensity * intensity * (3 - 2 * intensity); // smoothstep
+    final halfWidth = context.imageSize.width * 0.045;
+    final shiftFraction = 0.55 * t;
 
-    for (final region in [MeshRegion.leftArm, MeshRegion.rightArm]) {
-      for (final index in BodyWarpUtils.regionIndices(region)) {
-        if (index == 11 || index == 12) {
-          continue;
-        }
-        final source = BodyWarpUtils.vertexAt(context.mesh, index);
-        if (source == null) {
-          continue;
-        }
-        final shoulderX = index <= 15
-            ? BodyWarpUtils.vertexAt(context.mesh, 11)?.dx ?? context.centerX
-            : BodyWarpUtils.vertexAt(context.mesh, 12)?.dx ?? context.centerX;
-        final towardShoulder = shoulderX - source.dx;
-        points.add(
-          ControlPoint(
-            source: source,
-            target: Offset(
-              source.dx + towardShoulder.sign * maxShift,
-              source.dy,
-            ),
-          ),
-        );
-      }
+    final movable = <ControlPoint>[];
+
+    // Braço esquerdo: ombro(11) → cotovelo(13) → punho(15)
+    final lShoulder = BodyWarpUtils.vertexAt(context.mesh, 11);
+    final lElbow = BodyWarpUtils.vertexAt(context.mesh, 13);
+    final lWrist = BodyWarpUtils.vertexAt(context.mesh, 15);
+    if (lShoulder != null && lElbow != null) {
+      movable.addAll(
+        BodyWarpUtils.slimBoneSegment(
+          proximal: lShoulder,
+          distal: lElbow,
+          imageSize: context.imageSize,
+          limbHalfWidth: halfWidth,
+          shiftFraction: shiftFraction,
+          freezeProximal: true,
+        ),
+      );
+    }
+    if (lElbow != null && lWrist != null) {
+      movable.addAll(
+        BodyWarpUtils.slimBoneSegment(
+          proximal: lElbow,
+          distal: lWrist,
+          imageSize: context.imageSize,
+          limbHalfWidth: halfWidth * 0.85,
+          shiftFraction: shiftFraction,
+          freezeProximal: true,
+        ),
+      );
     }
 
-    return points;
+    // Braço direito: 12 → 14 → 16
+    final rShoulder = BodyWarpUtils.vertexAt(context.mesh, 12);
+    final rElbow = BodyWarpUtils.vertexAt(context.mesh, 14);
+    final rWrist = BodyWarpUtils.vertexAt(context.mesh, 16);
+    if (rShoulder != null && rElbow != null) {
+      movable.addAll(
+        BodyWarpUtils.slimBoneSegment(
+          proximal: rShoulder,
+          distal: rElbow,
+          imageSize: context.imageSize,
+          limbHalfWidth: halfWidth,
+          shiftFraction: shiftFraction,
+          freezeProximal: true,
+        ),
+      );
+    }
+    if (rElbow != null && rWrist != null) {
+      movable.addAll(
+        BodyWarpUtils.slimBoneSegment(
+          proximal: rElbow,
+          distal: rWrist,
+          imageSize: context.imageSize,
+          limbHalfWidth: halfWidth * 0.85,
+          shiftFraction: shiftFraction,
+          freezeProximal: true,
+        ),
+      );
+    }
+
+    if (movable.isEmpty) {
+      return const [];
+    }
+
+    return [
+      ...BodyWarpUtils.anchorPoints(
+        context.mesh,
+        excludeIndices: {13, 14, 15, 16},
+      ),
+      ...movable,
+      ...BodyWarpUtils.backgroundFreezeRing(
+        movable: movable,
+        imageSize: context.imageSize,
+      ),
+    ];
   }
 }
