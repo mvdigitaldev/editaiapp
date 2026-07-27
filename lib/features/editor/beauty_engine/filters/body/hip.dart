@@ -29,39 +29,42 @@ class HipFilter extends BodyWarpFilter {
     }
 
     final t = intensity * intensity * (3 - 2 * intensity);
-    final left = BodyWarpUtils.vertexAt(context.mesh, 23);
-    final right = BodyWarpUtils.vertexAt(context.mesh, 24);
-    if (left == null || right == null) {
+    final a = BodyWarpUtils.vertexAt(context.mesh, 23);
+    final b = BodyWarpUtils.vertexAt(context.mesh, 24);
+    if (a == null || b == null) {
       return const [];
     }
+
+    // Esquerda/direita na imagem (selfie espelhada inverte labels MediaPipe).
+    final imageLeft = a.dx <= b.dx ? a : b;
+    final imageRight = a.dx <= b.dx ? b : a;
 
     final shift = context.imageSize.width * 0.04 * t;
     final pad = context.imageSize.width * 0.03;
     final movable = <ControlPoint>[
       ControlPoint(
         source: BodyWarpUtils.clampToFrame(
-          Offset(left.dx - pad, left.dy),
+          Offset(imageLeft.dx - pad, imageLeft.dy),
           context.imageSize,
         ),
         target: BodyWarpUtils.clampToFrame(
-          Offset(left.dx - pad - shift, left.dy),
+          Offset(imageLeft.dx - pad - shift, imageLeft.dy),
           context.imageSize,
         ),
       ),
       ControlPoint(
         source: BodyWarpUtils.clampToFrame(
-          Offset(right.dx + pad, right.dy),
+          Offset(imageRight.dx + pad, imageRight.dy),
           context.imageSize,
         ),
         target: BodyWarpUtils.clampToFrame(
-          Offset(right.dx + pad + shift, right.dy),
+          Offset(imageRight.dx + pad + shift, imageRight.dy),
           context.imageSize,
         ),
       ),
-      // Âncora no meio do quadril.
       ControlPoint(
-        source: Offset((left.dx + right.dx) * 0.5, left.dy),
-        target: Offset((left.dx + right.dx) * 0.5, left.dy),
+        source: Offset((imageLeft.dx + imageRight.dx) * 0.5, imageLeft.dy),
+        target: Offset((imageLeft.dx + imageRight.dx) * 0.5, imageLeft.dy),
       ),
     ];
 

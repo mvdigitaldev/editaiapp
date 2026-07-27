@@ -16,6 +16,9 @@ import '../mesh/mesh_engine_impl.dart';
 import '../pose/pose_detector.dart';
 import '../pose/pose_detector_impl.dart';
 import '../pose/pose_detector_stub.dart';
+import '../segment/person_mask.dart';
+import '../segment/person_mask_detector_impl.dart';
+import '../segment/person_mask_detector_stub.dart';
 import '../presets/beauty_preset_local_store.dart';
 import '../presets/beauty_preset_remote_datasource.dart';
 import '../presets/beauty_preset_repository.dart';
@@ -47,11 +50,17 @@ final mediapipePoseModelPathProvider = Provider<Future<String>>(
   (ref) => MediapipeModelLoader.ensurePoseModelOnDisk(),
 );
 
+final mediapipeSegmenterModelPathProvider = Provider<Future<String>>(
+  (ref) => MediapipeModelLoader.ensureSegmenterModelOnDisk(),
+);
+
 final mediapipeInitCoordinatorProvider = Provider<MediapipeInitCoordinator>(
   (ref) => MediapipeInitCoordinator(
     bindings: ref.watch(mediapipeBindingsProvider),
     resolveFaceModelPath: () => ref.read(mediapipeFaceModelPathProvider),
     resolvePoseModelPath: () => ref.read(mediapipePoseModelPathProvider),
+    resolveSegmenterModelPath: () =>
+        ref.read(mediapipeSegmenterModelPathProvider),
   ),
 );
 
@@ -82,6 +91,19 @@ final poseDetectorProvider = Provider<PoseDetector>(
     }
 
     return PoseDetectorImpl(
+      bindings: ref.watch(mediapipeBindingsProvider),
+      coordinator: ref.watch(mediapipeInitCoordinatorProvider),
+    );
+  },
+);
+
+final personMaskDetectorProvider = Provider<PersonMaskDetector>(
+  (ref) {
+    if (!_supportsNativeMediapipe) {
+      return const PersonMaskDetectorStub();
+    }
+
+    return PersonMaskDetectorImpl(
       bindings: ref.watch(mediapipeBindingsProvider),
       coordinator: ref.watch(mediapipeInitCoordinatorProvider),
     );
@@ -165,6 +187,7 @@ final beautyEngineControllerProvider = Provider<BeautyEngineController>(
   (ref) => BeautyEngineController(
     faceDetector: ref.watch(faceMeshDetectorProvider),
     poseDetector: ref.watch(poseDetectorProvider),
+    personMaskDetector: ref.watch(personMaskDetectorProvider),
     meshEngine: ref.watch(meshEngineProvider),
     warpEngine: ref.watch(warpEngineProvider),
     gpuRenderer: ref.watch(gpuRendererProvider),

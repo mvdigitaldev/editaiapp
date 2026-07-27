@@ -1,16 +1,132 @@
 import 'dart:math' as math;
 
-/// Curva de fusão estilo Meitu: overlap fixo, slider controla suavidade.
+/// Família de proporção da colagem.
+enum CollageAspectFamily {
+  ratio16x9,
+  ratio4x3,
+  square,
+}
+
+/// Orientação (ignorada para quadrado).
+enum CollageOrientation {
+  landscape,
+  portrait,
+}
+
+/// Preset completo: proporção + orientação → ratio e eixo de empilhamento.
+class CollageAspectPreset {
+  const CollageAspectPreset({
+    required this.family,
+    this.orientation = CollageOrientation.portrait,
+  });
+
+  final CollageAspectFamily family;
+  final CollageOrientation orientation;
+
+  static const square = CollageAspectPreset(family: CollageAspectFamily.square);
+
+  static const ratio16x9Portrait = CollageAspectPreset(
+    family: CollageAspectFamily.ratio16x9,
+    orientation: CollageOrientation.portrait,
+  );
+
+  static const ratio16x9Landscape = CollageAspectPreset(
+    family: CollageAspectFamily.ratio16x9,
+    orientation: CollageOrientation.landscape,
+  );
+
+  static const ratio4x3Portrait = CollageAspectPreset(
+    family: CollageAspectFamily.ratio4x3,
+    orientation: CollageOrientation.portrait,
+  );
+
+  static const ratio4x3Landscape = CollageAspectPreset(
+    family: CollageAspectFamily.ratio4x3,
+    orientation: CollageOrientation.landscape,
+  );
+
+  /// Largura / altura do canvas.
+  double get widthOverHeight {
+    switch (family) {
+      case CollageAspectFamily.square:
+        return 1;
+      case CollageAspectFamily.ratio16x9:
+        return orientation == CollageOrientation.landscape ? 16 / 9 : 9 / 16;
+      case CollageAspectFamily.ratio4x3:
+        return orientation == CollageOrientation.landscape ? 4 / 3 : 3 / 4;
+    }
+  }
+
+  /// Landscape → empilha na horizontal; portrait/square → vertical.
+  bool get isHorizontalStack =>
+      family != CollageAspectFamily.square &&
+      orientation == CollageOrientation.landscape;
+
+  /// Dimensões do canvas com maior lado = [maxEdge].
+  ({int width, int height}) canvasSize(int maxEdge) {
+    final edge = maxEdge.clamp(64, 8192);
+    final ratio = widthOverHeight;
+    if (ratio >= 1) {
+      final width = edge;
+      final height = math.max(1, (edge / ratio).round());
+      return (width: width, height: height);
+    }
+    final height = edge;
+    final width = math.max(1, (edge * ratio).round());
+    return (width: width, height: height);
+  }
+}
+
+/// Curva de fusão + overlap variável com [fusionStrength].
 class SeamlessBlendCurve {
   SeamlessBlendCurve._();
 
-  /// Zona de sobreposição (~12% do eixo transversal da colagem).
-  static const double overlapRatio = 0.12;
+  /// Overlap mínimo (~6% do eixo longo).
+  static const double minOverlapRatio = 0.06;
 
-  /// Máximo da soma das duas emendas numa foto do meio (topo + base).
-  static const double middlePhotoOverlapBudget = 0.42;
+  /// Máximo da soma das duas emendas numa foto do meio (topo + base),
+  /// escala com a fusão.
+  static double middlePhotoOverlapBudget(double fusionStrength) {
+    final f = fusionStrength.clamp(0.0, 1.0);
+    return 0.42 + f * 0.55;
+  }
 
-  /// Peso da imagem inferior/direita em [t] (0 = só a de cima/esquerda, 1 = só a de baixo/direita).
+  /// Fração máxima de overlap no eixo (em fusion=1).
+  /// 2 fotos → 1.0 (cada uma cobre o canvas, ~50/50).
+  /// N fotos → (N-1)/N (contribuição ~1/N).
+  static double maxOverlapRatio(int photoCount) {
+    final n = photoCount.clamp(2, 12);
+    if (n <= 2) return 1.0;
+    return (n - 1) / n;
+  }
+
+  /// Overlap em pixels ao longo do eixo de empilhamento.
+  static int overlapPixels({
+    required int axisLength,
+    required int photoCount,
+    required double fusionStrength,
+  }) {
+    if (axisLength <= 0 || photoCount < 2) return 0;
+
+    final f = fusionStrength.clamp(0.0, 1.0);
+    final maxRatio = maxOverlapRatio(photoCount);
+    final ratio = minOverlapRatio + (maxRatio - minOverlapRatio) * f;
+    final raw = (axisLength * ratio).round();
+    return raw.clamp(4, axisLength);
+  }
+
+  /// Altura/largura de cada slot cover: `(L + (N-1)*o) / N`.
+  static int slotSpan({
+    required int axisLength,
+    required int photoCount,
+    required int overlap,
+  }) {
+    final n = photoCount.clamp(2, 12);
+    final o = overlap.clamp(0, axisLength);
+    return math.max(1, (axisLength + (n - 1) * o) ~/ n);
+  }
+
+  /// Peso da imagem inferior/direita em [t] (0 = só a de cima/esquerda).
   static double blendWeight(double t, double fusionStrength) {
     final normalized = t.clamp(0.0, 1.0);
     final fusion = fusionStrength.clamp(0.0, 1.0);

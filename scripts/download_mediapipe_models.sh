@@ -19,3 +19,6 @@ download "face_landmarker.task" \
 
 download "pose_landmarker_lite.task" \
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task"
+
+download "selfie_segmenter.tflite" \
+  "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite"

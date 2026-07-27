@@ -162,12 +162,18 @@ class _FailingBindings implements BeautyMediapipeBindings {
   }
 
   @override
+  Future<PersonMaskNativeResult?> detectPersonMask(NativeImageBuffer buffer) async {
+    return null;
+  }
+
+  @override
   void dispose() {}
 
   @override
   Future<void> initialize({
     required String faceModelPath,
     String? poseModelPath,
+    String? segmenterModelPath,
   }) async {
     throw StateError('init failed');
   }

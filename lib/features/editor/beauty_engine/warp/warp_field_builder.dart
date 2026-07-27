@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import '../models/mesh_region.dart';
 import '../models/warp_field.dart';
+import '../segment/person_mask.dart';
 import 'mls_solver.dart';
 import 'models/control_point.dart';
 
@@ -76,6 +77,7 @@ class WarpFieldBuilder {
     required Size imageSize,
     required MeshRegion region,
     required double intensity,
+    PersonMask? personMask,
   }) {
     if (intensity <= 0 || controlPoints.isEmpty) {
       return WarpField.identity(imageSize: imageSize, region: region);
@@ -87,6 +89,8 @@ class WarpFieldBuilder {
 
     final bounds = _controlBounds(controlPoints, imageSize);
     final featherPx = maskFeatherPx;
+    final invW = imageSize.width > 0 ? 1.0 / imageSize.width : 0.0;
+    final invH = imageSize.height > 0 ? 1.0 / imageSize.height : 0.0;
 
     for (var gy = 0; gy < gridHeight; gy++) {
       for (var gx = 0; gx < gridWidth; gx++) {
@@ -95,7 +99,14 @@ class WarpFieldBuilder {
         final py = (gy / (gridHeight - 1)) * imageSize.height;
         final point = Offset(px, py);
 
-        final m = _computeMask(point, bounds, featherPx);
+        var m = _computeMask(point, bounds, featherPx);
+        if (personMask != null && m > 0.001) {
+          // Congela fundo (Freeze Mask): só deforma a silhueta.
+          final person = _softPerson(
+            personMask.sampleNormalized(px * invW, py * invH),
+          );
+          m *= person;
+        }
         mask[idx] = m;
         if (m <= 0.001) {
           continue;
@@ -138,7 +149,6 @@ class WarpFieldBuilder {
       minY = math.min(minY, point.source.dy);
       maxX = math.max(maxX, point.source.dx);
       maxY = math.max(maxY, point.source.dy);
-      // Inclui target — zona vacante após slim precisa de mask>0.
       minX = math.min(minX, point.target.dx);
       minY = math.min(minY, point.target.dy);
       maxX = math.max(maxX, point.target.dx);
@@ -151,7 +161,6 @@ class WarpFieldBuilder {
     }
 
     final minDim = math.min(imageSize.width, imageSize.height);
-    // Padding cobre a silhueta antiga + zona liberada + feather.
     final padding = math.max(
       64.0,
       math.max(minDim * 0.08, maxShift * 2.2 + maskFeatherPx),
@@ -187,6 +196,18 @@ class WarpFieldBuilder {
     }
 
     final t = (edgeDistPx / featherPx).clamp(0.0, 1.0);
+    return _smoothstep(t);
+  }
+
+  /// Suaviza a silhueta e descarta fundo quase-zero.
+  static double _softPerson(double raw) {
+    if (raw <= 0.08) {
+      return 0;
+    }
+    if (raw >= 0.45) {
+      return 1;
+    }
+    final t = ((raw - 0.08) / (0.45 - 0.08)).clamp(0.0, 1.0);
     return _smoothstep(t);
   }
 

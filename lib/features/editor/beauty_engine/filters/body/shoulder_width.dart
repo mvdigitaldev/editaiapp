@@ -28,29 +28,29 @@ class ShoulderWidthFilter extends BodyWarpFilter {
       return const [];
     }
 
-    final points = BodyWarpUtils.anchorPoints(context.mesh);
+    final a = BodyWarpUtils.vertexAt(context.mesh, 11);
+    final b = BodyWarpUtils.vertexAt(context.mesh, 12);
+    if (a == null || b == null) {
+      return BodyWarpUtils.anchorPoints(context.mesh);
+    }
+
+    final imageLeft = a.dx <= b.dx ? a : b;
+    final imageRight = a.dx <= b.dx ? b : a;
     final shift = context.imageSize.width * 0.04 * intensity;
 
-    final left = BodyWarpUtils.vertexAt(context.mesh, 11);
-    if (left != null) {
-      points.add(
-        ControlPoint(
-          source: left,
-          target: Offset(left.dx - shift, left.dy),
-        ),
-      );
-    }
-
-    final right = BodyWarpUtils.vertexAt(context.mesh, 12);
-    if (right != null) {
-      points.add(
-        ControlPoint(
-          source: right,
-          target: Offset(right.dx + shift, right.dy),
-        ),
-      );
-    }
-
-    return points;
+    return [
+      ...BodyWarpUtils.anchorPoints(
+        context.mesh,
+        excludeIndices: {11, 12},
+      ),
+      ControlPoint(
+        source: imageLeft,
+        target: Offset(imageLeft.dx - shift, imageLeft.dy),
+      ),
+      ControlPoint(
+        source: imageRight,
+        target: Offset(imageRight.dx + shift, imageRight.dy),
+      ),
+    ];
   }
 }

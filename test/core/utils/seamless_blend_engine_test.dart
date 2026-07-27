@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:editaiapp/core/utils/seamless_blend_curve.dart';
 import 'package:editaiapp/core/utils/seamless_blend_engine.dart';
@@ -16,11 +17,33 @@ void main() {
 
   Future<String> writeTemp(img.Image image) async {
     final file = File(
-      '${Directory.systemTemp.path}/seamless_test_${DateTime.now().microsecondsSinceEpoch}.jpg',
+      '${Directory.systemTemp.path}/seamless_test_${DateTime.now().microsecondsSinceEpoch}_${math.Random().nextInt(1 << 20)}.jpg',
     );
     await file.writeAsBytes(img.encodeJpg(image));
     return file.path;
   }
+
+  group('CollageAspectPreset', () {
+    test('canvasSize 16:9 landscape e portrait', () {
+      final land = CollageAspectPreset.ratio16x9Landscape.canvasSize(1600);
+      expect(land.width, 1600);
+      expect(land.height, closeTo(900, 1));
+
+      final port = CollageAspectPreset.ratio16x9Portrait.canvasSize(1600);
+      expect(port.height, 1600);
+      expect(port.width, closeTo(900, 1));
+    });
+
+    test('canvasSize square e 4:3', () {
+      final sq = CollageAspectPreset.square.canvasSize(1000);
+      expect(sq.width, 1000);
+      expect(sq.height, 1000);
+
+      final fourThree = CollageAspectPreset.ratio4x3Landscape.canvasSize(1200);
+      expect(fourThree.width, 1200);
+      expect(fourThree.height, closeTo(900, 1));
+    });
+  });
 
   group('SeamlessBlendCurve', () {
     test('baixa fusão mantém cores puras por mais tempo na junção', () {
@@ -30,80 +53,138 @@ void main() {
       expect(lowWeight, lessThan(0.15));
       expect(highWeight, greaterThan(lowWeight));
     });
+
+    test('fusion alta aumenta overlap; 2 fotos em 100% cobrem o eixo', () {
+      const axis = 1000;
+      final low = SeamlessBlendCurve.overlapPixels(
+        axisLength: axis,
+        photoCount: 2,
+        fusionStrength: 0.0,
+      );
+      final high = SeamlessBlendCurve.overlapPixels(
+        axisLength: axis,
+        photoCount: 2,
+        fusionStrength: 1.0,
+      );
+      expect(high, greaterThan(low));
+      expect(high, axis);
+
+      final slot = SeamlessBlendCurve.slotSpan(
+        axisLength: axis,
+        photoCount: 2,
+        overlap: high,
+      );
+      expect(slot, axis);
+    });
   });
 
   group('SeamlessBlendEngine', () {
-    test('vertical: 2 imagens sólidas preservam faixas e altura total', () async {
-      final red = solidImage(200, 100, 255, 0, 0);
-      final blue = solidImage(200, 100, 0, 0, 255);
-
-      final result = await engine.blend(
-        imagePaths: [await writeTemp(red), await writeTemp(blue)],
-        config: const SeamlessBlendConfig(fusionStrength: 0.0),
-      );
-
-      expect(result.width, 200);
-      final overlap = SeamlessBlendEngine.overlapPixels(
-        crossAxis: 200,
-        sizeA: 100,
-        sizeB: 100,
-      );
-      expect(result.height, 200 - overlap);
-    });
-
-    test('junções 1→2 e 2→3 com overlap uniforme em 3 fotos', () async {
-      final a = solidImage(200, 120, 255, 0, 0);
-      final b = solidImage(200, 80, 0, 255, 0);
-      final c = solidImage(200, 120, 0, 0, 255);
-
-      final result = await engine.blend(
-        imagePaths: [
-          await writeTemp(a),
-          await writeTemp(b),
-          await writeTemp(c),
-        ],
-        config: const SeamlessBlendConfig(fusionStrength: 0.8),
-      );
-
-      const totalRaw = 120 + 80 + 120;
-      final overlapEach = (totalRaw - result.height) ~/ 2;
-      expect(overlapEach, inInclusiveRange(14, 18));
-
-      final dstY1 = 120 - overlapEach;
-      final dstY2 = dstY1 + 80 - overlapEach;
-
-      final above12 = result.image.getPixel(100, dstY1 - 4);
-      final below12 = result.image.getPixel(100, dstY1 + overlapEach + 4);
-      expect(above12.r, greaterThan(200));
-      expect(below12.g, greaterThan(200));
-
-      final above23 = result.image.getPixel(100, dstY2 - 4);
-      final below23 = result.image.getPixel(100, dstY2 + overlapEach + 4);
-      expect(above23.g, greaterThan(200));
-      expect(below23.b, greaterThan(200));
-
-      final midY = dstY1 + overlapEach + (80 - 2 * overlapEach) ~/ 2;
-      final mid = result.image.getPixel(100, midY);
-      expect(mid.g, greaterThan(200));
-    });
-
-    test('fusionStrength não altera altura total', () async {
+    test('respeita aspect 9:16 no canvas', () async {
       final paths = [
-        await writeTemp(solidImage(120, 80, 255, 0, 0)),
-        await writeTemp(solidImage(120, 80, 0, 0, 255)),
-        await writeTemp(solidImage(120, 80, 0, 255, 0)),
+        await writeTemp(solidImage(400, 600, 255, 0, 0)),
+        await writeTemp(solidImage(400, 600, 0, 0, 255)),
       ];
 
-      final low = await engine.blend(
+      final result = await engine.blend(
         imagePaths: paths,
-        config: const SeamlessBlendConfig(fusionStrength: 0.0),
-      );
-      final high = await engine.blend(
-        imagePaths: paths,
-        config: const SeamlessBlendConfig(fusionStrength: 1.0),
+        config: const SeamlessBlendConfig(
+          aspect: CollageAspectPreset.ratio16x9Portrait,
+          fusionStrength: 0.5,
+          maxEdge: 900,
+        ),
       );
 
-      expect(high.height, low.height);
+      expect(result.height, 900);
+      expect(result.width / result.height, closeTo(9 / 16, 0.02));
+    });
+
+    test('respeita aspect 16:9 landscape', () async {
+      final paths = [
+        await writeTemp(solidImage(600, 400, 255, 0, 0)),
+        await writeTemp(solidImage(600, 400, 0, 0, 255)),
+      ];
+
+      final result = await engine.blend(
+        imagePaths: paths,
+        config: const SeamlessBlendConfig(
+          aspect: CollageAspectPreset.ratio16x9Landscape,
+          fusionStrength: 0.4,
+          maxEdge: 1600,
+        ),
+      );
+
+      expect(result.width, 1600);
+      expect(result.width / result.height, closeTo(16 / 9, 0.02));
+    });
+
+    test('respeita aspect 1:1', () async {
+      final paths = [
+        await writeTemp(solidImage(300, 300, 255, 0, 0)),
+        await writeTemp(solidImage(300, 300, 0, 255, 0)),
+      ];
+
+      final result = await engine.blend(
+        imagePaths: paths,
+        config: const SeamlessBlendConfig(
+          aspect: CollageAspectPreset.square,
+          fusionStrength: 0.3,
+          maxEdge: 800,
+        ),
+      );
+
+      expect(result.width, 800);
+      expect(result.height, 800);
+    });
+
+    test('2 fotos fusion=1 mantém dimensões do preset', () async {
+      final paths = [
+        await writeTemp(solidImage(200, 200, 255, 0, 0)),
+        await writeTemp(solidImage(200, 200, 0, 0, 255)),
+      ];
+
+      final result = await engine.blend(
+        imagePaths: paths,
+        config: const SeamlessBlendConfig(
+          aspect: CollageAspectPreset.square,
+          fusionStrength: 1.0,
+          maxEdge: 500,
+        ),
+      );
+
+      expect(result.width, 500);
+      expect(result.height, 500);
+
+      // Centro deve ser mistura (não vermelho puro nem azul puro).
+      final mid = result.image.getPixel(250, 250);
+      expect(mid.r, lessThan(250));
+      expect(mid.b, lessThan(250));
+      expect(mid.r + mid.b, greaterThan(100));
+    });
+
+    test('fusionStrength alto aumenta overlap efetivo (slot maior)', () {
+      const axis = 900;
+      final lowO = SeamlessBlendCurve.overlapPixels(
+        axisLength: axis,
+        photoCount: 3,
+        fusionStrength: 0.0,
+      );
+      final highO = SeamlessBlendCurve.overlapPixels(
+        axisLength: axis,
+        photoCount: 3,
+        fusionStrength: 1.0,
+      );
+      final lowSlot = SeamlessBlendCurve.slotSpan(
+        axisLength: axis,
+        photoCount: 3,
+        overlap: lowO,
+      );
+      final highSlot = SeamlessBlendCurve.slotSpan(
+        axisLength: axis,
+        photoCount: 3,
+        overlap: highO,
+      );
+      expect(highO, greaterThan(lowO));
+      expect(highSlot, greaterThan(lowSlot));
     });
 
     test('rejeita menos de 2 fotos', () async {

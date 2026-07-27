@@ -5,6 +5,7 @@ import MediaPipeTasksVision
 public class BeautyMediapipePlugin: NSObject, FlutterPlugin {
   private var faceBridge: FaceLandmarkerBridge?
   private var poseBridge: PoseLandmarkerBridge?
+  private var segmenterBridge: ImageSegmenterBridge?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -15,6 +16,7 @@ public class BeautyMediapipePlugin: NSObject, FlutterPlugin {
     registrar.addMethodCallDelegate(instance, channel: channel)
     instance.faceBridge = FaceLandmarkerBridge()
     instance.poseBridge = PoseLandmarkerBridge()
+    instance.segmenterBridge = ImageSegmenterBridge()
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -26,10 +28,14 @@ public class BeautyMediapipePlugin: NSObject, FlutterPlugin {
         return
       }
       let posePath = args["poseModelPath"] as? String
+      let segmenterPath = args["segmenterModelPath"] as? String
       do {
         try faceBridge?.initialize(modelPath: facePath)
         if let posePath, !posePath.isEmpty {
           try poseBridge?.initialize(modelPath: posePath)
+        }
+        if let segmenterPath, !segmenterPath.isEmpty {
+          try segmenterBridge?.initialize(modelPath: segmenterPath)
         }
         result(nil)
       } catch {
@@ -86,9 +92,35 @@ public class BeautyMediapipePlugin: NSObject, FlutterPlugin {
         result(FlutterError(code: "detect_failed", message: error.localizedDescription, details: nil))
       }
 
+    case "detectPersonMask":
+      guard let bridge = segmenterBridge else {
+        result(FlutterError(code: "not_initialized", message: "Segmenter bridge unavailable", details: nil))
+        return
+      }
+      guard let args = call.arguments as? [String: Any],
+            let bytes = args["bytes"] as? FlutterStandardTypedData else {
+        result(FlutterError(code: "invalid_args", message: "bytes required", details: nil))
+        return
+      }
+      let rotation = args["rotation"] as? Int ?? 0
+      let width = args["width"] as? Int ?? 0
+      let height = args["height"] as? Int ?? 0
+      do {
+        let mapped = try bridge.detectPersonMask(
+          imageBytes: bytes.data,
+          width: width,
+          height: height,
+          rotation: rotation
+        )
+        result(mapped)
+      } catch {
+        result(FlutterError(code: "detect_failed", message: error.localizedDescription, details: nil))
+      }
+
     case "dispose":
       faceBridge?.dispose()
       poseBridge?.dispose()
+      segmenterBridge?.dispose()
       result(nil)
 
     default:

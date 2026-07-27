@@ -4,20 +4,20 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
+import '../../../../core/utils/seamless_blend_curve.dart';
 import '../../../../core/utils/seamless_blend_engine.dart';
 
-/// Preview gerado pelo mesmo motor CPU do export — comportamento idêntico
-/// para 2, 3 ou mais fotos.
+/// Preview gerado pelo mesmo motor CPU do export.
 class SeamlessCollagePreview extends StatefulWidget {
   const SeamlessCollagePreview({
     super.key,
     required this.imagePaths,
-    required this.layout,
+    required this.aspect,
     required this.fusionStrength,
   });
 
   final List<String> imagePaths;
-  final CollageLayout layout;
+  final CollageAspectPreset aspect;
   final double fusionStrength;
 
   @override
@@ -26,14 +26,15 @@ class SeamlessCollagePreview extends StatefulWidget {
 
 class _SeamlessCollagePreviewState extends State<SeamlessCollagePreview> {
   static const _engine = SeamlessBlendEngine();
-  static const _previewMaxCrossAxis = 720;
+  static const _previewMaxEdge = 720;
 
   Uint8List? _previewBytes;
-  double? _aspectRatio;
   bool _isGenerating = false;
   Timer? _debounce;
   int _generation = 0;
   int _displayGeneration = 0;
+
+  double get _presetAspectRatio => widget.aspect.widthOverHeight;
 
   @override
   void initState() {
@@ -57,7 +58,8 @@ class _SeamlessCollagePreviewState extends State<SeamlessCollagePreview> {
 
   bool _inputsChanged(SeamlessCollagePreview old) {
     return _pathsChanged(old.imagePaths) ||
-        old.layout != widget.layout ||
+        old.aspect.family != widget.aspect.family ||
+        old.aspect.orientation != widget.aspect.orientation ||
         old.fusionStrength != widget.fusionStrength;
   }
 
@@ -76,14 +78,12 @@ class _SeamlessCollagePreviewState extends State<SeamlessCollagePreview> {
     if (widget.imagePaths.length < SeamlessBlendEngine.minPhotos) {
       setState(() {
         _previewBytes = null;
-        _aspectRatio = null;
         _isGenerating = false;
         _displayGeneration = ++_generation;
       });
       return;
     }
 
-    // Descarta preview antigo imediatamente ao trocar fotos/ordem.
     if (immediate && mounted) {
       setState(() {
         _previewBytes = null;
@@ -107,18 +107,17 @@ class _SeamlessCollagePreviewState extends State<SeamlessCollagePreview> {
     final generation = ++_generation;
     if (mounted) setState(() => _isGenerating = true);
 
-    // Snapshot — evita ler lista mutável durante o blend async.
     final paths = List<String>.from(widget.imagePaths);
-    final layout = widget.layout;
+    final aspect = widget.aspect;
     final fusion = widget.fusionStrength;
 
     try {
       final result = await _engine.blend(
         imagePaths: paths,
         config: SeamlessBlendConfig(
-          layout: layout,
+          aspect: aspect,
           fusionStrength: fusion,
-          maxCrossAxis: _previewMaxCrossAxis,
+          maxEdge: _previewMaxEdge,
           jpegQuality: 82,
         ),
       );
@@ -131,7 +130,6 @@ class _SeamlessCollagePreviewState extends State<SeamlessCollagePreview> {
 
       setState(() {
         _previewBytes = bytes;
-        _aspectRatio = result.width / result.height;
         _displayGeneration = generation;
         _isGenerating = false;
       });
@@ -139,7 +137,6 @@ class _SeamlessCollagePreviewState extends State<SeamlessCollagePreview> {
       if (!mounted || generation != _generation) return;
       setState(() {
         _previewBytes = null;
-        _aspectRatio = null;
         _isGenerating = false;
       });
     }
@@ -151,21 +148,11 @@ class _SeamlessCollagePreviewState extends State<SeamlessCollagePreview> {
       return const _EmptyPreview();
     }
 
-    if (_previewBytes == null) {
-      return const Center(
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      );
-    }
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxW = constraints.maxWidth;
         final maxH = constraints.maxHeight;
-        final ratio = _aspectRatio ?? 1;
+        final ratio = _presetAspectRatio;
 
         var width = maxW;
         var height = width / ratio;
@@ -183,17 +170,28 @@ class _SeamlessCollagePreviewState extends State<SeamlessCollagePreview> {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.memory(
-                    _previewBytes!,
-                    key: ValueKey(_displayGeneration),
-                    fit: BoxFit.contain,
-                    gaplessPlayback: false,
-                  ),
+                  child: _previewBytes == null
+                      ? const ColoredBox(
+                          color: Color(0x11000000),
+                          child: Center(
+                            child: SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        )
+                      : Image.memory(
+                          _previewBytes!,
+                          key: ValueKey(_displayGeneration),
+                          fit: BoxFit.cover,
+                          gaplessPlayback: false,
+                        ),
                 ),
-                if (_isGenerating)
-                  Container(
+                if (_isGenerating && _previewBytes != null)
+                  const ColoredBox(
                     color: Colors.black26,
-                    child: const Center(
+                    child: Center(
                       child: SizedBox(
                         width: 24,
                         height: 24,

@@ -16,6 +16,7 @@ import '../models/image_source_rgba.dart';
 import '../models/pose_result.dart';
 import '../models/processing_pipeline.dart';
 import '../performance/adaptive_preview_policy.dart';
+import '../segment/person_mask.dart';
 import 'widgets/beauty_adjustments_panel.dart';
 
 /// Editor de retoque beauty — ajustes manuais rosto/nariz/corpo/pele.
@@ -35,6 +36,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   ImageSource? _previewSource;
   FaceMeshResult? _cachedFace;
   PoseResult? _cachedPose;
+  PersonMask? _cachedPersonMask;
   bool _landmarksReady = false;
   bool _processing = false;
   bool _showOriginal = false;
@@ -100,6 +102,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       _previewSource = previewSource;
       _cachedFace = null;
       _cachedPose = null;
+      _cachedPersonMask = null;
       _landmarksReady = false;
       _lastApplyMs = null;
       _showOriginal = false;
@@ -146,8 +149,10 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     controller.poseLandmarkThrottle.reset();
     final face = await controller.detectFace(_previewSource!);
     final pose = await controller.detectPose(_previewSource!);
+    final personMask = await controller.detectPersonMask(_previewSource!);
     _cachedFace = face;
     _cachedPose = pose;
+    _cachedPersonMask = personMask;
     _landmarksReady = true;
   }
 
@@ -171,6 +176,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         quality: bodyActive ? 82 : 85,
         face: _cachedFace,
         pose: _cachedPose,
+        personMask: bodyActive ? _cachedPersonMask : null,
         interactivePreview: bodyActive,
       );
 

@@ -46,6 +46,11 @@ class TiledExportEngine {
 
     final face = await controller.detectFace(rgbaSource);
     final pose = await controller.detectPose(rgbaSource);
+    final personMask = controller.bodyFilterPipeline.hasActiveBodyWarp(
+      pipeline.effectiveParameters,
+    )
+        ? await controller.detectPersonMask(rgbaSource)
+        : null;
 
     final params = pipeline.effectiveParameters;
     final imageSize = Size(
@@ -57,6 +62,7 @@ class TiledExportEngine {
       pose: pose,
       imageSize: imageSize,
       parameters: params,
+      personMask: personMask,
     );
     final faceField = controller.composeFaceField(
       face: face,

@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/image_save_utils.dart';
+import '../../../../core/utils/seamless_blend_curve.dart';
 import '../../../../core/utils/seamless_blend_engine.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/multi_upload_area.dart';
@@ -23,7 +24,7 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
   static const _engine = SeamlessBlendEngine();
 
   List<String> _imagePaths = [];
-  CollageLayout _layout = CollageLayout.vertical;
+  CollageAspectPreset _aspect = CollageAspectPreset.ratio16x9Portrait;
   double _fusionStrength = 0.5;
   bool _isExporting = false;
   int _collageRevision = 0;
@@ -32,7 +33,12 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
       _imagePaths.length >= SeamlessBlendEngine.minPhotos && !_isExporting;
 
   String get _previewKey =>
-      '$_collageRevision|$_layout|${_imagePaths.join('\u0001')}';
+      '$_collageRevision|${_aspect.family}|${_aspect.orientation}|${_imagePaths.join('\u0001')}';
+
+  SeamlessBlendConfig get _config => SeamlessBlendConfig(
+        aspect: _aspect,
+        fusionStrength: _fusionStrength,
+      );
 
   void _onImagesChanged(List<String> paths) {
     setState(() {
@@ -41,8 +47,8 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
     });
   }
 
-  void _onLayoutChanged(CollageLayout layout) {
-    setState(() => _layout = layout);
+  void _onAspectChanged(CollageAspectPreset aspect) {
+    setState(() => _aspect = aspect);
   }
 
   void _onFusionChanged(double value) {
@@ -75,10 +81,7 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
     try {
       final file = await _engine.exportToFile(
         imagePaths: _imagePaths,
-        config: SeamlessBlendConfig(
-          layout: _layout,
-          fusionStrength: _fusionStrength,
-        ),
+        config: _config,
       );
 
       if (!mounted) return;
@@ -112,10 +115,7 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
     try {
       final file = await _engine.exportToFile(
         imagePaths: _imagePaths,
-        config: SeamlessBlendConfig(
-          layout: _layout,
-          fusionStrength: _fusionStrength,
-        ),
+        config: _config,
       );
 
       if (!mounted) return;
@@ -137,6 +137,7 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final horizontal = _aspect.isHorizontalStack;
 
     return Scaffold(
       appBar: AppBar(
@@ -164,7 +165,7 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
                       child: SeamlessCollagePreview(
                         key: ValueKey(_previewKey),
                         imagePaths: _imagePaths,
-                        layout: _layout,
+                        aspect: _aspect,
                         fusionStrength: _fusionStrength,
                       ),
                     ),
@@ -197,14 +198,14 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
                           const SizedBox(height: 8),
                           _PhotoOrderList(
                             imagePaths: _imagePaths,
-                            layout: _layout,
+                            horizontal: horizontal,
                             onReorder: _onReorder,
                             onRemove: _removeAt,
                           ),
                         ],
                         const SizedBox(height: 16),
                         Text(
-                          'Formato',
+                          'Proporção',
                           style: AppTextStyles.labelLarge.copyWith(
                             fontWeight: FontWeight.w600,
                             color: isDark
@@ -213,15 +214,15 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        CollageLayoutSelector(
-                          layout: _layout,
-                          onChanged: _onLayoutChanged,
+                        CollageAspectSelector(
+                          aspect: _aspect,
+                          onChanged: _onAspectChanged,
                         ),
                         const SizedBox(height: 16),
                         Row(
                           children: [
                             Text(
-                              'Suavidade da emenda',
+                              'Mesclagem',
                               style: AppTextStyles.labelLarge.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: isDark
@@ -231,7 +232,9 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
                             ),
                             const Spacer(),
                             Text(
-                              '${(_fusionStrength * 100).round()}%',
+                              _fusionStrength >= 0.98
+                                  ? 'Fusão máxima'
+                                  : '${(_fusionStrength * 100).round()}%',
                               style: AppTextStyles.labelMedium.copyWith(
                                 color: AppColors.primary,
                                 fontWeight: FontWeight.bold,
@@ -286,18 +289,18 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
 class _PhotoOrderList extends StatelessWidget {
   const _PhotoOrderList({
     required this.imagePaths,
-    required this.layout,
+    required this.horizontal,
     required this.onReorder,
     required this.onRemove,
   });
 
   final List<String> imagePaths;
-  final CollageLayout layout;
+  final bool horizontal;
   final void Function(int oldIndex, int newIndex) onReorder;
   final void Function(int index) onRemove;
 
   String _positionLabel(int index) {
-    if (layout == CollageLayout.vertical) {
+    if (!horizontal) {
       if (imagePaths.length == 2) {
         return index == 0 ? 'Cima' : 'Baixo';
       }

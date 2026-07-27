@@ -4,6 +4,7 @@ import '../../models/mesh_region.dart';
 import '../../models/pose_result.dart';
 import '../../models/tri_mesh.dart';
 import '../../models/warp_field.dart';
+import '../../segment/person_mask.dart';
 import '../../warp/models/control_point.dart';
 import '../../warp/warp_field_builder.dart';
 import 'arm_slim.dart';
@@ -87,6 +88,7 @@ class BodyFilterPipeline {
     required Size imageSize,
     required Map<String, double> parameters,
     bool interactive = false,
+    PersonMask? personMask,
   }) {
     if (!canApply(pose, parameters)) {
       return WarpField.identity(imageSize: imageSize, region: MeshRegion.torso);
@@ -138,6 +140,7 @@ class BodyFilterPipeline {
       imageSize: imageSize,
       region: MeshRegion.torso,
       intensity: maxIntensity,
+      personMask: personMask,
     );
   }
 

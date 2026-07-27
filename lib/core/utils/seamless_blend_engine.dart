@@ -5,21 +5,23 @@ import 'package:image/image.dart' as img;
 
 import 'seamless_blend_curve.dart';
 
-enum CollageLayout { vertical, horizontal }
-
 /// Configuração da colagem sem emenda.
 class SeamlessBlendConfig {
   const SeamlessBlendConfig({
-    this.layout = CollageLayout.vertical,
+    this.aspect = CollageAspectPreset.ratio16x9Portrait,
     this.fusionStrength = 0.5,
-    this.maxCrossAxis = 2048,
+    this.maxEdge = 2048,
     this.jpegQuality = 92,
   });
 
-  final CollageLayout layout;
+  final CollageAspectPreset aspect;
   final double fusionStrength;
-  final int maxCrossAxis;
+  /// Maior lado do canvas (export 2048, preview 720).
+  final int maxEdge;
   final int jpegQuality;
+
+  /// Compat: aliases antigos.
+  int get maxCrossAxis => maxEdge;
 }
 
 class SeamlessBlendResult {
@@ -34,34 +36,12 @@ class SeamlessBlendResult {
   final int height;
 }
 
-/// Motor CPU para colagem com transição suave entre fotos.
+/// Motor CPU: canvas no aspect escolhido + slots cover + overlap por fusão.
 class SeamlessBlendEngine {
   const SeamlessBlendEngine();
 
   static const int minPhotos = 2;
   static const int maxPhotos = 12;
-
-  /// Overlap uniforme por eixo transversal, limitado pelas fotos adjacentes.
-  static int overlapPixels({
-    required int crossAxis,
-    required int sizeA,
-    required int sizeB,
-  }) {
-    if (sizeA <= 0 || sizeB <= 0 || crossAxis <= 0) return 0;
-
-    final base = (crossAxis * SeamlessBlendCurve.overlapRatio).round();
-    final limit = math.min(sizeA, sizeB) ~/ 3;
-    return base.clamp(4, math.max(4, limit));
-  }
-
-  /// Compatibilidade com testes legados (2 fotos mesma dimensão).
-  static int overlapPixelsLegacy(int sizeA, int sizeB) {
-    return overlapPixels(
-      crossAxis: math.max(sizeA, sizeB),
-      sizeA: sizeA,
-      sizeB: sizeB,
-    );
-  }
 
   Future<SeamlessBlendResult> blend({
     required List<String> imagePaths,
@@ -84,9 +64,9 @@ class SeamlessBlendEngine {
       decoded.add(image);
     }
 
-    final result = config.layout == CollageLayout.vertical
-        ? _blendVertical(decoded, config)
-        : _blendHorizontal(decoded, config);
+    final result = config.aspect.isHorizontalStack
+        ? _blendHorizontal(decoded, config)
+        : _blendVertical(decoded, config);
 
     return SeamlessBlendResult(
       image: result,
@@ -113,146 +93,191 @@ class SeamlessBlendEngine {
   }
 
   img.Image _blendVertical(List<img.Image> images, SeamlessBlendConfig config) {
-    final targetWidth = _targetCrossAxis(
-      images.map((i) => i.width).toList(),
-      config.maxCrossAxis,
+    final size = config.aspect.canvasSize(config.maxEdge);
+    final canvasW = size.width;
+    final canvasH = size.height;
+    final n = images.length;
+
+    var overlap = SeamlessBlendCurve.overlapPixels(
+      axisLength: canvasH,
+      photoCount: n,
+      fusionStrength: config.fusionStrength,
     );
-
-    final scaled = images
-        .map((image) => img.copyResize(image, width: targetWidth))
-        .toList();
-
-    final heights = scaled.map((i) => i.height).toList();
-    final overlaps = _computeOverlaps(
-      sizes: heights,
-      crossAxis: targetWidth,
-    );
-
-    var totalHeight = scaled.first.height;
-    for (var i = 1; i < scaled.length; i++) {
-      totalHeight += scaled[i].height - overlaps[i - 1];
-    }
-
-    final canvas = img.Image(width: targetWidth, height: totalHeight);
-    img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
-    img.compositeImage(canvas, scaled.first, dstY: 0);
-
-    var currentY = scaled.first.height;
-    for (var i = 1; i < scaled.length; i++) {
-      final overlap = overlaps[i - 1];
-      final current = scaled[i];
-      final dstY = currentY - overlap;
-
-      _blendOverlapVertical(
-        canvas: canvas,
-        bottom: current,
-        dstY: dstY,
+    overlap = _applyMiddleBudget(
+      overlap: overlap,
+      photoCount: n,
+      slotHint: SeamlessBlendCurve.slotSpan(
+        axisLength: canvasH,
+        photoCount: n,
         overlap: overlap,
-        fusionStrength: config.fusionStrength,
-      );
+      ),
+      fusionStrength: config.fusionStrength,
+    );
 
-      for (var row = overlap; row < current.height; row++) {
-        for (var x = 0; x < targetWidth; x++) {
-          canvas.setPixel(x, dstY + row, current.getPixel(x, row));
-        }
+    final slotH = SeamlessBlendCurve.slotSpan(
+      axisLength: canvasH,
+      photoCount: n,
+      overlap: overlap,
+    );
+    final step = math.max(1, slotH - overlap);
+
+    final slots = [
+      for (final image in images) _coverCrop(image, canvasW, slotH),
+    ];
+
+    final canvas = img.Image(width: canvasW, height: canvasH);
+    img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
+
+    // Primeira foto.
+    _blit(canvas, slots.first, 0, 0);
+
+    for (var i = 1; i < n; i++) {
+      final dstY = i * step;
+      final current = slots[i];
+      final blendRows = math.min(overlap, canvasH - dstY);
+
+      if (blendRows > 0) {
+        _blendOverlapVertical(
+          canvas: canvas,
+          bottom: current,
+          dstY: dstY,
+          overlap: blendRows,
+          fusionStrength: config.fusionStrength,
+        );
       }
 
-      currentY = dstY + current.height;
+      for (var row = blendRows; row < slotH; row++) {
+        final cy = dstY + row;
+        if (cy < 0 || cy >= canvasH) continue;
+        for (var x = 0; x < canvasW; x++) {
+          canvas.setPixel(x, cy, current.getPixel(x, row));
+        }
+      }
     }
 
     return canvas;
   }
 
   img.Image _blendHorizontal(List<img.Image> images, SeamlessBlendConfig config) {
-    final targetHeight = _targetCrossAxis(
-      images.map((i) => i.height).toList(),
-      config.maxCrossAxis,
+    final size = config.aspect.canvasSize(config.maxEdge);
+    final canvasW = size.width;
+    final canvasH = size.height;
+    final n = images.length;
+
+    var overlap = SeamlessBlendCurve.overlapPixels(
+      axisLength: canvasW,
+      photoCount: n,
+      fusionStrength: config.fusionStrength,
     );
-
-    final scaled = images
-        .map((image) => img.copyResize(image, height: targetHeight))
-        .toList();
-
-    final widths = scaled.map((i) => i.width).toList();
-    final overlaps = _computeOverlaps(
-      sizes: widths,
-      crossAxis: targetHeight,
-    );
-
-    var totalWidth = scaled.first.width;
-    for (var i = 1; i < scaled.length; i++) {
-      totalWidth += scaled[i].width - overlaps[i - 1];
-    }
-
-    final canvas = img.Image(width: totalWidth, height: targetHeight);
-    img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
-    img.compositeImage(canvas, scaled.first, dstX: 0);
-
-    var currentX = scaled.first.width;
-    for (var i = 1; i < scaled.length; i++) {
-      final overlap = overlaps[i - 1];
-      final current = scaled[i];
-      final dstX = currentX - overlap;
-
-      _blendOverlapHorizontal(
-        canvas: canvas,
-        right: current,
-        dstX: dstX,
+    overlap = _applyMiddleBudget(
+      overlap: overlap,
+      photoCount: n,
+      slotHint: SeamlessBlendCurve.slotSpan(
+        axisLength: canvasW,
+        photoCount: n,
         overlap: overlap,
-        fusionStrength: config.fusionStrength,
-      );
+      ),
+      fusionStrength: config.fusionStrength,
+    );
 
-      for (var col = overlap; col < current.width; col++) {
-        for (var y = 0; y < targetHeight; y++) {
-          canvas.setPixel(dstX + col, y, current.getPixel(col, y));
-        }
+    final slotW = SeamlessBlendCurve.slotSpan(
+      axisLength: canvasW,
+      photoCount: n,
+      overlap: overlap,
+    );
+    final step = math.max(1, slotW - overlap);
+
+    final slots = [
+      for (final image in images) _coverCrop(image, slotW, canvasH),
+    ];
+
+    final canvas = img.Image(width: canvasW, height: canvasH);
+    img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
+
+    _blit(canvas, slots.first, 0, 0);
+
+    for (var i = 1; i < n; i++) {
+      final dstX = i * step;
+      final current = slots[i];
+      final blendCols = math.min(overlap, canvasW - dstX);
+
+      if (blendCols > 0) {
+        _blendOverlapHorizontal(
+          canvas: canvas,
+          right: current,
+          dstX: dstX,
+          overlap: blendCols,
+          fusionStrength: config.fusionStrength,
+        );
       }
 
-      currentX = dstX + current.width;
+      for (var col = blendCols; col < slotW; col++) {
+        final cx = dstX + col;
+        if (cx < 0 || cx >= canvasW) continue;
+        for (var y = 0; y < canvasH; y++) {
+          canvas.setPixel(cx, y, current.getPixel(col, y));
+        }
+      }
     }
 
     return canvas;
   }
 
-  /// Todas as junções usam o mesmo overlap base; fotos do meio têm orçamento limitado.
-  List<int> _computeOverlaps({
-    required List<int> sizes,
-    required int crossAxis,
+  int _applyMiddleBudget({
+    required int overlap,
+    required int photoCount,
+    required int slotHint,
+    required double fusionStrength,
   }) {
-    final overlaps = <int>[];
-    for (var i = 0; i < sizes.length - 1; i++) {
-      overlaps.add(
-        overlapPixels(
-          crossAxis: crossAxis,
-          sizeA: sizes[i],
-          sizeB: sizes[i + 1],
-        ),
-      );
+    if (photoCount <= 2) return overlap;
+    final budget = (slotHint *
+            SeamlessBlendCurve.middlePhotoOverlapBudget(fusionStrength))
+        .round();
+    // Cada foto do meio participa de 2 emendas → limita overlap individual.
+    final maxEach = math.max(4, budget ~/ 2);
+    return math.min(overlap, maxEach);
+  }
+
+  img.Image _coverCrop(img.Image source, int targetW, int targetH) {
+    if (targetW <= 0 || targetH <= 0) {
+      return img.Image(width: 1, height: 1);
     }
+    final scale = math.max(
+      targetW / source.width,
+      targetH / source.height,
+    );
+    final newW = math.max(targetW, (source.width * scale).round());
+    final newH = math.max(targetH, (source.height * scale).round());
+    final resized = img.copyResize(source, width: newW, height: newH);
+    final x = ((resized.width - targetW) / 2).round().clamp(
+          0,
+          math.max(0, resized.width - targetW),
+        );
+    final y = ((resized.height - targetH) / 2).round().clamp(
+          0,
+          math.max(0, resized.height - targetH),
+        );
+    return img.copyCrop(
+      resized,
+      x: x.toInt(),
+      y: y.toInt(),
+      width: targetW,
+      height: targetH,
+    );
+  }
 
-    for (var i = 1; i < sizes.length - 1; i++) {
-      final budget =
-          (sizes[i] * SeamlessBlendCurve.middlePhotoOverlapBudget).round();
-      final top = overlaps[i - 1];
-      final bottom = overlaps[i];
-      final total = top + bottom;
-
-      if (total > budget && budget >= 8) {
-        final scale = budget / total;
-        overlaps[i - 1] = math.max(4, (top * scale).round());
-        overlaps[i] = math.max(4, (bottom * scale).round());
+  void _blit(img.Image canvas, img.Image src, int dstX, int dstY) {
+    for (var y = 0; y < src.height; y++) {
+      final cy = dstY + y;
+      if (cy < 0 || cy >= canvas.height) continue;
+      for (var x = 0; x < src.width; x++) {
+        final cx = dstX + x;
+        if (cx < 0 || cx >= canvas.width) continue;
+        canvas.setPixel(cx, cy, src.getPixel(x, y));
       }
     }
-
-    return overlaps;
   }
 
-  int _targetCrossAxis(List<int> values, int maxCrossAxis) {
-    final maxValue = values.reduce(math.max);
-    return maxValue.clamp(1, maxCrossAxis);
-  }
-
-  /// Amostra o topo do canvas (composite acumulado) + base da foto nova.
   void _blendOverlapVertical({
     required img.Image canvas,
     required img.Image bottom,
@@ -261,14 +286,17 @@ class SeamlessBlendEngine {
     required double fusionStrength,
   }) {
     for (var row = 0; row < overlap; row++) {
-      final t = row / overlap;
+      final t = overlap <= 1 ? 1.0 : row / (overlap - 1);
       final weight = SeamlessBlendCurve.blendWeight(t, fusionStrength);
+      final cy = dstY + row;
+      if (cy < 0 || cy >= canvas.height) continue;
       for (var x = 0; x < canvas.width; x++) {
-        final topPixel = canvas.getPixel(x, dstY + row);
+        if (x >= bottom.width || row >= bottom.height) continue;
+        final topPixel = canvas.getPixel(x, cy);
         final bottomPixel = bottom.getPixel(x, row);
         canvas.setPixel(
           x,
-          dstY + row,
+          cy,
           _lerpPixel(topPixel, bottomPixel, weight),
         );
       }
@@ -283,13 +311,16 @@ class SeamlessBlendEngine {
     required double fusionStrength,
   }) {
     for (var col = 0; col < overlap; col++) {
-      final t = col / overlap;
+      final t = overlap <= 1 ? 1.0 : col / (overlap - 1);
       final weight = SeamlessBlendCurve.blendWeight(t, fusionStrength);
+      final cx = dstX + col;
+      if (cx < 0 || cx >= canvas.width) continue;
       for (var y = 0; y < canvas.height; y++) {
-        final leftPixel = canvas.getPixel(dstX + col, y);
+        if (y >= right.height || col >= right.width) continue;
+        final leftPixel = canvas.getPixel(cx, y);
         final rightPixel = right.getPixel(col, y);
         canvas.setPixel(
-          dstX + col,
+          cx,
           y,
           _lerpPixel(leftPixel, rightPixel, weight),
         );

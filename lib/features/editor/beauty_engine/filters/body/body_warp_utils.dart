@@ -150,7 +150,10 @@ abstract final class BodyWarpUtils {
     return points;
   }
 
-  /// Afina torso/cintura: borda lateral estimada → centro.
+  /// Afina torso/cintura: borda lateral (eixo da imagem) → centro.
+  ///
+  /// Usa esquerda/direita geométricas (menor/maior X), não os labels
+  /// MediaPipe left/right — em selfie espelhada o 11 fica à direita da foto.
   static List<ControlPoint> slimTorsoSides({
     required Offset leftTop,
     required Offset rightTop,
@@ -167,26 +170,30 @@ abstract final class BodyWarpUtils {
     final points = <ControlPoint>[];
     for (var i = 0; i <= samples; i++) {
       final t = i / samples;
-      final left = Offset(
+      final sideA = Offset(
         leftTop.dx + (leftBottom.dx - leftTop.dx) * t,
         leftTop.dy + (leftBottom.dy - leftTop.dy) * t,
       );
-      final right = Offset(
+      final sideB = Offset(
         rightTop.dx + (rightBottom.dx - rightTop.dx) * t,
         rightTop.dy + (rightBottom.dy - rightTop.dy) * t,
       );
-      final midX = (left.dx + right.dx) * 0.5;
-      // Mais forte no meio (cintura), mais suave nos extremos.
+
+      // Esquerda/direita na imagem (não no corpo da pessoa).
+      final imageLeft = sideA.dx <= sideB.dx ? sideA : sideB;
+      final imageRight = sideA.dx <= sideB.dx ? sideB : sideA;
+      final midX = (imageLeft.dx + imageRight.dx) * 0.5;
+
       final waistWeight = 0.55 + 0.45 * math.sin(math.pi * t);
       final localShift = shiftPx * waistWeight;
 
-      // Pontos na silhueta estimada (um pouco fora do esqueleto).
-      final halfWidth = (right.dx - left.dx).abs() * 0.5;
+      final halfWidth = (imageRight.dx - imageLeft.dx).abs() * 0.5;
       final edgePad = math.max(halfWidth * 0.35, imageSize.width * 0.02);
 
-      final leftEdge = Offset(left.dx - edgePad, left.dy);
-      final rightEdge = Offset(right.dx + edgePad, right.dy);
+      final leftEdge = Offset(imageLeft.dx - edgePad, imageLeft.dy);
+      final rightEdge = Offset(imageRight.dx + edgePad, imageRight.dy);
 
+      // Empurra bordas para o centro = emagrece.
       points.add(
         ControlPoint(
           source: clampToFrame(leftEdge, imageSize),
@@ -206,8 +213,7 @@ abstract final class BodyWarpUtils {
         ),
       );
 
-      // Âncora no eixo para o MLS não dobrar o centro.
-      final center = Offset(midX, left.dy);
+      final center = Offset(midX, imageLeft.dy);
       points.add(ControlPoint(source: center, target: center));
     }
 

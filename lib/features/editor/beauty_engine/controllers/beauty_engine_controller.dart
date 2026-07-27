@@ -19,12 +19,14 @@ import '../performance/landmark_throttle.dart';
 import '../performance/tiled_export_engine.dart';
 import '../pose/pose_detector.dart';
 import '../rendering/gpu_renderer.dart';
+import '../segment/person_mask.dart';
 import '../warp/warp_engine.dart';
 
 /// Orquestrador do Beauty Engine — ponto unico para a UI (sem Widget).
 class BeautyEngineController {
   final FaceMeshDetector faceDetector;
   final PoseDetector poseDetector;
+  final PersonMaskDetector? personMaskDetector;
   final MeshEngine meshEngine;
   final WarpEngine warpEngine;
   final GPURenderer gpuRenderer;
@@ -42,6 +44,7 @@ class BeautyEngineController {
     required this.meshEngine,
     required this.warpEngine,
     required this.gpuRenderer,
+    this.personMaskDetector,
     this.faceFilterPipeline = const FaceFilterPipeline(),
     this.bodyFilterPipeline = const BodyFilterPipeline(),
     this.skinFilterPipeline = const SkinFilterPipeline(),
@@ -66,12 +69,18 @@ class BeautyEngineController {
 
     final face = await detectFace(source);
     final pose = await detectPose(source);
+    final personMask = bodyFilterPipeline.hasActiveBodyWarp(
+      pipeline.effectiveParameters,
+    )
+        ? await detectPersonMask(source)
+        : null;
 
     final output = await _renderTexture(
       source: source,
       pipeline: pipeline,
       face: face,
       pose: pose,
+      personMask: personMask,
     );
 
     final bytes = await gpuRenderer.readPixels(output);
@@ -96,6 +105,7 @@ class BeautyEngineController {
     bool forceTiledExport = false,
     FaceMeshResult? face,
     PoseResult? pose,
+    PersonMask? personMask,
     bool interactivePreview = false,
   }) async {
     profiler.beginFrame();
@@ -117,11 +127,17 @@ class BeautyEngineController {
     profiler.start('export_total');
     final resolvedFace = face ?? await detectFace(source);
     final resolvedPose = pose ?? await detectPose(source);
+    final params = pipeline.effectiveParameters;
+    final resolvedMask = personMask ??
+        (bodyFilterPipeline.hasActiveBodyWarp(params)
+            ? await detectPersonMask(source)
+            : null);
     final output = await _renderTexture(
       source: source,
       pipeline: pipeline,
       face: resolvedFace,
       pose: resolvedPose,
+      personMask: resolvedMask,
       interactivePreview: interactivePreview,
     );
 
@@ -139,11 +155,24 @@ class BeautyEngineController {
     return poseLandmarkThrottle.resolve(() => poseDetector.detect(source));
   }
 
+  Future<PersonMask?> detectPersonMask(ImageSource source) async {
+    final detector = personMaskDetector;
+    if (detector == null) {
+      return null;
+    }
+    try {
+      return await detector.detect(source);
+    } catch (_) {
+      return null;
+    }
+  }
+
   WarpField? composeBodyField({
     required PoseResult? pose,
     required Size imageSize,
     required Map<String, double> parameters,
     bool interactive = false,
+    PersonMask? personMask,
   }) {
     if (pose == null || !bodyFilterPipeline.hasActiveBodyWarp(parameters)) {
       return null;
@@ -159,6 +188,7 @@ class BeautyEngineController {
       imageSize: imageSize,
       parameters: parameters,
       interactive: interactive,
+      personMask: personMask,
     );
   }
 
@@ -228,6 +258,7 @@ class BeautyEngineController {
     required ProcessingPipeline pipeline,
     required FaceMeshResult? face,
     PoseResult? pose,
+    PersonMask? personMask,
     bool interactivePreview = false,
   }) async {
     profiler.start('render_texture');
@@ -252,6 +283,7 @@ class BeautyEngineController {
       imageSize: imageSize,
       parameters: params,
       interactive: interactivePreview,
+      personMask: personMask,
     );
     if (bodyField != null && !bodyField.isIdentity) {
       output = await gpuRenderer.runPipeline(

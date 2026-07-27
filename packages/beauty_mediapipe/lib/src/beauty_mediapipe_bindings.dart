@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'native_image_buffer.dart';
 
 /// Landmark individual retornado pelo nativo.
@@ -70,16 +72,32 @@ class PoseLandmarkerNativeResult {
   });
 }
 
+/// Máscara de pessoa (1 canal uint8, 0–255) do Image Segmenter.
+class PersonMaskNativeResult {
+  final Uint8List bytes;
+  final int width;
+  final int height;
+
+  const PersonMaskNativeResult({
+    required this.bytes,
+    required this.width,
+    required this.height,
+  });
+}
+
 /// Bindings MediaPipe — implementação via MethodChannel.
 abstract class BeautyMediapipeBindings {
   Future<void> initialize({
     required String faceModelPath,
     String? poseModelPath,
+    String? segmenterModelPath,
   });
 
   Future<FaceLandmarkerNativeResult?> detectFace(NativeImageBuffer buffer);
 
   Future<PoseLandmarkerNativeResult?> detectPose(NativeImageBuffer buffer);
+
+  Future<PersonMaskNativeResult?> detectPersonMask(NativeImageBuffer buffer);
 
   void dispose();
 }

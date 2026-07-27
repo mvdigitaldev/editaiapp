@@ -95,3 +95,4 @@ flutter:
     - assets/logo.png
     - assets/mediapipe/face_landmarker.task
     - assets/mediapipe/pose_landmarker_lite.task
+    - assets/mediapipe/selfie_segmenter.tflite

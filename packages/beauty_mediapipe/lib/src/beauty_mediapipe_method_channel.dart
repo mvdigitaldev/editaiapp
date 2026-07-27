@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/services.dart';
 
 import 'beauty_mediapipe_bindings.dart';
@@ -17,10 +19,12 @@ class BeautyMediapipeMethodChannel implements BeautyMediapipeBindings {
   Future<void> initialize({
     required String faceModelPath,
     String? poseModelPath,
+    String? segmenterModelPath,
   }) async {
     await _channel.invokeMethod<void>('initialize', {
       'faceModelPath': faceModelPath,
       if (poseModelPath != null) 'poseModelPath': poseModelPath,
+      if (segmenterModelPath != null) 'segmenterModelPath': segmenterModelPath,
     });
     _initialized = true;
   }
@@ -63,6 +67,26 @@ class BeautyMediapipeMethodChannel implements BeautyMediapipeBindings {
     }
 
     return _parsePoseResult(raw as Map<dynamic, dynamic>);
+  }
+
+  @override
+  Future<PersonMaskNativeResult?> detectPersonMask(NativeImageBuffer buffer) async {
+    if (!_initialized) {
+      throw StateError('BeautyMediapipeMethodChannel not initialized');
+    }
+
+    final dynamic raw = await _channel.invokeMethod<dynamic>('detectPersonMask', {
+      'bytes': buffer.bytes,
+      'width': buffer.width,
+      'height': buffer.height,
+      'rotation': buffer.rotation,
+    });
+
+    if (raw == null) {
+      return null;
+    }
+
+    return _parsePersonMaskResult(raw as Map<dynamic, dynamic>);
   }
 
   @override
@@ -121,12 +145,44 @@ class BeautyMediapipeMethodChannel implements BeautyMediapipeBindings {
       bboxBottom: (box['bottom'] as num).toDouble(),
     );
   }
+
+  PersonMaskNativeResult _parsePersonMaskResult(Map<dynamic, dynamic> raw) {
+    final width = raw['width'] as int;
+    final height = raw['height'] as int;
+    final dynamic bytesRaw = raw['bytes'];
+    late final Uint8List bytes;
+    if (bytesRaw is Uint8List) {
+      bytes = bytesRaw;
+    } else if (bytesRaw is ByteData) {
+      bytes = bytesRaw.buffer.asUint8List(
+        bytesRaw.offsetInBytes,
+        bytesRaw.lengthInBytes,
+      );
+    } else if (bytesRaw is List<int>) {
+      bytes = Uint8List.fromList(bytesRaw);
+    } else {
+      throw StateError('person_mask_bytes_invalid: ${bytesRaw.runtimeType}');
+    }
+
+    if (bytes.length != width * height) {
+      throw StateError(
+        'person_mask_size_mismatch: got ${bytes.length}, expected ${width * height}',
+      );
+    }
+
+    return PersonMaskNativeResult(
+      bytes: bytes,
+      width: width,
+      height: height,
+    );
+  }
 }
 
 /// Stub para testes unitários.
 class BeautyMediapipeBindingsStub implements BeautyMediapipeBindings {
   FaceLandmarkerNativeResult? nextFaceResult;
   PoseLandmarkerNativeResult? nextPoseResult;
+  PersonMaskNativeResult? nextPersonMaskResult;
 
   @override
   Future<FaceLandmarkerNativeResult?> detectFace(NativeImageBuffer buffer) async {
@@ -139,11 +195,17 @@ class BeautyMediapipeBindingsStub implements BeautyMediapipeBindings {
   }
 
   @override
+  Future<PersonMaskNativeResult?> detectPersonMask(NativeImageBuffer buffer) async {
+    return nextPersonMaskResult;
+  }
+
+  @override
   void dispose() {}
 
   @override
   Future<void> initialize({
     required String faceModelPath,
     String? poseModelPath,
+    String? segmenterModelPath,
   }) async {}
 }
