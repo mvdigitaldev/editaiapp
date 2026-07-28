@@ -88,6 +88,8 @@ flutter:
   config:
     enable-swift-package-manager: false
   uses-material-design: true
+  shaders:
+    - lib/features/editor/beauty_engine/shaders/body_reshape_remap.frag
   assets:
     - assets/animations/
     - assets/filters/lut/

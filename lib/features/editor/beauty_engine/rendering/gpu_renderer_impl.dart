@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
+import '../body_reshape/rendering/fragment_program_warp_backend.dart';
 import 'export_encoder.dart';
+import 'fragment_program_backend.dart';
 import 'gpu_texture_store.dart';
 import 'render_pass.dart';
 import 'render_target.dart';
@@ -8,25 +10,62 @@ import 'shader_program_cache.dart';
 import 'texture_handle.dart';
 import 'texture_pool.dart';
 
-/// Pipeline GPU multi-pass com texture pool e export encoder.
+/// Pipeline multi-pass com texture pool e export encoder.
 ///
-/// Backend CPU hoje; interface pronta para FragmentProgram/Impeller (Sprint 08+).
+/// Preview de warp: [FragmentProgramWarpBackend] (Impeller). Fallback CPU
+/// apenas quando o backend não está disponível.
 class GpuRendererImpl implements GPURenderer {
   GpuRendererImpl({
     TexturePool? pool,
     ShaderProgramCache? shaderCache,
     ExportEncoder? exportEncoder,
-  })  : _pool = pool ?? TexturePool(),
-        _shaderCache = shaderCache ?? ShaderProgramCache(),
-        _exportEncoder = exportEncoder ?? const ExportEncoder();
+    FragmentProgramWarpBackend? warpBackend,
+    bool forceCpuWarp = false,
+  }) : this._(
+          pool: pool ?? TexturePool(),
+          exportEncoder: exportEncoder ?? const ExportEncoder(),
+          forceCpuWarp: forceCpuWarp,
+          warpBackend: warpBackend ??
+              FragmentProgramWarpBackend(forceCpuFallback: forceCpuWarp),
+          shaderCache: shaderCache,
+        );
+
+  GpuRendererImpl._({
+    required TexturePool pool,
+    required ExportEncoder exportEncoder,
+    required bool forceCpuWarp,
+    required FragmentProgramWarpBackend warpBackend,
+    ShaderProgramCache? shaderCache,
+  })  : _pool = pool,
+        _exportEncoder = exportEncoder,
+        _forceCpuWarp = forceCpuWarp,
+        _warpBackend = warpBackend,
+        _shaderCache = shaderCache ??
+            ShaderProgramCache(
+              warpBackend: warpBackend,
+              preferGpuWarp: !forceCpuWarp,
+            );
 
   final TexturePool _pool;
   final ShaderProgramCache _shaderCache;
   final ExportEncoder _exportEncoder;
+  final FragmentProgramWarpBackend _warpBackend;
+  final bool _forceCpuWarp;
+  bool _initialized = false;
 
   ShaderProgramCache get shaderCache => _shaderCache;
 
   GpuTextureStore get textureStore => _pool.store;
+
+  FragmentProgramBackend get fragmentBackend => _warpBackend;
+
+  Future<void> initialize() async {
+    if (_initialized) {
+      return;
+    }
+    await _warpBackend.initialize();
+    _initialized = true;
+  }
 
   @override
   Future<TextureHandle> upload(TextureUpload upload) async {
@@ -39,11 +78,16 @@ class GpuRendererImpl implements GPURenderer {
     required String shaderName,
     Map<String, Object> uniforms = const {},
   }) async {
+    await initialize();
     final pass = _shaderCache.getPass(shaderName);
+    final merged = Map<String, Object>.from(uniforms);
+    if (_forceCpuWarp) {
+      merged['forceCpu'] = true;
+    }
     final context = RenderPassContext(
       input: input,
       pool: _pool,
-      uniforms: uniforms,
+      uniforms: merged,
     );
     return pass.execute(context);
   }
@@ -53,6 +97,7 @@ class GpuRendererImpl implements GPURenderer {
     required TextureHandle input,
     required List<RenderPipelineStage> stages,
   }) async {
+    await initialize();
     var current = input;
     for (final stage in stages) {
       final next = await applyPass(
@@ -97,6 +142,9 @@ class GpuRendererImpl implements GPURenderer {
   @override
   void dispose() {
     _pool.releaseAll();
+    if (!identical(_warpBackend, FragmentProgramWarpBackend.shared)) {
+      _warpBackend.dispose();
+    }
   }
 }
 

@@ -1,10 +1,12 @@
-# Shaders GLSL/SPIR-V
+# Shaders GLSL / Flutter FragmentProgram
 
 | Shader | Sprint | Descricao |
 |--------|--------|-----------|
-| `warp_remap.frag` | 06 | Aplica WarpField (MLS remap) |
+| `body_reshape_remap.frag` | 09 | Preview Body Reshape (Impeller / FragmentProgram) |
+| `warp_remap.frag` | 06 | Referência GLSL ES do WarpField (legado) |
 | `bilateral_skin.frag` | 08+ | Skin smooth |
 | `lut_apply.frag` | — | LUT |
 | `makeup_blend.frag` | — | Blush, lipstick, contour |
 
-GPU path completo na Sprint 07. Sprint 06 usa CPU remap via `WarpCpuRemap` + `GPURendererStub`.
+Preview V2 (Sprint 9): `FragmentProgramWarpBackend` + `body_reshape_remap.frag`.
+Fallback CPU: `WarpCpuRemap` quando o FragmentProgram não estiver disponível.

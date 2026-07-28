@@ -6,6 +6,7 @@ import 'body_warp_filter.dart';
 ///
 /// Mantido na lista de filtros para canApply / UI; o compose usa
 /// [BodyFilterPipeline] torso unificado para evitar waist+body no mesmo MLS.
+/// V2: [WaistStrategy] via [BodyMeshDeformer] / [BodyFilterPipeline.deformAdaptiveMesh].
 class WaistSlimFilter extends BodyWarpFilter {
   WaistSlimFilter();
 

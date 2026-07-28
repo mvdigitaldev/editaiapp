@@ -6,6 +6,7 @@ import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_region.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_reshape_request.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/legacy_body_parameter_adapter.dart';
+import 'package:editaiapp/features/editor/beauty_engine/body_reshape/providers/vision_capabilities.dart';
 import 'package:editaiapp/features/editor/beauty_engine/filters/body/body_filter_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -52,6 +53,7 @@ void main() {
         },
         boundingBox: Rect.fromLTWH(0.2, 0.1, 0.6, 0.8),
         providerId: 'fake',
+        capabilities: VisionCapabilities.mediapipePoseOnly,
       );
 
       expect(

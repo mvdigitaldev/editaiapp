@@ -7,6 +7,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../body_reshape/providers/background_analysis_provider.dart';
+import '../body_reshape/providers/body_mesh_provider.dart';
+import '../body_reshape/providers/body_part_segmentation_provider.dart';
+import '../body_reshape/providers/body_vision_coordinator.dart';
+import '../body_reshape/providers/mediapipe_body_mesh_provider.dart';
+import '../body_reshape/providers/mediapipe_person_matte_provider.dart';
+import '../body_reshape/providers/occlusion_provider.dart';
+import '../body_reshape/providers/person_matte_provider.dart';
+import '../body_reshape/providers/unavailable_vision_providers.dart';
 import '../controllers/beauty_engine_controller.dart';
 import '../face_mesh/face_mesh_detector.dart';
 import '../face_mesh/face_mesh_detector_impl.dart';
@@ -110,6 +119,52 @@ final personMaskDetectorProvider = Provider<PersonMaskDetector>(
   },
 );
 
+final bodyMeshProviderProvider = Provider<BodyMeshProvider>(
+  (ref) {
+    if (!_supportsNativeMediapipe) {
+      return const UnavailableBodyMeshProvider();
+    }
+    return MediaPipeBodyMeshProvider(
+      poseDetector: ref.watch(poseDetectorProvider),
+    );
+  },
+);
+
+final personMatteProviderProvider = Provider<PersonMatteProvider>(
+  (ref) {
+    if (!_supportsNativeMediapipe) {
+      return const UnavailablePersonMatteProvider();
+    }
+    return MediaPipePersonMatteProvider(
+      detector: ref.watch(personMaskDetectorProvider),
+    );
+  },
+);
+
+final bodyPartSegmentationProviderProvider =
+    Provider<BodyPartSegmentationProvider>(
+  (ref) => const UnavailableBodyPartSegmentationProvider(),
+);
+
+final occlusionProviderProvider = Provider<OcclusionProvider>(
+  (ref) => const UnavailableOcclusionProvider(),
+);
+
+final backgroundAnalysisProviderProvider = Provider<BackgroundAnalysisProvider>(
+  (ref) => const UnavailableBackgroundAnalysisProvider(),
+);
+
+final bodyVisionCoordinatorProvider = Provider<BodyVisionCoordinator>(
+  (ref) => BodyVisionCoordinator(
+    bodyMeshProvider: ref.watch(bodyMeshProviderProvider),
+    personMatteProvider: ref.watch(personMatteProviderProvider),
+    bodyPartSegmentationProvider:
+        ref.watch(bodyPartSegmentationProviderProvider),
+    occlusionProvider: ref.watch(occlusionProviderProvider),
+    backgroundAnalysisProvider: ref.watch(backgroundAnalysisProviderProvider),
+  ),
+);
+
 final meshEngineProvider = Provider<MeshEngine>(
   (ref) => MeshEngineImpl(),
 );
@@ -188,6 +243,7 @@ final beautyEngineControllerProvider = Provider<BeautyEngineController>(
     faceDetector: ref.watch(faceMeshDetectorProvider),
     poseDetector: ref.watch(poseDetectorProvider),
     personMaskDetector: ref.watch(personMaskDetectorProvider),
+    bodyVisionCoordinator: ref.watch(bodyVisionCoordinatorProvider),
     meshEngine: ref.watch(meshEngineProvider),
     warpEngine: ref.watch(warpEngineProvider),
     gpuRenderer: ref.watch(gpuRendererProvider),

@@ -3,7 +3,6 @@ import 'dart:ui';
 import '../models/mesh_region.dart';
 import '../models/warp_algorithm.dart';
 import '../rendering/gpu_renderer.dart';
-import '../rendering/texture_handle.dart';
 import 'control_point_builder.dart';
 import 'warp_field_builder.dart';
 import 'warp_engine.dart';
@@ -13,11 +12,15 @@ class MlsWarpEngine implements WarpEngine {
   MlsWarpEngine({
     ControlPointBuilder? controlPointBuilder,
     WarpFieldBuilder? fieldBuilder,
-  })  : _controlPointBuilder = controlPointBuilder ?? const ControlPointBuilder(),
-        _fieldBuilder = fieldBuilder ?? const WarpFieldBuilder();
+    BodyMultiPassPipeline? multiPassPipeline,
+  })  : _controlPointBuilder =
+            controlPointBuilder ?? const ControlPointBuilder(),
+        _fieldBuilder = fieldBuilder ?? const WarpFieldBuilder(),
+        _multiPassPipeline = multiPassPipeline ?? BodyMultiPassPipeline();
 
   final ControlPointBuilder _controlPointBuilder;
   final WarpFieldBuilder _fieldBuilder;
+  final BodyMultiPassPipeline _multiPassPipeline;
 
   WarpField? _activeField;
 
@@ -49,6 +52,16 @@ class MlsWarpEngine implements WarpEngine {
       intensity: intensity,
     );
     return _activeField!;
+  }
+
+  @override
+  BodyMultiPassResult? composeBodyMultiPass(BodyMultiPassInput input) {
+    if (!input.config.isV2Enabled) {
+      return null;
+    }
+    final result = _multiPassPipeline.run(input);
+    _activeField = result.field;
+    return result;
   }
 
   @override

@@ -2,7 +2,11 @@ import 'dart:typed_data';
 
 import '../models/image_source.dart';
 
-/// Máscara de pessoa (uint8 0–255, 1 canal).
+/// Máscara de pessoa legada (uint8 0–255, 1 canal).
+///
+/// O Body Reshape V2 usa [PersonMatte] + [ProtectionMaps] (SDF/contorno) para
+/// controlar o domínio de deformação. Este tipo permanece para o pipeline MLS
+/// atual e como fonte do adaptador MediaPipe via bridge.
 class PersonMask {
   final Uint8List bytes;
   final int width;

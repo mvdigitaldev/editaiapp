@@ -1,6 +1,13 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
+import '../body_reshape/models/body_frame_assets.dart';
+import '../body_reshape/models/body_reshape_request.dart';
+import '../body_reshape/models/warp_plan.dart';
+import '../body_reshape/occlusion/conservative_occlusion_provider.dart';
+import '../body_reshape/occlusion/occlusion_engine.dart';
+import '../body_reshape/providers/body_vision_coordinator.dart';
+import '../body_reshape/providers/vision_capabilities.dart';
 import '../filters/body/body_filter_pipeline.dart';
 import '../filters/face/face_filter_pipeline.dart';
 import '../filters/face/face_warp_utils.dart';
@@ -13,7 +20,6 @@ import '../models/image_source_rgba.dart';
 import '../models/processed_frame.dart';
 import '../models/processing_pipeline.dart';
 import '../models/pose_result.dart';
-import '../models/warp_field.dart';
 import '../performance/beauty_profiler.dart';
 import '../performance/landmark_throttle.dart';
 import '../performance/tiled_export_engine.dart';
@@ -27,6 +33,7 @@ class BeautyEngineController {
   final FaceMeshDetector faceDetector;
   final PoseDetector poseDetector;
   final PersonMaskDetector? personMaskDetector;
+  final BodyVisionCoordinator? bodyVisionCoordinator;
   final MeshEngine meshEngine;
   final WarpEngine warpEngine;
   final GPURenderer gpuRenderer;
@@ -37,6 +44,14 @@ class BeautyEngineController {
   final LandmarkThrottle<FaceMeshResult?> faceLandmarkThrottle;
   final LandmarkThrottle<PoseResult?> poseLandmarkThrottle;
   final TiledExportEngine tiledExportEngine;
+  final OcclusionEngine occlusionEngine;
+  final ConservativeOcclusionProvider conservativeOcclusionProvider;
+
+  /// Toggles do pipeline multi-passe V2 (Sprint 10). Default = legado.
+  BodyMultiPassConfig bodyMultiPassConfig;
+
+  /// Último resultado multi-passe (telemetria / debug).
+  BodyMultiPassResult? lastBodyMultiPassResult;
 
   BeautyEngineController({
     required this.faceDetector,
@@ -45,9 +60,13 @@ class BeautyEngineController {
     required this.warpEngine,
     required this.gpuRenderer,
     this.personMaskDetector,
+    this.bodyVisionCoordinator,
     this.faceFilterPipeline = const FaceFilterPipeline(),
     this.bodyFilterPipeline = const BodyFilterPipeline(),
     this.skinFilterPipeline = const SkinFilterPipeline(),
+    this.occlusionEngine = const OcclusionEngine(),
+    this.conservativeOcclusionProvider = const ConservativeOcclusionProvider(),
+    this.bodyMultiPassConfig = BodyMultiPassConfig.legacy,
     BeautyProfiler? profiler,
     LandmarkThrottle<FaceMeshResult?>? faceLandmarkThrottle,
     LandmarkThrottle<PoseResult?>? poseLandmarkThrottle,
@@ -167,12 +186,75 @@ class BeautyEngineController {
     }
   }
 
+  /// Capacidades agregadas dos providers V2 (pose/matte/partes/oclusão/fundo).
+  VisionCapabilities get bodyVisionCapabilities =>
+      bodyVisionCoordinator?.capabilities ?? VisionCapabilities.none;
+
+  /// Carrega assets semânticos sem acoplar o Warp Engine a um SDK específico.
+  ///
+  /// Quando não há mapa de oclusão do provider, infere oclusão conservadora
+  /// (mãos/braços/cabelo) a partir da pose/partes.
+  Future<BodyFrameAssets?> loadBodyFrameAssets(ImageSource source) async {
+    final coordinator = bodyVisionCoordinator;
+    if (coordinator == null) {
+      return null;
+    }
+    try {
+      final assets = await coordinator.load(source);
+      if (assets == null) {
+        return null;
+      }
+      if (assets.occlusionMap != null && !assets.occlusionMap!.isEmpty) {
+        return assets;
+      }
+      final inferred = conservativeOcclusionProvider.inferFromAssets(
+        assets,
+        imageSize: Size(source.width.toDouble(), source.height.toDouble()),
+      );
+      if (inferred == null) {
+        return assets;
+      }
+      return assets.copyWith(
+        occlusionMap: inferred.map,
+        capabilities: assets.capabilities.merge(
+          const VisionCapabilities(occlusionMap: true),
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Plano V2 com gate de capacidades + oclusão; não altera o remap legado.
+  WarpPlan createBodyReshapePlan({
+    required Size imageSize,
+    required Map<String, double> parameters,
+    bool interactive = false,
+    VisionCapabilities? capabilities,
+    BodyFrameAssets? assets,
+  }) {
+    final plan = bodyFilterPipeline.createReshapePlan(
+      imageSize: imageSize,
+      parameters: parameters,
+      interactive: interactive,
+      capabilities: capabilities ??
+          assets?.capabilities ??
+          bodyVisionCapabilities,
+    );
+    if (assets == null) {
+      return plan;
+    }
+    return occlusionEngine.applyToPlan(plan: plan, assets: assets);
+  }
+
   WarpField? composeBodyField({
     required PoseResult? pose,
     required Size imageSize,
     required Map<String, double> parameters,
     bool interactive = false,
     PersonMask? personMask,
+    BodyFrameAssets? assets,
+    BodyMultiPassConfig? multiPassConfig,
   }) {
     if (pose == null || !bodyFilterPipeline.hasActiveBodyWarp(parameters)) {
       return null;
@@ -181,8 +263,22 @@ class BeautyEngineController {
       return null;
     }
 
+    final config = multiPassConfig ?? bodyMultiPassConfig;
+    if ((config.bodyMeshWarp || config.localMls) && assets != null) {
+      final v2 = composeBodyMultiPassField(
+        assets: assets,
+        imageSize: imageSize,
+        parameters: parameters,
+        interactive: interactive,
+        config: config,
+      );
+      if (v2 != null && !v2.isIdentity) {
+        return v2;
+      }
+    }
+
     final bodyMesh = meshEngine.buildBodyMesh(pose, imageSize);
-    return bodyFilterPipeline.compose(
+    var field = bodyFilterPipeline.compose(
       mesh: bodyMesh,
       pose: pose,
       imageSize: imageSize,
@@ -190,6 +286,76 @@ class BeautyEngineController {
       interactive: interactive,
       personMask: personMask,
     );
+
+    // Pós-processamento V2 parcial sobre o campo legado (anti-fold / edge).
+    if (config.antiFolding || config.edgeRefinement) {
+      final partial = BodyMultiPassConfig(
+        bodyMeshWarp: false,
+        localMls: false,
+        antiFolding: config.antiFolding,
+        edgeRefinement: config.edgeRefinement,
+        profilePasses: config.profilePasses,
+      );
+      final result = warpEngine.composeBodyMultiPass(
+        BodyMultiPassInput(
+          imageSize: imageSize,
+          config: partial,
+          seedField: field,
+          assets: assets,
+        ),
+      );
+      if (result != null) {
+        lastBodyMultiPassResult = result;
+        field = result.field;
+      }
+    }
+
+    return field;
+  }
+
+  /// Executa o pipeline multi-passe V2 a partir de assets + plano semântico.
+  WarpField? composeBodyMultiPassField({
+    required BodyFrameAssets assets,
+    required Size imageSize,
+    required Map<String, double> parameters,
+    bool interactive = false,
+    BodyMultiPassConfig? config,
+  }) {
+    final resolved = config ?? bodyMultiPassConfig;
+    if (!resolved.isV2Enabled) {
+      return null;
+    }
+
+    final plan = createBodyReshapePlan(
+      imageSize: imageSize,
+      parameters: parameters,
+      interactive: interactive,
+      assets: assets,
+    );
+    if (plan.isIdentity) {
+      return null;
+    }
+
+    final quality = interactive
+        ? WarpQualityProfile.interactive
+        : WarpQualityProfile.preview;
+    final adaptive = meshEngine.buildAdaptiveBodyMesh(
+      assets: assets,
+      imageSize: imageSize,
+      qualityProfile: quality,
+    );
+
+    final result = warpEngine.composeBodyMultiPass(
+      BodyMultiPassInput(
+        imageSize: imageSize,
+        config: resolved,
+        sourceMesh: adaptive,
+        assets: assets,
+        plan: plan,
+      ),
+    );
+    lastBodyMultiPassResult = result;
+    return result?.field;
   }
 
   WarpField? composeFaceField({
@@ -428,4 +594,3 @@ class BeautyEngineController {
     return stages;
   }
 }
-

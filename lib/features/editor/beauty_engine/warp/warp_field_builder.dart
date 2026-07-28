@@ -2,6 +2,10 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
+import '../body_reshape/maps/influence_map.dart';
+import '../body_reshape/maps/matte_preprocessor.dart';
+import '../body_reshape/maps/person_mask_bridge.dart';
+import '../body_reshape/maps/protection_maps.dart';
 import '../models/mesh_region.dart';
 import '../models/warp_field.dart';
 import '../segment/person_mask.dart';
@@ -24,6 +28,8 @@ class WarpFieldBuilder {
     this.mlsIterations = 6,
     this.outerRingPx = 12,
     this.maxDisplacementFraction = 0.40,
+    this.missingMatteIntensityScale = 0.65,
+    this.mattePreprocessor = const MattePreprocessor(),
   });
 
   final int gridWidth;
@@ -31,11 +37,16 @@ class WarpFieldBuilder {
   final double maskFeatherPx;
   final int mlsIterations;
 
-  /// Anel fora da silhueta onde o fundo ainda pode entrar (px).
+  /// Mantido por compatibilidade de API; o domínio fora do matte agora é zero.
   final double outerRingPx;
 
   /// Clamp de |disp| como fração da meia-largura da ROI (anti-fold).
   final double maxDisplacementFraction;
+
+  /// Escala conservadora quando não há PersonMask/matte.
+  final double missingMatteIntensityScale;
+
+  final MattePreprocessor mattePreprocessor;
 
   /// Grade e feather proporcionais à imagem — menos pixelização nas bordas.
   factory WarpFieldBuilder.forImageSize(
@@ -91,10 +102,20 @@ class WarpFieldBuilder {
     required MeshRegion region,
     required double intensity,
     PersonMask? personMask,
+    ProtectionMaps? protectionMaps,
+    InfluenceMap? influenceMap,
   }) {
     if (intensity <= 0 || controlPoints.isEmpty) {
       return WarpField.identity(imageSize: imageSize, region: region);
     }
+
+    final protection = protectionMaps ??
+        (personMask == null
+            ? null
+            : mattePreprocessor.buildProtectionMaps(
+                personMask.toPersonMatte(),
+                imageSize: imageSize,
+              ));
 
     final cellCount = gridWidth * gridHeight;
     final displacement = Float32List(cellCount * 2);
@@ -105,11 +126,17 @@ class WarpFieldBuilder {
     final invW = imageSize.width > 0 ? 1.0 / imageSize.width : 0.0;
     final invH = imageSize.height > 0 ? 1.0 / imageSize.height : 0.0;
     final halfW = bounds.width * 0.5;
+    final missingScale =
+        protection == null ? missingMatteIntensityScale.clamp(0.0, 1.0) : 1.0;
     final maxDisp = math.max(
-      imageSize.width * 0.035,
-      halfW * maxDisplacementFraction,
-    );
-    final capsule = _capsuleFromPoints(controlPoints, imageSize);
+          imageSize.width * 0.035,
+          halfW * maxDisplacementFraction,
+        ) *
+        missingScale;
+    // Fallback legado quando não há InfluenceMap V2.
+    final capsule = influenceMap == null
+        ? _capsuleFromPoints(controlPoints, imageSize)
+        : null;
 
     for (var gy = 0; gy < gridHeight; gy++) {
       for (var gx = 0; gx < gridWidth; gx++) {
@@ -117,20 +144,26 @@ class WarpFieldBuilder {
         final px = (gx / (gridWidth - 1)) * imageSize.width;
         final py = (gy / (gridHeight - 1)) * imageSize.height;
         final point = Offset(px, py);
+        final nx = px * invW;
+        final ny = py * invH;
 
         var m = _computeMask(point, bounds, featherPx);
-        if (m > 0.001 && capsule != null) {
+
+        if (influenceMap != null && !influenceMap.isEmpty) {
+          // Influence Map adaptativo substitui cápsula/retângulo.
+          m *= influenceMap.sampleNormalized(nx, ny);
+        } else if (m > 0.001 && capsule != null) {
           m *= _capsuleFalloff(point, capsule);
         }
-        if (personMask != null && m > 0.001) {
-          m *= _personInfluence(
-            personMask,
-            px,
-            py,
-            invW,
-            invH,
-          );
+
+        if (protection != null) {
+          // Domínio controlado pelo matte: fora → peso 0 (sem anel de fundo).
+          m *= protection.sampleWarpWeight(nx, ny);
+        } else {
+          // Sem matte: continua utilizável, porém mais conservador.
+          m *= missingScale;
         }
+
         mask[idx] = m;
         if (m <= 0.001) {
           continue;
@@ -229,56 +262,6 @@ class WarpFieldBuilder {
 
     final t = (edgeDistPx / featherPx).clamp(0.0, 1.0);
     return _smoothstep(t);
-  }
-
-  /// Interior full; anel ~[outerRingPx] fora da silhueta com warp leve; longe freeze.
-  double _personInfluence(
-    PersonMask mask,
-    double px,
-    double py,
-    double invW,
-    double invH,
-  ) {
-    final raw = mask.sampleNormalized(px * invW, py * invH);
-
-    // Núcleo da pessoa: warp completo (sem soft parcial na borda de contraste).
-    if (raw >= 0.42) {
-      return 1.0;
-    }
-
-    // Faixa interna próxima à borda.
-    if (raw >= 0.22) {
-      final t = ((raw - 0.22) / (0.42 - 0.22)).clamp(0.0, 1.0);
-      return 0.55 + 0.45 * _smoothstep(t);
-    }
-
-    // Anel externo: fundo perto da silhueta pode entrar na zona vacante.
-    var maxNear = raw;
-    final ring = outerRingPx;
-    const offsets = <Offset>[
-      Offset(-1, 0),
-      Offset(1, 0),
-      Offset(0, -1),
-      Offset(0, 1),
-      Offset(-0.7, -0.7),
-      Offset(0.7, -0.7),
-      Offset(-0.7, 0.7),
-      Offset(0.7, 0.7),
-    ];
-    for (final o in offsets) {
-      final nx = ((px + o.dx * ring) * invW).clamp(0.0, 1.0);
-      final ny = ((py + o.dy * ring) * invH).clamp(0.0, 1.0);
-      maxNear = math.max(maxNear, mask.sampleNormalized(nx, ny));
-    }
-
-    if (maxNear >= 0.42) {
-      // Fora mas colado na pessoa — displacement leve.
-      return 0.28 * _smoothstep(((maxNear - 0.25) / 0.5).clamp(0.0, 1.0));
-    }
-    if (maxNear >= 0.25) {
-      return 0.12 * _smoothstep(((maxNear - 0.15) / 0.35).clamp(0.0, 1.0));
-    }
-    return 0;
   }
 
   /// Cápsula vertical aproximada a partir dos CPs móveis (eixo do torso).

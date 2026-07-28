@@ -1,7 +1,6 @@
-/// Backend FragmentProgram/Impeller — Sprint futuro.
-///
-/// Quando Flutter GPU estiver wired, substituir passes CPU por draw calls GPU
-/// sem alterar [GpuRendererImpl] / [ShaderProgramCache].
+import '../body_reshape/rendering/fragment_program_warp_backend.dart';
+
+/// Backend FragmentProgram/Impeller para preview GPU.
 abstract class FragmentProgramBackend {
   const FragmentProgramBackend();
 
@@ -10,7 +9,7 @@ abstract class FragmentProgramBackend {
   Future<void> initialize();
 }
 
-/// Stub — Impeller/Metal path pendente de wiring nativo.
+/// Stub legado — Impeller indisponível / testes sem GPU.
 class FragmentProgramBackendStub implements FragmentProgramBackend {
   const FragmentProgramBackendStub();
 
@@ -19,4 +18,11 @@ class FragmentProgramBackendStub implements FragmentProgramBackend {
 
   @override
   Future<void> initialize() async {}
+}
+
+/// Factory do backend de warp preview (Sprint 9).
+FragmentProgramBackend createDefaultFragmentProgramBackend({
+  bool forceCpuFallback = false,
+}) {
+  return FragmentProgramWarpBackend(forceCpuFallback: forceCpuFallback);
 }

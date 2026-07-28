@@ -19,6 +19,9 @@ class WarpEngineStub implements WarpEngine {
   }
 
   @override
+  BodyMultiPassResult? composeBodyMultiPass(BodyMultiPassInput input) => null;
+
+  @override
   Future<TextureHandle> applyGPU({
     required TextureHandle input,
     required WarpField field,

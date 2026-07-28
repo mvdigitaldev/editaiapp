@@ -4,6 +4,8 @@ import 'body_warp_filter.dart';
 import 'body_warp_utils.dart';
 
 /// Ajusta largura do quadril (landmarks 23/24 + borda real da silhueta).
+///
+/// V2: [HipStrategy] via [BodyMeshDeformer] / [BodyFilterPipeline.deformAdaptiveMesh].
 class HipFilter extends BodyWarpFilter {
   HipFilter();
 

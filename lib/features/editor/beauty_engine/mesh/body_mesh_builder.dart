@@ -8,6 +8,9 @@ import 'mesh_topology.dart';
 import 'mesh_utils.dart';
 
 /// Converte [PoseResult] (33 landmarks) em malha corporal simplificada.
+///
+/// Mantido para o pipeline MLS legado. Para Body Reshape V2 use
+/// AdaptiveMeshGenerator / MeshEngine.buildAdaptiveBodyMesh.
 class BodyMeshBuilder {
   const BodyMeshBuilder();
 

@@ -46,6 +46,12 @@ class BodyAdjustment {
   final BodyOcclusionPolicy occlusionPolicy;
   final String sourceParameter;
 
+  /// Escala aplicada por oclusão (1 = sem redução).
+  final double occlusionScale;
+
+  /// Motivo explícito quando a oclusão reduziu/limitou o ajuste.
+  final String? occlusionReason;
+
   const BodyAdjustment({
     required this.type,
     required this.regions,
@@ -57,11 +63,14 @@ class BodyAdjustment {
     required this.minimumConfidence,
     required this.occlusionPolicy,
     required this.sourceParameter,
+    this.occlusionScale = 1,
+    this.occlusionReason,
   })  : assert(intensity >= 0 && intensity <= 1),
         assert(maxIntensity >= 0 && maxIntensity <= 1),
         assert(weight >= 0),
         assert(influence >= 0 && influence <= 1),
-        assert(minimumConfidence >= 0 && minimumConfidence <= 1);
+        assert(minimumConfidence >= 0 && minimumConfidence <= 1),
+        assert(occlusionScale >= 0 && occlusionScale <= 1);
 
   double get effectiveIntensity {
     final limited = intensity < maxIntensity ? intensity : maxIntensity;
@@ -69,4 +78,37 @@ class BodyAdjustment {
   }
 
   bool get isActive => effectiveIntensity > 0;
+
+  bool get wasOcclusionLimited =>
+      occlusionReason != null || occlusionScale < 0.999;
+
+  BodyAdjustment copyWith({
+    BodyAdjustmentType? type,
+    Set<BodyRegion>? regions,
+    double? intensity,
+    double? maxIntensity,
+    double? weight,
+    BodyAdjustmentDirection? direction,
+    double? influence,
+    double? minimumConfidence,
+    BodyOcclusionPolicy? occlusionPolicy,
+    String? sourceParameter,
+    double? occlusionScale,
+    String? occlusionReason,
+  }) {
+    return BodyAdjustment(
+      type: type ?? this.type,
+      regions: regions ?? this.regions,
+      intensity: intensity ?? this.intensity,
+      maxIntensity: maxIntensity ?? this.maxIntensity,
+      weight: weight ?? this.weight,
+      direction: direction ?? this.direction,
+      influence: influence ?? this.influence,
+      minimumConfidence: minimumConfidence ?? this.minimumConfidence,
+      occlusionPolicy: occlusionPolicy ?? this.occlusionPolicy,
+      sourceParameter: sourceParameter ?? this.sourceParameter,
+      occlusionScale: occlusionScale ?? this.occlusionScale,
+      occlusionReason: occlusionReason ?? this.occlusionReason,
+    );
+  }
 }

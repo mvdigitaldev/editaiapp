@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'mesh_region.dart';
 
 /// Malha triangulada compartilhada (vertices + UVs + indices).
+///
+/// Ponte comum entre face MLS, body legado e AdaptiveBodyMesh.toTriMesh().
 class TriMesh {
   final Float32List vertices;
   final Float32List uvs;

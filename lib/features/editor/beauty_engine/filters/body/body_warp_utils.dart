@@ -16,7 +16,22 @@ abstract final class BodyWarpUtils {
   /// Fração máxima da meia-largura local que o slim pode puxar (anti-fold).
   static const maxSlimFractionOfHalfWidth = 0.30;
 
+  /// Sem PersonMask/matte, reduz intensidade para limitar artefatos de fundo.
+  static const missingMatteIntensityScale = 0.65;
+
   static const anchorIndices = <int>[11, 12, 23, 24, 27, 28];
+
+  /// Intensidade efetiva quando o domínio de proteção do matte não está disponível.
+  static double intensityWithMatteGuard(
+    double intensity, {
+    PersonMask? personMask,
+  }) {
+    final clamped = intensity.clamp(0.0, 1.0);
+    if (personMask != null) {
+      return clamped;
+    }
+    return clamped * missingMatteIntensityScale;
+  }
 
   static double poseConfidence(PoseResult pose, Set<int> indices) {
     if (indices.isEmpty) {
@@ -79,7 +94,8 @@ abstract final class BodyWarpUtils {
     return MeshTopology.bodyRegionLandmarks[region] ?? const {};
   }
 
-  static Offset clampToFrame(Offset target, Size imageSize, {double margin = 8}) {
+  static Offset clampToFrame(Offset target, Size imageSize,
+      {double margin = 8}) {
     return Offset(
       target.dx.clamp(margin, imageSize.width - margin),
       target.dy.clamp(margin, imageSize.height - margin),

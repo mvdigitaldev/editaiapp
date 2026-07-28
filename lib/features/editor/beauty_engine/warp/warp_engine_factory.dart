@@ -29,6 +29,9 @@ class TpsWarpEngine implements WarpEngine {
   }
 
   @override
+  BodyMultiPassResult? composeBodyMultiPass(BodyMultiPassInput input) => null;
+
+  @override
   Future<TextureHandle> applyGPU({
     required TextureHandle input,
     required WarpField field,
@@ -51,6 +54,9 @@ class ArapWarpEngine implements WarpEngine {
   }
 
   @override
+  BodyMultiPassResult? composeBodyMultiPass(BodyMultiPassInput input) => null;
+
+  @override
   Future<TextureHandle> applyGPU({
     required TextureHandle input,
     required WarpField field,
@@ -71,6 +77,9 @@ class MeshWarpEngine implements WarpEngine {
   WarpField compute(WarpRequest request) {
     throw UnimplementedError('Mesh warp engine not yet implemented');
   }
+
+  @override
+  BodyMultiPassResult? composeBodyMultiPass(BodyMultiPassInput input) => null;
 
   @override
   Future<TextureHandle> applyGPU({

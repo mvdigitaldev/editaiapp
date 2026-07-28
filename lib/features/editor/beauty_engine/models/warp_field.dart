@@ -2,9 +2,11 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
+import '../body_reshape/passes/pass_profiler.dart';
+import '../body_reshape/protection/rigidity_map.dart';
+import '../warp/models/control_point.dart';
 import 'mesh_region.dart';
 import 'tri_mesh.dart';
-import '../warp/models/control_point.dart';
 
 /// Campo de deformacao calculado pelo warp engine.
 class WarpField {
@@ -17,6 +19,24 @@ class WarpField {
   final List<ControlPoint> controlPoints;
   final double intensity;
 
+  /// Rigidez estrutural do fundo aplicada (Sprint 7), se houver.
+  final RigidityMap? rigidityMap;
+
+  /// Último passe que produziu/alterou este campo (Sprint 10).
+  final String? passId;
+
+  /// Células com máscara ativa (telemetria multi-passe).
+  final int? activeCellCount;
+
+  /// Traces de profiling dos passes aplicados.
+  final List<PassProfileEntry>? passProfiles;
+
+  /// Células com jacobiano invertido antes do AntiFoldingPass.
+  final int foldingCellsBefore;
+
+  /// Células ainda invertidas após AntiFoldingPass.
+  final int foldingCellsAfter;
+
   const WarpField({
     required this.gridWidth,
     required this.gridHeight,
@@ -26,11 +46,66 @@ class WarpField {
     required this.region,
     this.controlPoints = const [],
     this.intensity = 0,
+    this.rigidityMap,
+    this.passId,
+    this.activeCellCount,
+    this.passProfiles,
+    this.foldingCellsBefore = 0,
+    this.foldingCellsAfter = 0,
   });
 
-  bool get isIdentity => intensity <= 0 || controlPoints.isEmpty;
+  /// Identidade: sem intensidade, ou sem CPs e sem máscara ativa (mesh raster).
+  bool get isIdentity {
+    if (intensity <= 0) {
+      return true;
+    }
+    if (controlPoints.isNotEmpty) {
+      return false;
+    }
+    for (final value in mask) {
+      if (value > 1e-6) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   WarpField reset() => WarpField.identity(imageSize: imageSize, region: region);
+
+  WarpField copyWith({
+    int? gridWidth,
+    int? gridHeight,
+    Float32List? displacement,
+    Float32List? mask,
+    Size? imageSize,
+    MeshRegion? region,
+    List<ControlPoint>? controlPoints,
+    double? intensity,
+    RigidityMap? rigidityMap,
+    bool clearRigidityMap = false,
+    String? passId,
+    int? activeCellCount,
+    List<PassProfileEntry>? passProfiles,
+    int? foldingCellsBefore,
+    int? foldingCellsAfter,
+  }) {
+    return WarpField(
+      gridWidth: gridWidth ?? this.gridWidth,
+      gridHeight: gridHeight ?? this.gridHeight,
+      displacement: displacement ?? this.displacement,
+      mask: mask ?? this.mask,
+      imageSize: imageSize ?? this.imageSize,
+      region: region ?? this.region,
+      controlPoints: controlPoints ?? this.controlPoints,
+      intensity: intensity ?? this.intensity,
+      rigidityMap: clearRigidityMap ? null : (rigidityMap ?? this.rigidityMap),
+      passId: passId ?? this.passId,
+      activeCellCount: activeCellCount ?? this.activeCellCount,
+      passProfiles: passProfiles ?? this.passProfiles,
+      foldingCellsBefore: foldingCellsBefore ?? this.foldingCellsBefore,
+      foldingCellsAfter: foldingCellsAfter ?? this.foldingCellsAfter,
+    );
+  }
 
   static WarpField identity({
     required Size imageSize,
@@ -195,6 +270,15 @@ class WarpField {
       region: second.region,
       controlPoints: [...first.controlPoints, ...second.controlPoints],
       intensity: math.max(first.intensity, second.intensity),
+      rigidityMap: second.rigidityMap ?? first.rigidityMap,
+      passId: second.passId ?? first.passId,
+      passProfiles: [
+        ...?first.passProfiles,
+        ...?second.passProfiles,
+      ],
+      foldingCellsBefore:
+          first.foldingCellsBefore + second.foldingCellsBefore,
+      foldingCellsAfter: second.foldingCellsAfter,
     );
   }
 

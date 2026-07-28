@@ -1,3 +1,4 @@
+import '../body_reshape/rendering/fragment_program_warp_backend.dart';
 import 'render_pass.dart';
 import 'pass_cheekbone_contour.dart';
 import 'pass_color.dart';
@@ -10,13 +11,26 @@ import 'render_target.dart';
 
 /// Cache de passes/shaders registrados.
 class ShaderProgramCache {
-  ShaderProgramCache({Map<String, RenderPass>? passes})
-      : _passes = passes ?? _defaultPasses();
+  ShaderProgramCache({
+    Map<String, RenderPass>? passes,
+    FragmentProgramWarpBackend? warpBackend,
+    bool preferGpuWarp = true,
+  }) : _passes = passes ??
+            _defaultPasses(
+              warpBackend: warpBackend,
+              preferGpuWarp: preferGpuWarp,
+            );
 
   final Map<String, RenderPass> _passes;
 
-  static Map<String, RenderPass> _defaultPasses() {
-    const warp = PassWarp();
+  static Map<String, RenderPass> _defaultPasses({
+    FragmentProgramWarpBackend? warpBackend,
+    bool preferGpuWarp = true,
+  }) {
+    final warp = PassWarp(
+      warpBackend: warpBackend,
+      preferGpu: preferGpuWarp,
+    );
     const color = PassColor();
     final lut = PassLut();
     const composite = PassComposite();
