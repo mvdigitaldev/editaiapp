@@ -1,4 +1,7 @@
-/// Regiões da malha reutilizável para warp e filtros.
+/// Regiões da malha legada reutilizável para warp e filtros.
+///
+/// O Body Reshape V2 usa `BodyRegion`, mantendo este enum para compatibilidade
+/// com campos MLS e com a topologia facial existentes.
 enum MeshRegion {
   faceOval,
   jawLeft,

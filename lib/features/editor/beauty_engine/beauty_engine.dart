@@ -1,6 +1,7 @@
 /// Beauty Engine — motor de edição facial/corporal (open source).
 library beauty_engine;
 
+export 'body_reshape/body_reshape.dart';
 export 'controllers/beauty_engine_controller.dart';
 export 'di/beauty_engine_providers.dart';
 export 'face_mesh/face_mesh_detector.dart';

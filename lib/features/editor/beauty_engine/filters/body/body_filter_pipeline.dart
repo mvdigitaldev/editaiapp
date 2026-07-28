@@ -1,6 +1,9 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import '../../body_reshape/models/body_reshape_request.dart';
+import '../../body_reshape/models/legacy_body_parameter_adapter.dart';
+import '../../body_reshape/models/warp_plan.dart';
 import '../../models/mesh_region.dart';
 import '../../models/pose_result.dart';
 import '../../models/tri_mesh.dart';
@@ -24,6 +27,8 @@ import 'waist_slim.dart';
 class BodyFilterPipeline {
   const BodyFilterPipeline();
 
+  static const _parameterAdapter = LegacyBodyParameterAdapter();
+
   static final allFilters = <BodyWarpFilter>[
     WaistSlimFilter(),
     HipFilter(),
@@ -35,16 +40,8 @@ class BodyFilterPipeline {
     ShoulderWidthFilter(),
   ];
 
-  static const bodyWarpParameterKeys = [
-    'waist_slim',
-    'hip',
-    'body_slim',
-    'leg_length',
-    'leg_slim',
-    'arm_slim',
-    'neck_slim',
-    'shoulder_width',
-  ];
+  static const bodyWarpParameterKeys =
+      LegacyBodyParameterAdapter.supportedParameterKeys;
 
   static const _legKeys = {'leg_length', 'leg_slim'};
   static const _unifiedTorsoKeys = {'waist_slim', 'body_slim'};
@@ -56,6 +53,26 @@ class BodyFilterPipeline {
       }
     }
     return false;
+  }
+
+  /// Produz o plano semântico V2 sem alterar a execução do pipeline legado.
+  WarpPlan createReshapePlan({
+    required Size imageSize,
+    required Map<String, double> parameters,
+    bool interactive = false,
+  }) {
+    final profile = interactive
+        ? WarpQualityProfile.interactive
+        : (imageSize.width * imageSize.height >= 700000
+            ? WarpQualityProfile.export
+            : WarpQualityProfile.preview);
+    return _parameterAdapter.buildPlan(
+      BodyReshapeRequest(
+        imageSize: imageSize,
+        parameters: parameters,
+        qualityProfile: profile,
+      ),
+    );
   }
 
   /// Retorna false se pose parcial/confiança baixa para os filtros pedidos.
@@ -278,32 +295,6 @@ class BodyFilterPipeline {
   }
 
   double _readParameter(Map<String, double> parameters, String snakeKey) {
-    if (parameters.containsKey(snakeKey)) {
-      return parameters[snakeKey]!.clamp(0.0, 1.0);
-    }
-    final camel = _toCamelCase(snakeKey);
-    if (parameters.containsKey(camel)) {
-      return parameters[camel]!.clamp(0.0, 1.0);
-    }
-    return 0;
-  }
-
-  String _toCamelCase(String snake) {
-    final parts = snake.split('_');
-    if (parts.isEmpty) {
-      return snake;
-    }
-    final buffer = StringBuffer(parts.first);
-    for (var i = 1; i < parts.length; i++) {
-      final part = parts[i];
-      if (part.isEmpty) {
-        continue;
-      }
-      buffer.write(part[0].toUpperCase());
-      if (part.length > 1) {
-        buffer.write(part.substring(1));
-      }
-    }
-    return buffer.toString();
+    return LegacyBodyParameterAdapter.readParameter(parameters, snakeKey);
   }
 }

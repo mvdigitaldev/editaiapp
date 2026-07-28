@@ -34,6 +34,19 @@ class BodyParams {
         'headSize': headSize,
       };
 
+  /// Chaves consumidas pelos pipelines de edição e presets.
+  Map<String, double> toParameterMap() => {
+        'waist_slim': waistSlim,
+        'hip': hip,
+        'body_slim': bodySlim,
+        'leg_length': legLength,
+        'leg_slim': legSlim,
+        'arm_slim': armSlim,
+        'neck_slim': neckSlim,
+        'shoulder_width': shoulderWidth,
+        'head_size': headSize,
+      };
+
   factory BodyParams.fromJson(Map<String, dynamic> json) {
     return BodyParams(
       waistSlim: (json['waistSlim'] as num?)?.toDouble() ?? 0,
