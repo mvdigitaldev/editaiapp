@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import '../../models/pose_result.dart';
 import '../../models/tri_mesh.dart';
+import '../../segment/person_mask.dart';
 
 /// Contexto para filtros warp corporais (Sprint 18–20).
 class BodyWarpContext {
@@ -11,6 +12,7 @@ class BodyWarpContext {
     required this.imageSize,
     required this.intensity,
     required this.confidenceFactor,
+    this.personMask,
   });
 
   final TriMesh mesh;
@@ -18,6 +20,7 @@ class BodyWarpContext {
   final Size imageSize;
   final double intensity;
   final double confidenceFactor;
+  final PersonMask? personMask;
 
   double get effectiveIntensity =>
       (intensity * confidenceFactor).clamp(0.0, 1.0);

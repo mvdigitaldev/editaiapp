@@ -193,5 +193,16 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('rejeita mais de maxPhotos fotos', () async {
+      final paths = <String>[];
+      for (var i = 0; i < SeamlessBlendEngine.maxPhotos + 1; i++) {
+        paths.add(await writeTemp(solidImage(40, 40, 10 * i, 20, 30)));
+      }
+      expect(
+        () => engine.blend(imagePaths: paths),
+        throwsArgumentError,
+      );
+    });
   });
 }

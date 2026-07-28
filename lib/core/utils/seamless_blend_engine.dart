@@ -41,7 +41,7 @@ class SeamlessBlendEngine {
   const SeamlessBlendEngine();
 
   static const int minPhotos = 2;
-  static const int maxPhotos = 12;
+  static const int maxPhotos = 6;
 
   Future<SeamlessBlendResult> blend({
     required List<String> imagePaths,

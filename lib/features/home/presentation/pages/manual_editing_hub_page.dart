@@ -55,7 +55,7 @@ class ManualEditingHubPage extends ConsumerWidget {
                 icon: Icons.view_agenda_outlined,
                 title: 'Colagem sem emenda',
                 description:
-                    'Empilhe até 12 fotos com transição suave — sem IA, grátis.',
+                    'Empilhe até 6 fotos com transição suave — sem IA, grátis.',
                 onTap: () =>
                     Navigator.of(context).pushNamed('/seamless-collage'),
               ),

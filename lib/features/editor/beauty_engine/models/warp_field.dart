@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -142,6 +143,59 @@ class WarpField {
     final bottom = (maxGy / (gridHeight - 1)) * imageSize.height;
 
     return Rect.fromLTRB(left, top, right, bottom);
+  }
+
+  /// Compõe dois warps sequenciais (aplica [first], depois [second] no resultado).
+  ///
+  /// Remap: `src = p + d_eff(p)`. Composição:
+  /// `d_eff(p) = dB_eff(p) + dA_eff(p + dB_eff(p))`.
+  static WarpField composeSequential(WarpField first, WarpField second) {
+    if (first.isIdentity) return second;
+    if (second.isIdentity) return first;
+
+    final gridW = second.gridWidth;
+    final gridH = second.gridHeight;
+    final cellCount = gridW * gridH;
+    final outDisp = Float32List(cellCount * 2);
+    final outMask = Float32List(cellCount);
+    final invW = second.imageSize.width > 0 ? 1.0 / second.imageSize.width : 0.0;
+    final invH = second.imageSize.height > 0 ? 1.0 / second.imageSize.height : 0.0;
+
+    for (var gy = 0; gy < gridH; gy++) {
+      for (var gx = 0; gx < gridW; gx++) {
+        final idx = gy * gridW + gx;
+        final px = (gx / (gridW - 1)) * second.imageSize.width;
+        final py = (gy / (gridH - 1)) * second.imageSize.height;
+        final n = Offset(px * invW, py * invH);
+
+        final mb = second.sampleMask(n);
+        final db = second.sampleDisplacement(n);
+        final mid = Offset(px + db.dx * mb, py + db.dy * mb);
+        final nMid = Offset(
+          (mid.dx * invW).clamp(0.0, 1.0),
+          (mid.dy * invH).clamp(0.0, 1.0),
+        );
+        final ma = first.sampleMask(nMid);
+        final da = first.sampleDisplacement(nMid);
+
+        final effDx = db.dx * mb + da.dx * ma;
+        final effDy = db.dy * mb + da.dy * ma;
+        outDisp[idx * 2] = effDx;
+        outDisp[idx * 2 + 1] = effDy;
+        outMask[idx] = math.max(ma, mb);
+      }
+    }
+
+    return WarpField(
+      gridWidth: gridW,
+      gridHeight: gridH,
+      displacement: outDisp,
+      mask: outMask,
+      imageSize: second.imageSize,
+      region: second.region,
+      controlPoints: [...first.controlPoints, ...second.controlPoints],
+      intensity: math.max(first.intensity, second.intensity),
+    );
   }
 
   double _lerp(double a, double b, double t) => a + (b - a) * t;

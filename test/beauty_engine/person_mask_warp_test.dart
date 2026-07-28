@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:editaiapp/features/editor/beauty_engine/filters/body/body_filter_pipeline.dart';
+import 'package:editaiapp/features/editor/beauty_engine/filters/body/body_warp_utils.dart';
 import 'package:editaiapp/features/editor/beauty_engine/mesh/body_mesh_builder.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/mesh_region.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/pose_landmark.dart';
@@ -67,6 +68,38 @@ void main() {
         personMask: PersonMask(bytes: bytes, width: 40, height: 80),
       );
       expect(field.isIdentity, isFalse);
+    });
+  });
+  group('BodyWarpUtils silhouette', () {
+    test('findSilhouetteEdgeX finds left/right borders', () {
+      // Pessoa = colunas 10–30 em 40x20.
+      final bytes = Uint8List(40 * 20);
+      for (var y = 0; y < 20; y++) {
+        for (var x = 10; x <= 30; x++) {
+          bytes[y * 40 + x] = 255;
+        }
+      }
+      final mask = PersonMask(bytes: bytes, width: 40, height: 20);
+      const imageSize = Size(40, 20);
+
+      final left = BodyWarpUtils.findSilhouetteEdgeX(
+        mask: mask,
+        imageSize: imageSize,
+        midX: 20,
+        y: 10,
+        findLeft: true,
+      );
+      final right = BodyWarpUtils.findSilhouetteEdgeX(
+        mask: mask,
+        imageSize: imageSize,
+        midX: 20,
+        y: 10,
+        findLeft: false,
+      );
+      expect(left, isNotNull);
+      expect(right, isNotNull);
+      expect(left!, closeTo(10, 1.5));
+      expect(right!, closeTo(30, 1.5));
     });
   });
 }

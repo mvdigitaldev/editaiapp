@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import '../../models/mesh_region.dart';
@@ -46,6 +47,7 @@ class BodyFilterPipeline {
   ];
 
   static const _legKeys = {'leg_length', 'leg_slim'};
+  static const _unifiedTorsoKeys = {'waist_slim', 'body_slim'};
 
   bool hasActiveBodyWarp(Map<String, double> parameters) {
     for (final key in bodyWarpParameterKeys) {
@@ -97,7 +99,26 @@ class BodyFilterPipeline {
     final controlPoints = <ControlPoint>[];
     var maxIntensity = 0.0;
 
+    // Waist + body num único solve (evita CPs duplicados / folding).
+    final torsoPoints = _buildUnifiedTorsoSlim(
+      mesh: mesh,
+      pose: pose,
+      imageSize: imageSize,
+      parameters: parameters,
+      personMask: personMask,
+    );
+    if (torsoPoints != null) {
+      controlPoints.addAll(torsoPoints.points);
+      maxIntensity = maxIntensity > torsoPoints.intensity
+          ? maxIntensity
+          : torsoPoints.intensity;
+    }
+
     for (final filter in allFilters) {
+      if (_unifiedTorsoKeys.contains(filter.parameterKey)) {
+        continue;
+      }
+
       final raw = _readParameter(parameters, filter.parameterKey);
       if (raw <= 0) {
         continue;
@@ -113,6 +134,7 @@ class BodyFilterPipeline {
         imageSize: imageSize,
         intensity: raw,
         confidenceFactor: confidence,
+        personMask: personMask,
       );
 
       controlPoints.addAll(filter.buildControlPoints(warpContext));
@@ -135,13 +157,124 @@ class BodyFilterPipeline {
       quality: quality,
     );
 
-    return builder.build(
-      controlPoints: controlPoints,
+    final passes = _passCount(maxIntensity, interactive: interactive);
+    if (passes <= 1) {
+      return builder.build(
+        controlPoints: controlPoints,
+        imageSize: imageSize,
+        region: MeshRegion.torso,
+        intensity: maxIntensity,
+        personMask: personMask,
+      );
+    }
+
+    final scaled = BodyWarpUtils.scaleControlPointDeltas(
+      controlPoints,
+      1.0 / passes,
+    );
+    var field = builder.build(
+      controlPoints: scaled,
       imageSize: imageSize,
       region: MeshRegion.torso,
       intensity: maxIntensity,
       personMask: personMask,
     );
+    for (var i = 1; i < passes; i++) {
+      final next = builder.build(
+        controlPoints: scaled,
+        imageSize: imageSize,
+        region: MeshRegion.torso,
+        intensity: maxIntensity,
+        personMask: personMask,
+      );
+      field = WarpField.composeSequential(field, next);
+    }
+    return field;
+  }
+
+  ({List<ControlPoint> points, double intensity})? _buildUnifiedTorsoSlim({
+    required TriMesh mesh,
+    required PoseResult pose,
+    required Size imageSize,
+    required Map<String, double> parameters,
+    PersonMask? personMask,
+  }) {
+    final waistRaw = _readParameter(parameters, 'waist_slim');
+    final bodyRaw = _readParameter(parameters, 'body_slim');
+    if (waistRaw <= 0 && bodyRaw <= 0) {
+      return null;
+    }
+
+    final confidence = BodyWarpUtils.poseConfidence(pose, {11, 12, 23, 24});
+    if (confidence < BodyWarpUtils.visibilityThreshold) {
+      return null;
+    }
+
+    final waist = (waistRaw * confidence).clamp(0.0, 1.0);
+    final body = (bodyRaw * confidence).clamp(0.0, 1.0);
+    final waistT = waist * waist * (3 - 2 * waist);
+    final bodyT = body * body * (3 - 2 * body);
+
+    final leftTop = BodyWarpUtils.vertexAt(mesh, 11);
+    final rightTop = BodyWarpUtils.vertexAt(mesh, 12);
+    final leftBottom = BodyWarpUtils.vertexAt(mesh, 23);
+    final rightBottom = BodyWarpUtils.vertexAt(mesh, 24);
+    if (leftTop == null ||
+        rightTop == null ||
+        leftBottom == null ||
+        rightBottom == null) {
+      return null;
+    }
+
+    // Shift unificado: body cobre base; waist reforça o miolo (sem somar 100%).
+    final baseShift = imageSize.width * (0.045 * bodyT + 0.055 * waistT);
+    // Perfil: body mais plano; waist pico no meio.
+    final profileFloor = 0.40 + 0.25 * bodyT;
+    final profilePeak = (0.70 + 0.30 * bodyT + 0.35 * waistT).clamp(0.0, 1.15);
+
+    final movable = BodyWarpUtils.slimTorsoSides(
+      leftTop: leftTop,
+      rightTop: rightTop,
+      leftBottom: leftBottom,
+      rightBottom: rightBottom,
+      imageSize: imageSize,
+      shiftPx: baseShift,
+      samples: waistT > 0.3 ? 8 : 6,
+      personMask: personMask,
+      profileFloor: profileFloor,
+      profilePeak: profilePeak,
+    );
+
+    if (movable.isEmpty) {
+      return null;
+    }
+
+    final points = <ControlPoint>[
+      ...BodyWarpUtils.anchorPoints(
+        mesh,
+        excludeIndices: {11, 12, 23, 24},
+      ),
+      ...movable,
+      ...BodyWarpUtils.backgroundFreezeRing(
+        movable: movable,
+        imageSize: imageSize,
+        ringScale: 1.72,
+      ),
+    ];
+
+    return (
+      points: points,
+      intensity: math.max(waist, body),
+    );
+  }
+
+  int _passCount(double intensity, {required bool interactive}) {
+    if (interactive) {
+      return intensity >= 0.85 ? 2 : 1;
+    }
+    if (intensity >= 0.8) return 4;
+    if (intensity >= 0.55) return 3;
+    return 1;
   }
 
   double _readParameter(Map<String, double> parameters, String snakeKey) {

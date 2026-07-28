@@ -95,7 +95,7 @@ class SeamlessBlendCurve {
   /// 2 fotos → 1.0 (cada uma cobre o canvas, ~50/50).
   /// N fotos → (N-1)/N (contribuição ~1/N).
   static double maxOverlapRatio(int photoCount) {
-    final n = photoCount.clamp(2, 12);
+    final n = photoCount.clamp(2, 6);
     if (n <= 2) return 1.0;
     return (n - 1) / n;
   }
@@ -121,7 +121,7 @@ class SeamlessBlendCurve {
     required int photoCount,
     required int overlap,
   }) {
-    final n = photoCount.clamp(2, 12);
+    final n = photoCount.clamp(2, 6);
     final o = overlap.clamp(0, axisLength);
     return math.max(1, (axisLength + (n - 1) * o) ~/ n);
   }

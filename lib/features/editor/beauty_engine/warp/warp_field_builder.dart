@@ -22,12 +22,20 @@ class WarpFieldBuilder {
     this.gridHeight = 64,
     this.maskFeatherPx = 24,
     this.mlsIterations = 6,
+    this.outerRingPx = 12,
+    this.maxDisplacementFraction = 0.40,
   });
 
   final int gridWidth;
   final int gridHeight;
   final double maskFeatherPx;
   final int mlsIterations;
+
+  /// Anel fora da silhueta onde o fundo ainda pode entrar (px).
+  final double outerRingPx;
+
+  /// Clamp de |disp| como fração da meia-largura da ROI (anti-fold).
+  final double maxDisplacementFraction;
 
   /// Grade e feather proporcionais à imagem — menos pixelização nas bordas.
   factory WarpFieldBuilder.forImageSize(
@@ -42,33 +50,38 @@ class WarpFieldBuilder {
     late final int minGrid;
     late final int maxGrid;
     late final int mlsIterations;
+    late final double outerRingPx;
 
     switch (resolved) {
       case WarpFieldQuality.interactive:
-        cellPx = 18.0;
+        cellPx = 16.0;
         minGrid = 40;
-        maxGrid = 64;
-        mlsIterations = 3;
-      case WarpFieldQuality.preview:
-        cellPx = 14.0;
-        minGrid = 56;
-        maxGrid = 80;
+        maxGrid = 72;
         mlsIterations = 4;
+        outerRingPx = 10;
+      case WarpFieldQuality.preview:
+        cellPx = 12.0;
+        minGrid = 56;
+        maxGrid = 96;
+        mlsIterations = 5;
+        outerRingPx = 12;
       case WarpFieldQuality.export:
-        cellPx = 10.0;
+        cellPx = 8.0;
         minGrid = 80;
-        maxGrid = 144;
-        mlsIterations = 6;
+        maxGrid = 160;
+        mlsIterations = 8;
+        outerRingPx = 14;
     }
 
     final grid = (minDim / cellPx).round().clamp(minGrid, maxGrid);
-    final feather = math.max(32.0, minDim * 0.05);
+    final feather = math.max(28.0, minDim * 0.045);
 
     return WarpFieldBuilder(
       gridWidth: grid,
       gridHeight: grid,
       maskFeatherPx: feather,
       mlsIterations: mlsIterations,
+      outerRingPx: outerRingPx,
     );
   }
 
@@ -91,6 +104,12 @@ class WarpFieldBuilder {
     final featherPx = maskFeatherPx;
     final invW = imageSize.width > 0 ? 1.0 / imageSize.width : 0.0;
     final invH = imageSize.height > 0 ? 1.0 / imageSize.height : 0.0;
+    final halfW = bounds.width * 0.5;
+    final maxDisp = math.max(
+      imageSize.width * 0.035,
+      halfW * maxDisplacementFraction,
+    );
+    final capsule = _capsuleFromPoints(controlPoints, imageSize);
 
     for (var gy = 0; gy < gridHeight; gy++) {
       for (var gx = 0; gx < gridWidth; gx++) {
@@ -100,12 +119,17 @@ class WarpFieldBuilder {
         final point = Offset(px, py);
 
         var m = _computeMask(point, bounds, featherPx);
+        if (m > 0.001 && capsule != null) {
+          m *= _capsuleFalloff(point, capsule);
+        }
         if (personMask != null && m > 0.001) {
-          // Congela fundo (Freeze Mask): só deforma a silhueta.
-          final person = _softPerson(
-            personMask.sampleNormalized(px * invW, py * invH),
+          m *= _personInfluence(
+            personMask,
+            px,
+            py,
+            invW,
+            invH,
           );
-          m *= person;
         }
         mask[idx] = m;
         if (m <= 0.001) {
@@ -117,8 +141,16 @@ class WarpFieldBuilder {
           point,
           iterations: mlsIterations,
         );
-        displacement[idx * 2] = source.dx - px;
-        displacement[idx * 2 + 1] = source.dy - py;
+        var dx = source.dx - px;
+        var dy = source.dy - py;
+        final mag = math.sqrt(dx * dx + dy * dy);
+        if (mag > maxDisp && mag > 1e-6) {
+          final s = maxDisp / mag;
+          dx *= s;
+          dy *= s;
+        }
+        displacement[idx * 2] = dx;
+        displacement[idx * 2 + 1] = dy;
       }
     }
 
@@ -163,7 +195,7 @@ class WarpFieldBuilder {
     final minDim = math.min(imageSize.width, imageSize.height);
     final padding = math.max(
       64.0,
-      math.max(minDim * 0.08, maxShift * 2.2 + maskFeatherPx),
+      math.max(minDim * 0.08, maxShift * 2.2 + maskFeatherPx + outerRingPx),
     );
     return Rect.fromLTRB(
       math.max(0, minX - padding),
@@ -199,16 +231,113 @@ class WarpFieldBuilder {
     return _smoothstep(t);
   }
 
-  /// Suaviza a silhueta e descarta fundo quase-zero.
-  static double _softPerson(double raw) {
-    if (raw <= 0.08) {
-      return 0;
+  /// Interior full; anel ~[outerRingPx] fora da silhueta com warp leve; longe freeze.
+  double _personInfluence(
+    PersonMask mask,
+    double px,
+    double py,
+    double invW,
+    double invH,
+  ) {
+    final raw = mask.sampleNormalized(px * invW, py * invH);
+
+    // Núcleo da pessoa: warp completo (sem soft parcial na borda de contraste).
+    if (raw >= 0.42) {
+      return 1.0;
     }
-    if (raw >= 0.45) {
+
+    // Faixa interna próxima à borda.
+    if (raw >= 0.22) {
+      final t = ((raw - 0.22) / (0.42 - 0.22)).clamp(0.0, 1.0);
+      return 0.55 + 0.45 * _smoothstep(t);
+    }
+
+    // Anel externo: fundo perto da silhueta pode entrar na zona vacante.
+    var maxNear = raw;
+    final ring = outerRingPx;
+    const offsets = <Offset>[
+      Offset(-1, 0),
+      Offset(1, 0),
+      Offset(0, -1),
+      Offset(0, 1),
+      Offset(-0.7, -0.7),
+      Offset(0.7, -0.7),
+      Offset(-0.7, 0.7),
+      Offset(0.7, 0.7),
+    ];
+    for (final o in offsets) {
+      final nx = ((px + o.dx * ring) * invW).clamp(0.0, 1.0);
+      final ny = ((py + o.dy * ring) * invH).clamp(0.0, 1.0);
+      maxNear = math.max(maxNear, mask.sampleNormalized(nx, ny));
+    }
+
+    if (maxNear >= 0.42) {
+      // Fora mas colado na pessoa — displacement leve.
+      return 0.28 * _smoothstep(((maxNear - 0.25) / 0.5).clamp(0.0, 1.0));
+    }
+    if (maxNear >= 0.25) {
+      return 0.12 * _smoothstep(((maxNear - 0.15) / 0.35).clamp(0.0, 1.0));
+    }
+    return 0;
+  }
+
+  /// Cápsula vertical aproximada a partir dos CPs móveis (eixo do torso).
+  ({Offset top, Offset bottom, double radius})? _capsuleFromPoints(
+    List<ControlPoint> points,
+    Size imageSize,
+  ) {
+    var minX = double.infinity;
+    var maxX = -double.infinity;
+    var minY = double.infinity;
+    var maxY = -double.infinity;
+    var count = 0;
+    for (final p in points) {
+      if (p.isAnchor) continue;
+      minX = math.min(minX, p.source.dx);
+      maxX = math.max(maxX, p.source.dx);
+      minY = math.min(minY, p.source.dy);
+      maxY = math.max(maxY, p.source.dy);
+      count++;
+    }
+    if (count < 2 || !minX.isFinite) {
+      return null;
+    }
+    final cx = (minX + maxX) * 0.5;
+    final radius = math.max((maxX - minX) * 0.55, imageSize.width * 0.04);
+    return (
+      top: Offset(cx, minY),
+      bottom: Offset(cx, maxY),
+      radius: radius,
+    );
+  }
+
+  double _capsuleFalloff(
+    Offset point,
+    ({Offset top, Offset bottom, double radius}) capsule,
+  ) {
+    final axis = capsule.bottom - capsule.top;
+    final len2 = axis.dx * axis.dx + axis.dy * axis.dy;
+    if (len2 < 1) {
       return 1;
     }
-    final t = ((raw - 0.08) / (0.45 - 0.08)).clamp(0.0, 1.0);
-    return _smoothstep(t);
+    final t = (((point.dx - capsule.top.dx) * axis.dx +
+                (point.dy - capsule.top.dy) * axis.dy) /
+            len2)
+        .clamp(0.0, 1.0);
+    final closest = Offset(
+      capsule.top.dx + axis.dx * t,
+      capsule.top.dy + axis.dy * t,
+    );
+    final dist = (point - closest).distance;
+    final r = capsule.radius;
+    if (dist <= r * 0.55) {
+      return 1;
+    }
+    if (dist >= r) {
+      return 0;
+    }
+    final u = 1.0 - ((dist - r * 0.55) / (r * 0.45));
+    return _smoothstep(u.clamp(0.0, 1.0));
   }
 
   static double _smoothstep(double t) {

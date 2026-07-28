@@ -1,11 +1,9 @@
-import 'dart:ui';
-
 import '../../warp/models/control_point.dart';
 import 'body_warp_context.dart';
 import 'body_warp_filter.dart';
 import 'body_warp_utils.dart';
 
-/// Ajusta largura do quadril (landmarks 23/24 + borda estimada).
+/// Ajusta largura do quadril (landmarks 23/24 + borda real da silhueta).
 class HipFilter extends BodyWarpFilter {
   HipFilter();
 
@@ -35,38 +33,15 @@ class HipFilter extends BodyWarpFilter {
       return const [];
     }
 
-    // Esquerda/direita na imagem (selfie espelhada inverte labels MediaPipe).
-    final imageLeft = a.dx <= b.dx ? a : b;
-    final imageRight = a.dx <= b.dx ? b : a;
-
+    // Positivo = alargar (para fora).
     final shift = context.imageSize.width * 0.04 * t;
-    final pad = context.imageSize.width * 0.03;
-    final movable = <ControlPoint>[
-      ControlPoint(
-        source: BodyWarpUtils.clampToFrame(
-          Offset(imageLeft.dx - pad, imageLeft.dy),
-          context.imageSize,
-        ),
-        target: BodyWarpUtils.clampToFrame(
-          Offset(imageLeft.dx - pad - shift, imageLeft.dy),
-          context.imageSize,
-        ),
-      ),
-      ControlPoint(
-        source: BodyWarpUtils.clampToFrame(
-          Offset(imageRight.dx + pad, imageRight.dy),
-          context.imageSize,
-        ),
-        target: BodyWarpUtils.clampToFrame(
-          Offset(imageRight.dx + pad + shift, imageRight.dy),
-          context.imageSize,
-        ),
-      ),
-      ControlPoint(
-        source: Offset((imageLeft.dx + imageRight.dx) * 0.5, imageLeft.dy),
-        target: Offset((imageLeft.dx + imageRight.dx) * 0.5, imageLeft.dy),
-      ),
-    ];
+    final movable = BodyWarpUtils.hipSidePoints(
+      landmarkA: a,
+      landmarkB: b,
+      imageSize: context.imageSize,
+      shiftPx: shift,
+      personMask: context.personMask,
+    );
 
     return [
       ...BodyWarpUtils.anchorPoints(

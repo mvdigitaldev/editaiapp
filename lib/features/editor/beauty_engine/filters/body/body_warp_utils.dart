@@ -6,11 +6,15 @@ import '../../models/mesh_region.dart';
 import '../../models/pose_landmark.dart';
 import '../../models/pose_result.dart';
 import '../../models/tri_mesh.dart';
+import '../../segment/person_mask.dart';
 import '../../warp/models/control_point.dart';
 
 /// Utilitários warp corporais (MediaPipe Pose 33).
 abstract final class BodyWarpUtils {
   static const visibilityThreshold = 0.5;
+
+  /// Fração máxima da meia-largura local que o slim pode puxar (anti-fold).
+  static const maxSlimFractionOfHalfWidth = 0.30;
 
   static const anchorIndices = <int>[11, 12, 23, 24, 27, 28];
 
@@ -150,10 +154,10 @@ abstract final class BodyWarpUtils {
     return points;
   }
 
-  /// Afina torso/cintura: borda lateral (eixo da imagem) → centro.
+  /// Afina torso/cintura: borda real (PersonMask) → centro.
   ///
-  /// Usa esquerda/direita geométricas (menor/maior X), não os labels
-  /// MediaPipe left/right — em selfie espelhada o 11 fica à direita da foto.
+  /// Usa esquerda/direita geométricas (menor/maior X), não labels MediaPipe.
+  /// [profileFloor]/[profilePeak] controlam o peso ao longo do torso (t=0 ombro, t=1 quadril).
   static List<ControlPoint> slimTorsoSides({
     required Offset leftTop,
     required Offset rightTop,
@@ -162,6 +166,10 @@ abstract final class BodyWarpUtils {
     required Size imageSize,
     required double shiftPx,
     int samples = 6,
+    PersonMask? personMask,
+    double profileFloor = 0.55,
+    double profilePeak = 1.0,
+    double maxShiftFraction = maxSlimFractionOfHalfWidth,
   }) {
     if (shiftPx < 0.5) {
       return const [];
@@ -179,21 +187,37 @@ abstract final class BodyWarpUtils {
         rightTop.dy + (rightBottom.dy - rightTop.dy) * t,
       );
 
-      // Esquerda/direita na imagem (não no corpo da pessoa).
       final imageLeft = sideA.dx <= sideB.dx ? sideA : sideB;
       final imageRight = sideA.dx <= sideB.dx ? sideB : sideA;
       final midX = (imageLeft.dx + imageRight.dx) * 0.5;
+      final y = imageLeft.dy;
 
-      final waistWeight = 0.55 + 0.45 * math.sin(math.pi * t);
-      final localShift = shiftPx * waistWeight;
+      final profile =
+          profileFloor + (profilePeak - profileFloor) * math.sin(math.pi * t);
 
-      final halfWidth = (imageRight.dx - imageLeft.dx).abs() * 0.5;
-      final edgePad = math.max(halfWidth * 0.35, imageSize.width * 0.02);
+      final edges = _torsoEdgesAtY(
+        midX: midX,
+        y: y,
+        landmarkLeft: imageLeft,
+        landmarkRight: imageRight,
+        imageSize: imageSize,
+        personMask: personMask,
+      );
+      final leftEdge = edges.$1;
+      final rightEdge = edges.$2;
+      final halfWidth = (rightEdge.dx - leftEdge.dx).abs() * 0.5;
+      if (halfWidth < 2) {
+        continue;
+      }
 
-      final leftEdge = Offset(imageLeft.dx - edgePad, imageLeft.dy);
-      final rightEdge = Offset(imageRight.dx + edgePad, imageRight.dy);
+      final localShift = math.min(
+        shiftPx * profile,
+        halfWidth * maxShiftFraction,
+      );
+      if (localShift < 0.5) {
+        continue;
+      }
 
-      // Empurra bordas para o centro = emagrece.
       points.add(
         ControlPoint(
           source: clampToFrame(leftEdge, imageSize),
@@ -213,11 +237,142 @@ abstract final class BodyWarpUtils {
         ),
       );
 
-      final center = Offset(midX, imageLeft.dy);
+      final center = Offset(midX, y);
       points.add(ControlPoint(source: center, target: center));
     }
 
     return points;
+  }
+
+  /// Expande/contrai quadril nas bordas reais da silhueta.
+  static List<ControlPoint> hipSidePoints({
+    required Offset landmarkA,
+    required Offset landmarkB,
+    required Size imageSize,
+    required double shiftPx,
+    PersonMask? personMask,
+    double maxShiftFraction = maxSlimFractionOfHalfWidth,
+  }) {
+    if (shiftPx.abs() < 0.5) {
+      return const [];
+    }
+
+    final imageLeft = landmarkA.dx <= landmarkB.dx ? landmarkA : landmarkB;
+    final imageRight = landmarkA.dx <= landmarkB.dx ? landmarkB : landmarkA;
+    final midX = (imageLeft.dx + imageRight.dx) * 0.5;
+    final y = imageLeft.dy;
+
+    final edges = _torsoEdgesAtY(
+      midX: midX,
+      y: y,
+      landmarkLeft: imageLeft,
+      landmarkRight: imageRight,
+      imageSize: imageSize,
+      personMask: personMask,
+    );
+    final leftEdge = edges.$1;
+    final rightEdge = edges.$2;
+    final halfWidth = (rightEdge.dx - leftEdge.dx).abs() * 0.5;
+    final capped = math.min(shiftPx.abs(), halfWidth * maxShiftFraction);
+    final signed = shiftPx >= 0 ? capped : -capped;
+
+    return [
+      ControlPoint(
+        source: clampToFrame(leftEdge, imageSize),
+        target: clampToFrame(
+          Offset(leftEdge.dx - signed, leftEdge.dy),
+          imageSize,
+        ),
+      ),
+      ControlPoint(
+        source: clampToFrame(rightEdge, imageSize),
+        target: clampToFrame(
+          Offset(rightEdge.dx + signed, rightEdge.dy),
+          imageSize,
+        ),
+      ),
+      ControlPoint(
+        source: Offset(midX, y),
+        target: Offset(midX, y),
+      ),
+    ];
+  }
+
+  /// Borda esquerda/direita em [y]: raycast na máscara ou fallback em landmarks.
+  static (Offset, Offset) _torsoEdgesAtY({
+    required double midX,
+    required double y,
+    required Offset landmarkLeft,
+    required Offset landmarkRight,
+    required Size imageSize,
+    PersonMask? personMask,
+  }) {
+    if (personMask != null) {
+      final left = findSilhouetteEdgeX(
+        mask: personMask,
+        imageSize: imageSize,
+        midX: midX,
+        y: y,
+        findLeft: true,
+      );
+      final right = findSilhouetteEdgeX(
+        mask: personMask,
+        imageSize: imageSize,
+        midX: midX,
+        y: y,
+        findLeft: false,
+      );
+      if (left != null && right != null && right > left + 4) {
+        return (Offset(left, y), Offset(right, y));
+      }
+    }
+
+    final halfWidth = (landmarkRight.dx - landmarkLeft.dx).abs() * 0.5;
+    final edgePad = math.max(halfWidth * 0.12, imageSize.width * 0.01);
+    return (
+      Offset(landmarkLeft.dx - edgePad, y),
+      Offset(landmarkRight.dx + edgePad, y),
+    );
+  }
+
+  /// Percorre horizontalmente a partir do centro até a confiança cair abaixo do limiar.
+  static double? findSilhouetteEdgeX({
+    required PersonMask mask,
+    required Size imageSize,
+    required double midX,
+    required double y,
+    required bool findLeft,
+    double threshold = 0.48,
+  }) {
+    if (imageSize.width <= 1 || imageSize.height <= 1) {
+      return null;
+    }
+
+    final ny = (y / imageSize.height).clamp(0.0, 1.0);
+    final startX = midX.clamp(0.0, imageSize.width - 1.0);
+    final step = findLeft ? -1.0 : 1.0;
+    final maxDist = imageSize.width * 0.48;
+
+    // Garante que o meio está (aproximadamente) dentro da pessoa.
+    final midV = mask.sampleNormalized(startX / imageSize.width, ny);
+    if (midV < 0.2) {
+      return null;
+    }
+
+    var lastInside = startX;
+    for (var d = 0.0; d <= maxDist; d += 1.0) {
+      final x = startX + step * d;
+      if (x < 0 || x >= imageSize.width) {
+        break;
+      }
+      final v = mask.sampleNormalized(x / imageSize.width, ny);
+      if (v >= threshold) {
+        lastInside = x;
+      } else if (d > 2) {
+        return lastInside;
+      }
+    }
+    return lastInside;
   }
 
   /// Âncoras de fundo ao redor da região deformada (Freeze Mask do Liquify).
@@ -267,6 +422,28 @@ abstract final class BodyWarpUtils {
           source: clampToFrame(p, imageSize),
           target: clampToFrame(p, imageSize),
         ),
+    ];
+  }
+
+  /// Escala o deslocamento de cada CP móvel (multi-pass).
+  static List<ControlPoint> scaleControlPointDeltas(
+    List<ControlPoint> points,
+    double factor,
+  ) {
+    if (factor >= 0.999) {
+      return points;
+    }
+    return [
+      for (final p in points)
+        p.isAnchor
+            ? p
+            : ControlPoint(
+                source: p.source,
+                target: Offset(
+                  p.source.dx + (p.target.dx - p.source.dx) * factor,
+                  p.source.dy + (p.target.dy - p.source.dy) * factor,
+                ),
+              ),
     ];
   }
 
