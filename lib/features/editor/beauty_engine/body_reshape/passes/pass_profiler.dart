@@ -93,6 +93,9 @@ class BodyMultiPassConfig {
   final bool localMls;
   final bool edgeRefinement;
   final bool antiFolding;
+  final bool tpsRefinement;
+  final bool textureStabilization;
+  final bool backgroundCorrection;
   final bool profilePasses;
 
   const BodyMultiPassConfig({
@@ -100,34 +103,52 @@ class BodyMultiPassConfig {
     this.localMls = false,
     this.edgeRefinement = false,
     this.antiFolding = false,
+    this.tpsRefinement = false,
+    this.textureStabilization = false,
+    this.backgroundCorrection = false,
     this.profilePasses = true,
   });
 
   /// Legado: nenhum passe V2 (MLS compose permanece).
   static const legacy = BodyMultiPassConfig();
 
-  /// Preview V2 completo.
+  /// Preview V2 completo (Sprints 10–11).
   static const previewV2 = BodyMultiPassConfig(
     bodyMeshWarp: true,
     localMls: true,
     edgeRefinement: true,
     antiFolding: true,
+    tpsRefinement: true,
+    textureStabilization: true,
+    backgroundCorrection: true,
   );
 
   bool get isV2Enabled =>
-      bodyMeshWarp || localMls || edgeRefinement || antiFolding;
+      bodyMeshWarp ||
+      localMls ||
+      edgeRefinement ||
+      antiFolding ||
+      tpsRefinement ||
+      textureStabilization ||
+      backgroundCorrection;
 
   int get enabledPassCount =>
       (bodyMeshWarp ? 1 : 0) +
       (localMls ? 1 : 0) +
       (edgeRefinement ? 1 : 0) +
-      (antiFolding ? 1 : 0);
+      (antiFolding ? 1 : 0) +
+      (tpsRefinement ? 1 : 0) +
+      (textureStabilization ? 1 : 0) +
+      (backgroundCorrection ? 1 : 0);
 
   BodyMultiPassConfig copyWith({
     bool? bodyMeshWarp,
     bool? localMls,
     bool? edgeRefinement,
     bool? antiFolding,
+    bool? tpsRefinement,
+    bool? textureStabilization,
+    bool? backgroundCorrection,
     bool? profilePasses,
   }) {
     return BodyMultiPassConfig(
@@ -135,6 +156,9 @@ class BodyMultiPassConfig {
       localMls: localMls ?? this.localMls,
       edgeRefinement: edgeRefinement ?? this.edgeRefinement,
       antiFolding: antiFolding ?? this.antiFolding,
+      tpsRefinement: tpsRefinement ?? this.tpsRefinement,
+      textureStabilization: textureStabilization ?? this.textureStabilization,
+      backgroundCorrection: backgroundCorrection ?? this.backgroundCorrection,
       profilePasses: profilePasses ?? this.profilePasses,
     );
   }
@@ -142,7 +166,8 @@ class BodyMultiPassConfig {
   @override
   String toString() =>
       'BodyMultiPassConfig(mesh=$bodyMeshWarp, mls=$localMls, '
-      'edge=$edgeRefinement, antiFold=$antiFolding)';
+      'edge=$edgeRefinement, antiFold=$antiFolding, tps=$tpsRefinement, '
+      'tex=$textureStabilization, bg=$backgroundCorrection)';
 }
 
 /// Utilitário de hash espacial 2D (células uniformes).

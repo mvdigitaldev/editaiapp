@@ -35,10 +35,13 @@ import 'v_face.dart';
 /// Pipeline composável de filtros faciais warp (Sprint 10–16).
 class FaceFilterPipeline {
   const FaceFilterPipeline({
-    WarpFieldBuilder fieldBuilder = const WarpFieldBuilder(),
+    WarpFieldBuilder? fieldBuilder,
   }) : _fieldBuilder = fieldBuilder;
 
-  final WarpFieldBuilder _fieldBuilder;
+  /// Um builder injetado preserva as grades determinísticas dos testes.
+  /// Sem injeção, a grade acompanha a resolução para não ampliar degraus em
+  /// preview/export de alta resolução.
+  final WarpFieldBuilder? _fieldBuilder;
 
   static final allFilters = <FaceWarpFilter>[
     FaceSlimFilter(),
@@ -123,10 +126,12 @@ class FaceFilterPipeline {
     }
 
     if (controlPoints.isEmpty || maxIntensity <= 0) {
-      return WarpField.identity(imageSize: imageSize, region: MeshRegion.faceOval);
+      return WarpField.identity(
+          imageSize: imageSize, region: MeshRegion.faceOval);
     }
 
-    return _fieldBuilder.build(
+    final builder = _fieldBuilder ?? WarpFieldBuilder.forImageSize(imageSize);
+    return builder.build(
       controlPoints: controlPoints,
       imageSize: imageSize,
       region: MeshRegion.faceOval,

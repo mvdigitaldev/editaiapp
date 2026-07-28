@@ -1,7 +1,9 @@
 import '../../models/image_source.dart';
 import '../models/body_frame_assets.dart';
+import '../models/body_part_segmentation.dart';
 import '../models/person_matte.dart';
 import 'body_mesh_provider.dart';
+import 'body_part_segmentation_provider.dart';
 import 'person_matte_provider.dart';
 import 'vision_capabilities.dart';
 
@@ -44,4 +46,25 @@ class FakePersonMatteProvider implements PersonMatteProvider {
 
   @override
   Future<PersonMatte?> detect(ImageSource source) async => matte;
+}
+
+/// Provider de partes para testes e fixtures de oclusão.
+class FakeBodyPartSegmentationProvider implements BodyPartSegmentationProvider {
+  FakeBodyPartSegmentationProvider({
+    required this.segmentation,
+    this.id = 'fake_body_parts',
+  });
+
+  final BodyPartSegmentation? segmentation;
+
+  @override
+  final String id;
+
+  @override
+  VisionCapabilities get capabilities =>
+      const VisionCapabilities(bodyPartSegmentation: true, multiPerson: true);
+
+  @override
+  Future<BodyPartSegmentation?> detect(ImageSource source) async =>
+      segmentation;
 }

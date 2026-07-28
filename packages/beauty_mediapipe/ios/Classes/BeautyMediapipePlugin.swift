@@ -6,6 +6,7 @@ public class BeautyMediapipePlugin: NSObject, FlutterPlugin {
   private var faceBridge: FaceLandmarkerBridge?
   private var poseBridge: PoseLandmarkerBridge?
   private var segmenterBridge: ImageSegmenterBridge?
+  private var metalBackend: BodyReshapeMetalBackend?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -17,6 +18,7 @@ public class BeautyMediapipePlugin: NSObject, FlutterPlugin {
     instance.faceBridge = FaceLandmarkerBridge()
     instance.poseBridge = PoseLandmarkerBridge()
     instance.segmenterBridge = ImageSegmenterBridge()
+    instance.metalBackend = BodyReshapeMetalBackend()
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -121,6 +123,49 @@ public class BeautyMediapipePlugin: NSObject, FlutterPlugin {
       faceBridge?.dispose()
       poseBridge?.dispose()
       segmenterBridge?.dispose()
+      result(nil)
+
+    case "probeExportCapabilities":
+      result(metalBackend?.capabilities() ?? [
+        "metal": false,
+        "vulkan": false,
+        "openGlEs": false,
+        "nativeJpegEncode": false,
+      ])
+
+    case "warpExport":
+      guard let backend = metalBackend, backend.isAvailable else {
+        result(FlutterError(code: "unavailable", message: "Metal export unavailable", details: nil))
+        return
+      }
+      guard let args = call.arguments as? [String: Any] else {
+        result(FlutterError(code: "invalid_args", message: "args required", details: nil))
+        return
+      }
+      do {
+        let data = try backend.warpExport(args: args)
+        result(data)
+      } catch {
+        result(FlutterError(code: "warp_failed", message: error.localizedDescription, details: nil))
+      }
+
+    case "encodeJpeg":
+      guard let backend = metalBackend else {
+        result(FlutterError(code: "unavailable", message: "JPEG encode unavailable", details: nil))
+        return
+      }
+      guard let args = call.arguments as? [String: Any] else {
+        result(FlutterError(code: "invalid_args", message: "args required", details: nil))
+        return
+      }
+      do {
+        let data = try backend.encodeJpeg(args: args)
+        result(data)
+      } catch {
+        result(FlutterError(code: "encode_failed", message: error.localizedDescription, details: nil))
+      }
+
+    case "releaseExportResource":
       result(nil)
 
     default:

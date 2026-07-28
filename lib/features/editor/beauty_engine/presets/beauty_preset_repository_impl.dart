@@ -17,6 +17,8 @@ import 'bundled_preset_loader.dart';
 import 'preset_sync_service.dart';
 import 'preset_thumbnail_service.dart';
 
+export 'beauty_preset_body_migration.dart';
+
 /// Repositorio local + sync Supabase opcional (Sprint 23/24).
 class BeautyPresetRepositoryImpl implements BeautyPresetRepository {
   BeautyPresetRepositoryImpl({
@@ -165,6 +167,7 @@ class BeautyPresetRepositoryImpl implements BeautyPresetRepository {
 
   @override
   Future<BeautyPreset> importPresetJson(Map<String, dynamic> json) async {
+    // BeautyPreset.fromJson aplica BeautyPresetBodyMigration (Sprint 12).
     var preset = BeautyPreset.fromJson(json);
     if (BundledBeautyPresets.isBundled(preset.id)) {
       preset = preset.copyWith(

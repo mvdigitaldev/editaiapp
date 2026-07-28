@@ -179,6 +179,49 @@ void main() {
       expect(rightDx / rightCount, greaterThan(0));
     });
 
+    test('chest expand and belly reduce produce non-identity fields', () {
+      final assets = _standingPersonAssets(imageSize);
+      final mesh = _mesh();
+      final plan = WarpPlan(
+        imageSize: imageSize,
+        adjustments: [
+          const BodyAdjustment(
+            type: BodyAdjustmentType.chestExpand,
+            regions: {BodyRegion.chest},
+            intensity: 0.9,
+            maxIntensity: 0.9,
+            weight: 1,
+            direction: BodyAdjustmentDirection.outward,
+            influence: 0.65,
+            minimumConfidence: 0.5,
+            occlusionPolicy: BodyOcclusionPolicy.preserveOccluder,
+            sourceParameter: 'chest_expand',
+          ),
+          const BodyAdjustment(
+            type: BodyAdjustmentType.bellyReduce,
+            regions: {BodyRegion.waist, BodyRegion.torso},
+            intensity: 0.8,
+            maxIntensity: 0.8,
+            weight: 1,
+            direction: BodyAdjustmentDirection.inward,
+            influence: 0.7,
+            minimumConfidence: 0.5,
+            occlusionPolicy: BodyOcclusionPolicy.preserveOccluder,
+            sourceParameter: 'belly_reduce',
+          ),
+        ],
+        qualityProfile: WarpQualityProfile.preview,
+      );
+
+      final field = deformer.computeDisplacements(
+        mesh: mesh,
+        assets: assets,
+        plan: plan,
+      );
+
+      expect(field.isIdentity, isFalse);
+    });
+
     test('limb slim produces non-zero arm displacements', () {
       final assets = _standingPersonAssets(imageSize);
       final mesh = _mesh();

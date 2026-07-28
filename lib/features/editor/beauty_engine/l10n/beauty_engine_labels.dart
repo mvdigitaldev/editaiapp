@@ -1,3 +1,5 @@
+import 'body_reshape_labels.dart';
+
 /// Rótulos em português para UI do Beauty Engine (Sprint 27).
 /// Keys internas (`face_slim`, etc.) permanecem inalteradas.
 abstract final class BeautyEngineLabels {
@@ -34,18 +36,13 @@ abstract final class BeautyEngineLabels {
     'contour': 'Contorno',
     'eyebrows': 'Sobrancelhas',
     'eyelashes': 'Cílios',
-    'waist_slim': 'Afinar cintura',
-    'hip': 'Quadril',
-    'body_slim': 'Afinar corpo',
-    'leg_length': 'Alongar pernas',
-    'leg_slim': 'Afinar pernas',
-    'arm_slim': 'Afinar braços',
-    'neck_slim': 'Afinar pescoço',
-    'shoulder_width': 'Largura dos ombros',
+    ...BodyReshapeLabels.parameterLabelPt,
   };
 
   static String parameterLabel(String key) =>
-      parameterLabelPt[key] ?? key;
+      parameterLabelPt[key] ??
+      BodyReshapeLabels.parameterLabelPt[key] ??
+      key;
 
   static const lutOptionsPt = {
     'Nenhum': null,

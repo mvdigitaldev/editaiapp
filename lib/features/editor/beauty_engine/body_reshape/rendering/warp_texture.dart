@@ -26,29 +26,41 @@ class WarpTexture {
   final Uint8List rgba;
   final Size imageSize;
 
+  /// Faixa (px) usada para codificar displacement em RGBA8.
+  ///
+  /// Só existe para [WarpTextureKind.displacement]. Ao normalizar pela faixa
+  /// local do campo, pequenos ajustes mantêm precisão subpixel em imagens 4K.
+  final Offset displacementScalePx;
+
   const WarpTexture({
     required this.kind,
     required this.width,
     required this.height,
     required this.rgba,
     required this.imageSize,
+    this.displacementScalePx = Offset.zero,
   }) : assert(width > 0 && height > 0);
 
   int get byteLength => rgba.length;
 
   /// Deslocamento do [WarpField] na resolução da grade (bilinear no GPU).
-  factory WarpTexture.fromDisplacement(WarpField field) {
+  ///
+  /// RGBA8 codifica `[-scale, +scale]` em pixels, em vez de normalizar pelo
+  /// tamanho integral da imagem. Isso evita degraus de vários pixels.
+  factory WarpTexture.fromDisplacement(
+    WarpField field, {
+    Offset? scalePx,
+  }) {
     final w = field.gridWidth;
     final h = field.gridHeight;
-    final imgW = math.max(field.imageSize.width, 1.0);
-    final imgH = math.max(field.imageSize.height, 1.0);
+    final scale = scalePx ?? displacementScaleFor(field);
     final rgba = Uint8List(w * h * 4);
 
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
         final idx = y * w + x;
-        final dx = field.displacement[idx * 2] / imgW;
-        final dy = field.displacement[idx * 2 + 1] / imgH;
+        final dx = field.displacement[idx * 2] / scale.dx;
+        final dy = field.displacement[idx * 2 + 1] / scale.dy;
         final o = idx * 4;
         rgba[o] = _encodeSignedUnit(dx);
         rgba[o + 1] = _encodeSignedUnit(dy);
@@ -63,6 +75,24 @@ class WarpTexture {
       height: h,
       rgba: rgba,
       imageSize: field.imageSize,
+      displacementScalePx: scale,
+    );
+  }
+
+  /// Menor faixa segura para a codificação RGBA8 de um campo.
+  ///
+  /// A margem evita clipping após a interpolação. O mínimo de 1 px mantém
+  /// campos quase-identidade estáveis, sem viés de 2–30 px do encoding antigo.
+  static Offset displacementScaleFor(WarpField field) {
+    var maxX = 0.0;
+    var maxY = 0.0;
+    for (var i = 0; i < field.displacement.length; i += 2) {
+      maxX = math.max(maxX, field.displacement[i].abs());
+      maxY = math.max(maxY, field.displacement[i + 1].abs());
+    }
+    return Offset(
+      math.max(1.0, maxX * 1.05),
+      math.max(1.0, maxY * 1.05),
     );
   }
 
@@ -176,10 +206,14 @@ class WarpTexture {
   }
 
   /// Decodifica canal RG de deslocamento (testes / referência).
-  static Offset decodeDisplacement(int r, int g, Size imageSize) {
+  static Offset decodeDisplacement(
+    int r,
+    int g,
+    Offset displacementScalePx,
+  ) {
     final nx = (r / 255.0) * 2.0 - 1.0;
     final ny = (g / 255.0) * 2.0 - 1.0;
-    return Offset(nx * imageSize.width, ny * imageSize.height);
+    return Offset(nx * displacementScalePx.dx, ny * displacementScalePx.dy);
   }
 
   static int _encodeSignedUnit(double v) {

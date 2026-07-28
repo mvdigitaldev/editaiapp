@@ -21,7 +21,6 @@ class WaistStrategy extends BodyRegionDeformationStrategy
   Set<BodyAdjustmentType> get supportedTypes => {
         BodyAdjustmentType.waistSlim,
         BodyAdjustmentType.torsoSlim,
-        BodyAdjustmentType.bellyReduce,
       };
 
   @override
@@ -58,8 +57,7 @@ class WaistStrategy extends BodyRegionDeformationStrategy
     final span = math.max(hipY - shoulderY, 1.0);
 
     final isWaistFocused =
-        context.adjustment.type == BodyAdjustmentType.waistSlim ||
-            context.adjustment.type == BodyAdjustmentType.bellyReduce;
+        context.adjustment.type == BodyAdjustmentType.waistSlim;
     final shiftPx = context.imageSize.width * maxShiftFraction * intensity;
     final halfWidth = context.imageSize.width * 0.22;
 

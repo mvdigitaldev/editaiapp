@@ -2,6 +2,7 @@ import 'body_params.dart';
 import 'face_params.dart';
 import 'skin_params.dart';
 import 'tune_params.dart';
+import '../presets/beauty_preset_body_migration.dart';
 
 /// Preset composto LUT + beauty (serializável JSON).
 class BeautyPreset {
@@ -122,6 +123,14 @@ class BeautyPreset {
       };
 
   factory BeautyPreset.fromJson(Map<String, dynamic> json) {
+    final rawVersion = json['version'] as int? ?? 1;
+    final bodyJson = Map<String, dynamic>.from(
+      json['body'] as Map<String, dynamic>? ?? {},
+    );
+    final migrated = BeautyPresetBodyMigration.migrate(
+      bodyJson: bodyJson,
+      presetVersion: rawVersion,
+    );
     return BeautyPreset(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -133,13 +142,11 @@ class BeautyPreset {
       face: FaceParams.fromJson(
         json['face'] as Map<String, dynamic>? ?? {},
       ),
-      body: BodyParams.fromJson(
-        json['body'] as Map<String, dynamic>? ?? {},
-      ),
+      body: BodyParams.fromJson(migrated.bodyJson),
       skin: SkinParams.fromJson(
         json['skin'] as Map<String, dynamic>? ?? {},
       ),
-      version: json['version'] as int? ?? 1,
+      version: migrated.version,
       thumbnailPath: json['thumbnailPath'] as String?,
       remoteId: json['remoteId'] as String?,
       authorId: json['authorId'] as String?,

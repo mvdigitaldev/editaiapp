@@ -2,14 +2,46 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
+import '../body_reshape/protection/rigidity_map.dart';
 import '../models/warp_field.dart';
 
-/// Aplica [WarpField] em CPU (preview/testes ate GPURenderer Sprint 07).
+/// Aplica [WarpField] em CPU (preview/testes / fallback GPU).
+///
+/// Sprint 11: anti-ghosting na borda e atenuação por [RigidityMap].
 class WarpCpuRemap {
-  const WarpCpuRemap({this.fastMode = false});
+  const WarpCpuRemap({
+    this.fastMode = false,
+    this.antiGhosting = true,
+    this.rigidityMap,
+    this.edgeSoftness = 0.12,
+  });
 
   /// Mantido por compatibilidade; o remap liquify já é rápido.
   final bool fastMode;
+
+  /// Evita amostragem cruzada corpo↔fundo na faixa de máscara intermediária.
+  final bool antiGhosting;
+
+  /// Limita deslocamento em fundo estrutural (linhas rígidas).
+  final RigidityMap? rigidityMap;
+
+  final double edgeSoftness;
+
+  WarpCpuRemap copyWith({
+    bool? fastMode,
+    bool? antiGhosting,
+    RigidityMap? rigidityMap,
+    double? edgeSoftness,
+    bool clearRigidityMap = false,
+  }) {
+    return WarpCpuRemap(
+      fastMode: fastMode ?? this.fastMode,
+      antiGhosting: antiGhosting ?? this.antiGhosting,
+      rigidityMap:
+          clearRigidityMap ? null : (rigidityMap ?? this.rigidityMap),
+      edgeSoftness: edgeSoftness ?? this.edgeSoftness,
+    );
+  }
 
   Uint8List apply({
     required Uint8List rgba,
@@ -39,6 +71,8 @@ class WarpCpuRemap {
         ? height
         : (bounds.bottom.ceil() + 1).clamp(0, height);
 
+    final rigidity = rigidityMap ?? field.rigidityMap;
+
     for (var y = y0; y < y1; y++) {
       for (var x = x0; x < x1; x++) {
         _remapPixel(
@@ -52,6 +86,7 @@ class WarpCpuRemap {
           sampleRgba: rgba,
           sampleWidth: width,
           sampleHeight: height,
+          rigidity: rigidity,
         );
       }
     }
@@ -79,6 +114,7 @@ class WarpCpuRemap {
     }
 
     final output = Uint8List.fromList(tileRgba);
+    final rigidity = rigidityMap ?? field.rigidityMap;
 
     for (var y = 0; y < tileHeight; y++) {
       for (var x = 0; x < tileWidth; x++) {
@@ -97,6 +133,7 @@ class WarpCpuRemap {
           globalY: offsetY + y,
           fullWidth: fullWidth,
           fullHeight: fullHeight,
+          rigidity: rigidity,
         );
       }
     }
@@ -120,6 +157,7 @@ class WarpCpuRemap {
     }
 
     final output = Uint8List.fromList(tileRgba);
+    final rigidity = rigidityMap ?? field.rigidityMap;
 
     for (var y = 0; y < tileHeight; y++) {
       for (var x = 0; x < tileWidth; x++) {
@@ -138,6 +176,7 @@ class WarpCpuRemap {
           globalY: offsetY + y,
           fullWidth: fullWidth,
           fullHeight: fullHeight,
+          rigidity: rigidity,
         );
       }
     }
@@ -156,6 +195,7 @@ class WarpCpuRemap {
     required Uint8List sampleRgba,
     required int sampleWidth,
     required int sampleHeight,
+    RigidityMap? rigidity,
     int? globalX,
     int? globalY,
     int? fullWidth,
@@ -172,12 +212,49 @@ class WarpCpuRemap {
       return;
     }
 
-    final mask = rawMask.clamp(0.0, 1.0);
-    final disp = field.sampleDisplacement(normalized);
+    var mask = rawMask.clamp(0.0, 1.0);
+    var disp = field.sampleDisplacement(normalized);
+
+    // Fundo rígido: não curva linhas estruturais.
+    if (rigidity != null && !rigidity.isEmpty) {
+      final r = rigidity.sampleNormalized(normalized.dx, normalized.dy);
+      final soft = (1.0 - r) * (1.0 - r);
+      disp = Offset(disp.dx * soft, disp.dy * soft);
+      if (r >= 0.55) {
+        return;
+      }
+    }
+
+    // Anti-ghosting: na transição de máscara, reduz o pull e evita double-exposure.
+    if (antiGhosting) {
+      final soft = edgeSoftness.clamp(0.02, 0.4);
+      if (mask < 1.0 - soft) {
+        final edgeScale = (mask / (1.0 - soft)).clamp(0.0, 1.0);
+        mask *= edgeScale;
+        disp = Offset(disp.dx * edgeScale, disp.dy * edgeScale);
+      }
+    }
+
+    if (mask <= 0.001) {
+      return;
+    }
+
     // Liquify-style: atenuar o deslocamento pela máscara.
     // NÃO misturar cores original↔warped — isso cria fantasma (double exposure).
-    final srcX = gx + disp.dx * mask;
-    final srcY = gy + disp.dy * mask;
+    var srcX = gx + disp.dx * mask;
+    var srcY = gy + disp.dy * mask;
+
+    // Clamp anti-ghosting: não amostrar muito longe da silhueta ativa.
+    if (antiGhosting) {
+      final maxPull = math.max(fw, fh) * 0.08;
+      final pull = Offset(srcX - gx, srcY - gy);
+      final mag = pull.distance;
+      if (mag > maxPull && mag > 1e-6) {
+        final s = maxPull / mag;
+        srcX = gx + pull.dx * s;
+        srcY = gy + pull.dy * s;
+      }
+    }
 
     final warped = _sampleBilinear(
       sampleRgba,

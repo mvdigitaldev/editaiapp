@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../body_reshape/models/warp_plan.dart';
 import '../../filters/body/body_filter_pipeline.dart';
 import '../../filters/face/face_filter_pipeline.dart';
 import '../../filters/face/skin_filter_pipeline.dart';
 import '../../l10n/beauty_engine_labels.dart';
+import '../../l10n/body_reshape_labels.dart';
 import 'beauty_accessible_slider.dart';
 
 /// Categoria de ajuste manual no retoque beauty.
@@ -41,6 +43,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
     required this.linkEyes,
     required this.onParamChanged,
     required this.onLinkEyesChanged,
+    this.bodyWarpPlan,
   });
 
   final Map<String, double> params;
@@ -48,6 +51,9 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
   final bool linkEyes;
   final void Function(String key, double value) onParamChanged;
   final ValueChanged<bool> onLinkEyesChanged;
+
+  /// Último plano V2 — usado para hints de oclusão/confiança (Sprint 12).
+  final WarpPlan? bodyWarpPlan;
 
   static const categories = <BeautyAdjustmentCategoryDef>[
     BeautyAdjustmentCategoryDef(
@@ -152,6 +158,16 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     final isDark = theme.brightness == Brightness.dark;
     final activeKey = _activeParamKey;
     final activeValue = widget.params[activeKey] ?? 0;
+    final isBody = _category == BeautyAdjustmentCategory.corpo;
+    final limitationHint = isBody
+        ? BodyReshapeLabels.limitationHint(
+            parameterKey: activeKey,
+            plan: widget.bodyWarpPlan,
+          )
+        : null;
+    final limitHint =
+        isBody ? BodyReshapeLabels.controlLimitHint(activeKey) : null;
+    final hintText = limitationHint ?? limitHint;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -180,6 +196,22 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                     : null,
               ),
             ),
+            if (hintText != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    hintText,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: limitationHint != null
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.onSurface
+                              .withValues(alpha: 0.55),
+                    ),
+                  ),
+                ),
+              ),
             if (_category == BeautyAdjustmentCategory.olhos)
               SwitchListTile(
                 dense: true,

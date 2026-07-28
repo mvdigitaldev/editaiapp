@@ -125,7 +125,10 @@ class FragmentProgramWarpBackend implements FragmentProgramBackend {
     ui.Image? outputImage;
 
     try {
-      final displacement = WarpTexture.fromDisplacement(plan.field);
+      final displacement = WarpTexture.fromDisplacement(
+        plan.field,
+        scalePx: plan.displacementScalePx,
+      );
       final mask = WarpTexture.fromMask(plan.field);
       final influence = plan.hasInfluence
           ? WarpTexture.fromInfluenceMap(plan.influenceMap!)
@@ -161,8 +164,19 @@ class FragmentProgramWarpBackend implements FragmentProgramBackend {
       );
 
       final shader = _program!.fragmentShader();
-      shader.setFloat(0, width.toDouble());
-      shader.setFloat(1, height.toDouble());
+      final fullW = plan.fullWidth;
+      final fullH = plan.fullHeight;
+      final originX = plan.tileOriginX;
+      final originY = plan.tileOriginY;
+      // uImageSize (full), uTileOrigin, uTileSize (current draw / input).
+      shader.setFloat(0, fullW);
+      shader.setFloat(1, fullH);
+      shader.setFloat(2, originX);
+      shader.setFloat(3, originY);
+      shader.setFloat(4, width.toDouble());
+      shader.setFloat(5, height.toDouble());
+      shader.setFloat(6, displacement.displacementScalePx.dx);
+      shader.setFloat(7, displacement.displacementScalePx.dy);
       shader.setImageSampler(0, sourceImage);
       shader.setImageSampler(1, displacementImage);
       shader.setImageSampler(2, maskImage);

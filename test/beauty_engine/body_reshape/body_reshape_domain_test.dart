@@ -106,6 +106,50 @@ void main() {
       );
     });
 
+    test('maps new Sprint 12 controls with region, limit, direction and occlusion',
+        () {
+      final plan = adapter.buildPlan(
+        const BodyReshapeRequest(
+          imageSize: Size(400, 800),
+          parameters: {
+            'chest_expand': 0.5,
+            'belly_reduce': 0.4,
+            'butt_expand': 0.3,
+            'height': 0.6,
+            'shoulder_reduce': 0.2,
+            'arm_upper_slim': 0.5,
+            'leg_calf_slim': 0.4,
+          },
+        ),
+      );
+
+      expect(plan.adjustments.length, greaterThanOrEqualTo(7));
+
+      final chest = plan.adjustmentOfType(BodyAdjustmentType.chestExpand)!;
+      expect(chest.regions, const {BodyRegion.chest});
+      expect(chest.direction, BodyAdjustmentDirection.outward);
+      expect(chest.maxIntensity, 0.75);
+      expect(chest.occlusionPolicy, BodyOcclusionPolicy.preserveOccluder);
+
+      final height = plan.adjustmentOfType(BodyAdjustmentType.height)!;
+      expect(height.direction, BodyAdjustmentDirection.verticalStretch);
+      expect(
+        height.occlusionPolicy,
+        BodyOcclusionPolicy.rejectAdjustment,
+      );
+
+      expect(
+        LegacyBodyParameterAdapter.controlSpecs,
+        hasLength(LegacyBodyParameterAdapter.supportedParameterKeys.length),
+      );
+      expect(
+        LegacyBodyParameterAdapter.requiresV2Mesh(
+          const {'chest_expand': 0.1},
+        ),
+        isTrue,
+      );
+    });
+
     test('snake case takes precedence and values are clamped', () {
       expect(
         LegacyBodyParameterAdapter.readParameter(

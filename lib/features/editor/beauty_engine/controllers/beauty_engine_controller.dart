@@ -3,10 +3,12 @@ import 'dart:ui';
 
 import '../body_reshape/models/body_frame_assets.dart';
 import '../body_reshape/models/body_reshape_request.dart';
+import '../body_reshape/models/legacy_body_parameter_adapter.dart';
 import '../body_reshape/models/warp_plan.dart';
 import '../body_reshape/occlusion/conservative_occlusion_provider.dart';
 import '../body_reshape/occlusion/occlusion_engine.dart';
 import '../body_reshape/providers/body_vision_coordinator.dart';
+import '../body_reshape/providers/mediapipe_body_joint_mapper.dart';
 import '../body_reshape/providers/vision_capabilities.dart';
 import '../filters/body/body_filter_pipeline.dart';
 import '../filters/face/face_filter_pipeline.dart';
@@ -52,6 +54,12 @@ class BeautyEngineController {
 
   /// Último resultado multi-passe (telemetria / debug).
   BodyMultiPassResult? lastBodyMultiPassResult;
+
+  /// Último plano semântico V2 (UI de limites / oclusão — Sprint 12).
+  WarpPlan? lastBodyWarpPlan;
+
+  final MediaPipeBodyJointMapper _poseJointMapper =
+      const MediaPipeBodyJointMapper();
 
   BeautyEngineController({
     required this.faceDetector,
@@ -233,7 +241,7 @@ class BeautyEngineController {
     VisionCapabilities? capabilities,
     BodyFrameAssets? assets,
   }) {
-    final plan = bodyFilterPipeline.createReshapePlan(
+    var plan = bodyFilterPipeline.createReshapePlan(
       imageSize: imageSize,
       parameters: parameters,
       interactive: interactive,
@@ -241,10 +249,25 @@ class BeautyEngineController {
           assets?.capabilities ??
           bodyVisionCapabilities,
     );
-    if (assets == null) {
-      return plan;
+    if (assets != null) {
+      plan = occlusionEngine.applyToPlan(plan: plan, assets: assets);
     }
-    return occlusionEngine.applyToPlan(plan: plan, assets: assets);
+    lastBodyWarpPlan = plan;
+    return plan;
+  }
+
+  /// Assets a partir da pose (rápido) ou do coordinator (matte/oclusão).
+  BodyFrameAssets? resolveBodyFrameAssets({
+    required PoseResult? pose,
+    ImageSource? source,
+  }) {
+    if (pose != null) {
+      final fromPose = _poseJointMapper.fromPoseResult(pose);
+      if (fromPose != null) {
+        return fromPose;
+      }
+    }
+    return null;
   }
 
   WarpField? composeBodyField({
@@ -263,10 +286,20 @@ class BeautyEngineController {
       return null;
     }
 
-    final config = multiPassConfig ?? bodyMultiPassConfig;
-    if ((config.bodyMeshWarp || config.localMls) && assets != null) {
+    var config = multiPassConfig ?? bodyMultiPassConfig;
+    final frameAssets =
+        assets ?? resolveBodyFrameAssets(pose: pose);
+    if (LegacyBodyParameterAdapter.requiresV2Mesh(parameters) &&
+        !config.bodyMeshWarp) {
+      config = config.copyWith(
+        bodyMeshWarp: true,
+        antiFolding: true,
+      );
+    }
+
+    if ((config.bodyMeshWarp || config.localMls) && frameAssets != null) {
       final v2 = composeBodyMultiPassField(
-        assets: assets,
+        assets: frameAssets,
         imageSize: imageSize,
         parameters: parameters,
         interactive: interactive,
@@ -275,6 +308,14 @@ class BeautyEngineController {
       if (v2 != null && !v2.isIdentity) {
         return v2;
       }
+    } else if (frameAssets != null) {
+      // Mantém plano atualizado para hints da UI mesmo no path legado.
+      createBodyReshapePlan(
+        imageSize: imageSize,
+        parameters: parameters,
+        interactive: interactive,
+        assets: frameAssets,
+      );
     }
 
     final bodyMesh = meshEngine.buildBodyMesh(pose, imageSize);
@@ -444,12 +485,16 @@ class BeautyEngineController {
       rgbaSource.height.toDouble(),
     );
 
+    final bodyAssets = bodyFilterPipeline.hasActiveBodyWarp(params)
+        ? resolveBodyFrameAssets(pose: pose)
+        : null;
     final bodyField = composeBodyField(
       pose: pose,
       imageSize: imageSize,
       parameters: params,
       interactive: interactivePreview,
       personMask: personMask,
+      assets: bodyAssets,
     );
     if (bodyField != null && !bodyField.isIdentity) {
       output = await gpuRenderer.runPipeline(

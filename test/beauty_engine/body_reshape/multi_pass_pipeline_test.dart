@@ -37,7 +37,7 @@ void main() {
         1,
       );
       expect(const BodyMultiPassConfig(antiFolding: true).enabledPassCount, 1);
-      expect(BodyMultiPassConfig.previewV2.enabledPassCount, 4);
+      expect(BodyMultiPassConfig.previewV2.enabledPassCount, 7);
       expect(BodyMultiPassConfig.legacy.isV2Enabled, isFalse);
     });
   });

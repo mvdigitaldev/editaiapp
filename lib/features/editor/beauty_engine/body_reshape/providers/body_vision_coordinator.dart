@@ -3,6 +3,7 @@ import '../models/body_frame_assets.dart';
 import 'background_analysis_provider.dart';
 import 'body_mesh_provider.dart';
 import 'body_part_segmentation_provider.dart';
+import 'instance_selection_policy.dart';
 import 'occlusion_provider.dart';
 import 'person_matte_provider.dart';
 import 'vision_capabilities.dart';
@@ -15,6 +16,7 @@ class BodyVisionCoordinator {
     required this.bodyPartSegmentationProvider,
     required this.occlusionProvider,
     required this.backgroundAnalysisProvider,
+    this.instanceSelectionPolicy = const InstanceSelectionPolicy(),
   });
 
   final BodyMeshProvider bodyMeshProvider;
@@ -22,6 +24,7 @@ class BodyVisionCoordinator {
   final BodyPartSegmentationProvider bodyPartSegmentationProvider;
   final OcclusionProvider occlusionProvider;
   final BackgroundAnalysisProvider backgroundAnalysisProvider;
+  final InstanceSelectionPolicy instanceSelectionPolicy;
 
   VisionCapabilities get capabilities => bodyMeshProvider.capabilities
       .merge(personMatteProvider.capabilities)
@@ -49,4 +52,11 @@ class BodyVisionCoordinator {
       backgroundAnalysis: background,
     );
   }
+
+  /// Escolhe explicitamente a pessoa alvo para providers multi-pessoa.
+  ///
+  /// O provider MediaPipe atual entrega uma pessoa por vez; esse método mantém
+  /// a política fora do Warp Engine quando um provider futuro entregar várias.
+  BodyFrameAssets? selectTarget(Iterable<BodyFrameAssets> candidates) =>
+      instanceSelectionPolicy.select(candidates);
 }

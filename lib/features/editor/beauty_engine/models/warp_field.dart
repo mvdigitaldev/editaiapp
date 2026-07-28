@@ -70,6 +70,20 @@ class WarpField {
     return true;
   }
 
+  /// Magnitude máxima do deslocamento (px) — usada no halo do export tiled.
+  double get maxDisplacementMagnitude {
+    var maximum = 0.0;
+    for (var i = 0; i < displacement.length; i += 2) {
+      final dx = displacement[i];
+      final dy = displacement[i + 1];
+      final mag = math.sqrt(dx * dx + dy * dy);
+      if (mag > maximum) {
+        maximum = mag;
+      }
+    }
+    return maximum;
+  }
+
   WarpField reset() => WarpField.identity(imageSize: imageSize, region: region);
 
   WarpField copyWith({

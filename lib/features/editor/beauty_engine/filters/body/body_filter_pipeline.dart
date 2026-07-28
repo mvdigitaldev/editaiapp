@@ -127,6 +127,16 @@ class BodyFilterPipeline {
       (filter) => _readParameter(parameters, filter.parameterKey) > 0,
     );
 
+    // Controles só V2: exige pose mínima (ombros/quadril) via confidence torso.
+    if (activeFilters.isEmpty &&
+        LegacyBodyParameterAdapter.requiresV2Mesh(parameters)) {
+      final confidence = BodyWarpUtils.poseConfidence(
+        pose,
+        const {11, 12, 23, 24},
+      );
+      return confidence >= BodyWarpUtils.visibilityThreshold;
+    }
+
     for (final filter in activeFilters) {
       if (_legKeys.contains(filter.parameterKey) && pose.isPartial) {
         return false;

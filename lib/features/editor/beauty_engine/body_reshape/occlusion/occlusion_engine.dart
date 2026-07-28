@@ -9,6 +9,7 @@ import '../models/body_part_segmentation.dart';
 import '../models/warp_plan.dart';
 import 'occlusion_map.dart';
 import 'occlusion_policy.dart';
+import 'part_occlusion_map.dart';
 
 /// Resultado da avaliação de oclusão sobre um [WarpPlan].
 class OcclusionEvaluation {
@@ -24,8 +25,7 @@ class OcclusionEvaluation {
     this.usedInsufficientEvidenceFallback = false,
   });
 
-  bool get hasReductions =>
-      decisions.any((d) => d.wasReduced || d.wasRejected);
+  bool get hasReductions => decisions.any((d) => d.wasReduced || d.wasRejected);
 }
 
 /// Aplica [OcclusionPolicy] ao plano e protege mapas/campos.
@@ -36,19 +36,32 @@ class OcclusionEngine {
 
   final OcclusionPolicy policy;
 
+  /// Resolve uma evidência de oclusão aplicável ao campo de warp.
+  ///
+  /// Um mapa nativo explícito tem prioridade; sem ele, a segmentação por
+  /// partes produz proteção mensurável para braços, mãos e cabelo.
+  OcclusionField? fieldForAssets(BodyFrameAssets assets) {
+    if (assets.occlusionMap != null && !assets.occlusionMap!.isEmpty) {
+      return OcclusionField.fromMap(assets.occlusionMap!);
+    }
+    final parts = assets.partSegmentation;
+    if (parts == null || parts.isEmpty) {
+      return null;
+    }
+    final fromParts = PartOcclusionMap.fromSegmentation(parts);
+    return fromParts.isEmpty ? null : fromParts;
+  }
+
   /// Avalia oclusão com evidência dos assets (mapa e/ou partes).
   OcclusionEvaluation evaluate({
     required WarpPlan plan,
     required BodyFrameAssets assets,
     OcclusionField? occlusionField,
   }) {
-    final field = occlusionField ??
-        (assets.occlusionMap == null
-            ? null
-            : OcclusionField.fromMap(assets.occlusionMap!));
+    final field = occlusionField ?? fieldForAssets(assets);
 
-    final hasParts = assets.partSegmentation != null &&
-        !assets.partSegmentation!.isEmpty;
+    final hasParts =
+        assets.partSegmentation != null && !assets.partSegmentation!.isEmpty;
     final hasOcclusion = field != null && !field.isEmpty;
     final insufficient = !hasParts && !hasOcclusion;
 
@@ -194,12 +207,10 @@ class OcclusionEngine {
     for (var gy = 0; gy < gridH; gy++) {
       for (var gx = 0; gx < gridW; gx++) {
         final idx = gy * gridW + gx;
-        final nx = (gx / (gridW <= 1 ? 1 : gridW - 1)) *
-            field.imageSize.width *
-            invW;
-        final ny = (gy / (gridH <= 1 ? 1 : gridH - 1)) *
-            field.imageSize.height *
-            invH;
+        final nx =
+            (gx / (gridW <= 1 ? 1 : gridW - 1)) * field.imageSize.width * invW;
+        final ny =
+            (gy / (gridH <= 1 ? 1 : gridH - 1)) * field.imageSize.height * invH;
         final soft = 1.0 - occlusion.sampleNormalized(nx, ny);
         outDisp[idx * 2] = field.displacement[idx * 2] * soft;
         outDisp[idx * 2 + 1] = field.displacement[idx * 2 + 1] * soft;
@@ -296,8 +307,7 @@ class OcclusionEngine {
 
     if (overlap >= policy.reduceOverlap) {
       final scale = (policy.reduceScale *
-              (1.0 -
-                  (overlap - policy.reduceOverlap).clamp(0.0, 1.0) * 0.5))
+              (1.0 - (overlap - policy.reduceOverlap).clamp(0.0, 1.0) * 0.5))
           .clamp(0.1, policy.reduceScale);
       return OcclusionDecision(
         parameter: adjustment.sourceParameter,
@@ -449,7 +459,9 @@ class OcclusionEngine {
     return switch (label) {
       BodyPartLabel.leftHand => OccluderKind.leftHand,
       BodyPartLabel.rightHand => OccluderKind.rightHand,
-      BodyPartLabel.leftArm || BodyPartLabel.leftForearm => OccluderKind.leftArm,
+      BodyPartLabel.leftArm ||
+      BodyPartLabel.leftForearm =>
+        OccluderKind.leftArm,
       BodyPartLabel.rightArm ||
       BodyPartLabel.rightForearm =>
         OccluderKind.rightArm,

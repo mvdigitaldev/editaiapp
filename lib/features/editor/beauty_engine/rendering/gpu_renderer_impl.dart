@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 
+import '../body_reshape/rendering/export_warp.dart';
 import '../body_reshape/rendering/fragment_program_warp_backend.dart';
+import '../body_reshape/rendering/method_channel_native_export_backend.dart';
+import '../body_reshape/rendering/native_export_backend.dart';
 import 'export_encoder.dart';
 import 'fragment_program_backend.dart';
 import 'gpu_texture_store.dart';
@@ -12,44 +15,66 @@ import 'texture_pool.dart';
 
 /// Pipeline multi-pass com texture pool e export encoder.
 ///
-/// Preview de warp: [FragmentProgramWarpBackend] (Impeller). Fallback CPU
-/// apenas quando o backend não está disponível.
+/// Preview de warp: [FragmentProgramWarpBackend] (Impeller). Export: [ExportWarp]
+/// (native Metal/GLES → FragmentProgram). Fallback CPU apenas quando explícito.
 class GpuRendererImpl implements GPURenderer {
-  GpuRendererImpl({
-    TexturePool? pool,
-    ShaderProgramCache? shaderCache,
-    ExportEncoder? exportEncoder,
-    FragmentProgramWarpBackend? warpBackend,
-    bool forceCpuWarp = false,
-  }) : this._(
-          pool: pool ?? TexturePool(),
-          exportEncoder: exportEncoder ?? const ExportEncoder(),
-          forceCpuWarp: forceCpuWarp,
-          warpBackend: warpBackend ??
-              FragmentProgramWarpBackend(forceCpuFallback: forceCpuWarp),
-          shaderCache: shaderCache,
-        );
-
   GpuRendererImpl._({
     required TexturePool pool,
-    required ExportEncoder exportEncoder,
     required bool forceCpuWarp,
     required FragmentProgramWarpBackend warpBackend,
+    required NativeExportBackend nativeExportBackend,
+    required ExportWarp resolvedExportWarp,
+    required ExportEncoder resolvedExportEncoder,
     ShaderProgramCache? shaderCache,
   })  : _pool = pool,
-        _exportEncoder = exportEncoder,
         _forceCpuWarp = forceCpuWarp,
         _warpBackend = warpBackend,
+        _nativeExportBackend = nativeExportBackend,
+        _exportWarp = resolvedExportWarp,
+        _exportEncoder = resolvedExportEncoder,
         _shaderCache = shaderCache ??
             ShaderProgramCache(
               warpBackend: warpBackend,
               preferGpuWarp: !forceCpuWarp,
             );
 
+  factory GpuRendererImpl({
+    TexturePool? pool,
+    ShaderProgramCache? shaderCache,
+    ExportEncoder? exportEncoder,
+    FragmentProgramWarpBackend? warpBackend,
+    NativeExportBackend? nativeExportBackend,
+    ExportWarp? exportWarp,
+    bool forceCpuWarp = false,
+  }) {
+    final resolvedPool = pool ?? TexturePool();
+    final resolvedWarp = warpBackend ??
+        FragmentProgramWarpBackend(forceCpuFallback: forceCpuWarp);
+    final resolvedNative =
+        nativeExportBackend ?? MethodChannelNativeExportBackend();
+    final resolvedExport = exportWarp ??
+        ExportWarp(
+          fragmentBackend: resolvedWarp,
+          nativeBackend: resolvedNative,
+        );
+    return GpuRendererImpl._(
+      pool: resolvedPool,
+      forceCpuWarp: forceCpuWarp,
+      warpBackend: resolvedWarp,
+      nativeExportBackend: resolvedNative,
+      resolvedExportWarp: resolvedExport,
+      resolvedExportEncoder:
+          exportEncoder ?? ExportEncoder(exportWarp: resolvedExport),
+      shaderCache: shaderCache,
+    );
+  }
+
   final TexturePool _pool;
   final ShaderProgramCache _shaderCache;
   final ExportEncoder _exportEncoder;
   final FragmentProgramWarpBackend _warpBackend;
+  final NativeExportBackend _nativeExportBackend;
+  final ExportWarp _exportWarp;
   final bool _forceCpuWarp;
   bool _initialized = false;
 
@@ -58,6 +83,10 @@ class GpuRendererImpl implements GPURenderer {
   GpuTextureStore get textureStore => _pool.store;
 
   FragmentProgramBackend get fragmentBackend => _warpBackend;
+
+  ExportWarp get exportWarp => _exportWarp;
+
+  NativeExportBackend get nativeExportBackend => _nativeExportBackend;
 
   Future<void> initialize() async {
     if (_initialized) {
@@ -131,7 +160,7 @@ class GpuRendererImpl implements GPURenderer {
     if (entry == null) {
       return Uint8List(0);
     }
-    return _exportEncoder.encodeJpeg(entry, quality: quality);
+    return _exportEncoder.encodeJpegAsync(entry, quality: quality);
   }
 
   @override
@@ -142,6 +171,7 @@ class GpuRendererImpl implements GPURenderer {
   @override
   void dispose() {
     _pool.releaseAll();
+    _exportWarp.dispose();
     if (!identical(_warpBackend, FragmentProgramWarpBackend.shared)) {
       _warpBackend.dispose();
     }

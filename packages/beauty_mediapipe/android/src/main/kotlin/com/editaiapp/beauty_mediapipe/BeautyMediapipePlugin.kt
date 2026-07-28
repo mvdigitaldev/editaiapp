@@ -11,6 +11,7 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
     private var faceBridge: FaceLandmarkerBridge? = null
     private var poseBridge: PoseLandmarkerBridge? = null
     private var segmenterBridge: ImageSegmenterBridge? = null
+    private var exportBackend: BodyReshapeVulkanBackend? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(binding.binaryMessenger, CHANNEL_NAME)
@@ -18,6 +19,7 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
         faceBridge = FaceLandmarkerBridge(binding.applicationContext)
         poseBridge = PoseLandmarkerBridge(binding.applicationContext)
         segmenterBridge = ImageSegmenterBridge(binding.applicationContext)
+        exportBackend = BodyReshapeVulkanBackend()
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -28,6 +30,8 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
         poseBridge = null
         segmenterBridge?.dispose()
         segmenterBridge = null
+        exportBackend?.dispose()
+        exportBackend = null
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
@@ -126,6 +130,57 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
                 segmenterBridge?.dispose()
                 result.success(null)
             }
+
+            "probeExportCapabilities" -> {
+                result.success(
+                    exportBackend?.capabilities() ?: mapOf(
+                        "metal" to false,
+                        "vulkan" to false,
+                        "openGlEs" to false,
+                        "nativeJpegEncode" to false,
+                    ),
+                )
+            }
+
+            "warpExport" -> {
+                val backend = exportBackend
+                if (backend == null || !backend.isAvailable()) {
+                    result.error("unavailable", "GLES export unavailable", null)
+                    return
+                }
+                @Suppress("UNCHECKED_CAST")
+                val args = call.arguments as? Map<String, Any?>
+                if (args == null) {
+                    result.error("invalid_args", "args required", null)
+                    return
+                }
+                try {
+                    result.success(backend.warpExport(args))
+                } catch (e: Throwable) {
+                    result.error("warp_failed", e.message ?: e.toString(), null)
+                }
+            }
+
+            "encodeJpeg" -> {
+                val backend = exportBackend
+                if (backend == null) {
+                    result.error("unavailable", "JPEG encode unavailable", null)
+                    return
+                }
+                @Suppress("UNCHECKED_CAST")
+                val args = call.arguments as? Map<String, Any?>
+                if (args == null) {
+                    result.error("invalid_args", "args required", null)
+                    return
+                }
+                try {
+                    result.success(backend.encodeJpeg(args))
+                } catch (e: Throwable) {
+                    result.error("encode_failed", e.message ?: e.toString(), null)
+                }
+            }
+
+            "releaseExportResource" -> result.success(null)
 
             else -> result.notImplemented()
         }

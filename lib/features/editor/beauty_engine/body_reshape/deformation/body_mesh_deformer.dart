@@ -6,9 +6,15 @@ import '../mesh/mesh_optimizer.dart';
 import '../models/body_adjustment.dart';
 import '../models/body_frame_assets.dart';
 import '../models/warp_plan.dart';
+import 'belly_strategy.dart';
 import 'body_region_deformation_strategy.dart';
+import 'butt_strategy.dart';
+import 'chest_strategy.dart';
+import 'height_strategy.dart';
 import 'hip_strategy.dart';
 import 'limb_slim_strategy.dart';
+import 'neck_strategy.dart';
+import 'shoulder_strategy.dart';
 import 'waist_strategy.dart';
 
 /// Orquestra estratégias regionais + MeshOptimizer a partir de um [WarpPlan].
@@ -25,8 +31,14 @@ class BodyMeshDeformer {
 
   static const defaultStrategies = <BodyRegionDeformationStrategy>[
     WaistStrategy(),
+    BellyStrategy(),
     HipStrategy(),
+    ButtStrategy(),
+    ChestStrategy(),
+    ShoulderStrategy(),
+    HeightStrategy(),
     LimbSlimStrategy(),
+    NeckStrategy(),
   ];
 
   /// Aplica o plano V2 e devolve malha otimizada + campo de deslocamento.

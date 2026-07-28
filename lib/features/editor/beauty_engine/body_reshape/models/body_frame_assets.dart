@@ -13,6 +13,9 @@ class BodyFrameAssets {
   final Rect boundingBox;
   final bool isPartial;
   final String providerId;
+
+  /// Identificador estável da pessoa no frame, se o provider suportar instâncias.
+  final String? instanceId;
   final double confidence;
   final VisionCapabilities capabilities;
   final PersonMatte? personMatte;
@@ -25,6 +28,7 @@ class BodyFrameAssets {
     required this.boundingBox,
     required this.providerId,
     required this.capabilities,
+    this.instanceId,
     this.isPartial = false,
     this.confidence = 1,
     this.personMatte,
@@ -62,6 +66,7 @@ class BodyFrameAssets {
     Rect? boundingBox,
     bool? isPartial,
     String? providerId,
+    String? instanceId,
     double? confidence,
     VisionCapabilities? capabilities,
     PersonMatte? personMatte,
@@ -74,6 +79,7 @@ class BodyFrameAssets {
       boundingBox: boundingBox ?? this.boundingBox,
       isPartial: isPartial ?? this.isPartial,
       providerId: providerId ?? this.providerId,
+      instanceId: instanceId ?? this.instanceId,
       confidence: confidence ?? this.confidence,
       capabilities: capabilities ?? this.capabilities,
       personMatte: personMatte ?? this.personMatte,

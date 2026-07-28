@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/legacy_body_parameter_adapter.dart';
 import 'package:editaiapp/features/editor/beauty_engine/controllers/beauty_engine_controller.dart';
 import 'package:editaiapp/features/editor/beauty_engine/filters/body/body_filter_pipeline.dart';
 import 'package:editaiapp/features/editor/beauty_engine/filters/face/face_filter_pipeline.dart';
@@ -80,18 +81,33 @@ void main() {
       pose = _fakeFullBodyPose();
     });
 
-    for (final key in BodyFilterPipeline.bodyWarpParameterKeys) {
-      test('$key at 0.5 composes without error', () {
+    for (final filter in BodyFilterPipeline.allFilters) {
+      test('${filter.parameterKey} at 0.5 composes without error', () {
         final mesh = const BodyMeshBuilder().build(pose, imageSize);
         final field = pipeline.compose(
           mesh: mesh,
           pose: pose,
           imageSize: imageSize,
-          parameters: {key: 0.5},
+          parameters: {filter.parameterKey: 0.5},
         );
         expect(field.controlPoints, isNotEmpty);
       });
     }
+
+    test('V2-only keys expose reshape plan without MLS control points', () {
+      for (final key in LegacyBodyParameterAdapter.v2MeshParameterKeys) {
+        final plan = pipeline.createReshapePlan(
+          imageSize: imageSize,
+          parameters: {key: 0.5},
+        );
+        expect(plan.isIdentity, isFalse, reason: key);
+        expect(
+          pipeline.hasActiveBodyWarp({key: 0.5}),
+          isTrue,
+          reason: key,
+        );
+      }
+    });
   });
 
   group('Regression — skin filters', () {

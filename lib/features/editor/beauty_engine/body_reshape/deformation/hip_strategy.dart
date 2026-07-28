@@ -18,7 +18,6 @@ class HipStrategy extends BodyRegionDeformationStrategy
   @override
   Set<BodyAdjustmentType> get supportedTypes => {
         BodyAdjustmentType.hipExpand,
-        BodyAdjustmentType.buttExpand,
       };
 
   @override
@@ -48,14 +47,13 @@ class HipStrategy extends BodyRegionDeformationStrategy
 
     final shiftPx = context.imageSize.width * maxShiftFraction * intensity;
     final bandHalf = context.imageSize.height * 0.12;
-    final isButt = context.adjustment.type == BodyAdjustmentType.buttExpand;
 
     final mesh = context.mesh;
     for (var i = 0; i < mesh.vertexCount; i++) {
       final region = mesh.regionAtVertex(i);
       final regionWeight = switch (region) {
         BodyRegion.hip => 1.0,
-        BodyRegion.butt => isButt ? 1.0 : 0.55,
+        BodyRegion.butt => 0.55,
         BodyRegion.waist => 0.35,
         BodyRegion.leftThigh || BodyRegion.rightThigh => 0.25,
         _ => context.regionMatches(region) ? 0.4 : 0.0,
@@ -72,11 +70,8 @@ class HipStrategy extends BodyRegionDeformationStrategy
       final band = 1.0 - (verticalDist / (bandHalf * 1.6)).clamp(0.0, 1.0);
       final bandSmooth = band * band * (3 - 2 * band);
 
-      // Reforço ligeiramente abaixo do marco do quadril para butt.
       final t = ((point.dy - shoulderY) / span).clamp(0.0, 1.2);
-      final profile = isButt
-          ? ((t - 0.72).abs() < 0.22 ? 1.0 : 0.45)
-          : ((t - 0.62).abs() < 0.18 ? 1.0 : 0.5);
+      final profile = ((t - 0.62).abs() < 0.18) ? 1.0 : 0.5;
 
       final outward = horizontalOutwardFromMidline(
         point: point,

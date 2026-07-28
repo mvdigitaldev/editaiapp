@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart' as image_picker;
 
 import '../../../../core/theme/app_colors.dart';
+import '../body_reshape/models/warp_plan.dart';
 import '../di/beauty_engine_providers.dart';
 import '../diagnostics/beauty_engine_error_reporter.dart';
 import '../filters/body/body_filter_pipeline.dart';
@@ -42,6 +43,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   bool _showOriginal = false;
   bool _linkEyes = true;
   int? _lastApplyMs;
+  WarpPlan? _lastBodyWarpPlan;
   bool _prewarmed = false;
   Timer? _debounceTimer;
   bool _previewQueued = false;
@@ -201,6 +203,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         _previewBytes = jpeg;
         _lastApplyMs =
             profile.totalMs > 0 ? profile.totalMs : stopwatch.elapsedMilliseconds;
+        _lastBodyWarpPlan = controller.lastBodyWarpPlan;
         _showOriginal = false;
       });
     } catch (error, stackTrace) {
@@ -342,6 +345,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
             params: _params,
             enabled: _source != null && !_processing,
             linkEyes: _linkEyes,
+            bodyWarpPlan: _lastBodyWarpPlan,
             onParamChanged: _onParamChanged,
             onLinkEyesChanged: _onLinkEyesChanged,
           ),

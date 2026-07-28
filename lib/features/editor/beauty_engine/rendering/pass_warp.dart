@@ -11,7 +11,7 @@ import 'texture_handle.dart';
 /// Pass 1: warp remap (MLS / Body Reshape field).
 ///
 /// Preferência: [FragmentProgramWarpBackend] (GPU). Fallback: [WarpCpuRemap]
-/// apenas quando GPU indisponível, forçado (testes) ou falha no draw.
+/// com anti-ghosting + rigidity (Sprint 11).
 class PassWarp implements RenderPass {
   const PassWarp({
     WarpCpuRemap? remapper,
@@ -45,6 +45,7 @@ class PassWarp implements RenderPass {
         field.rigidityMap;
     final forceCpu = context.uniforms['forceCpu'] == true || !_preferGpu;
     final fastMode = context.uniforms['fastMode'] == true;
+    final antiGhosting = context.uniforms['antiGhosting'] != false;
 
     if (!forceCpu) {
       final backend = _warpBackend ?? FragmentProgramWarpBackend.shared;
@@ -74,7 +75,11 @@ class PassWarp implements RenderPass {
       }
     }
 
-    final remapper = _remapper ?? WarpCpuRemap(fastMode: fastMode);
+    final remapper = (_remapper ?? WarpCpuRemap(fastMode: fastMode)).copyWith(
+      antiGhosting: antiGhosting,
+      rigidityMap: protection,
+      fastMode: fastMode,
+    );
     final warped = remapper.apply(
       rgba: source.rgba,
       width: source.width,

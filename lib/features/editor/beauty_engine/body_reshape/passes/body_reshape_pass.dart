@@ -6,6 +6,7 @@ import '../../models/warp_field.dart';
 import '../../warp/models/control_point.dart';
 import '../maps/influence_map.dart';
 import '../maps/protection_maps.dart';
+import '../maps/texture_confidence_map.dart';
 import '../mesh/adaptive_body_mesh.dart';
 import '../mesh/mesh_optimizer.dart';
 import '../models/body_frame_assets.dart';
@@ -27,6 +28,10 @@ class BodyPassContext {
     this.plan,
     this.influenceMap,
     this.protectionMaps,
+    this.textureConfidence,
+    this.sourceRgba,
+    this.sourceWidth = 0,
+    this.sourceHeight = 0,
     this.region = MeshRegion.torso,
   });
 
@@ -42,6 +47,10 @@ class BodyPassContext {
   WarpPlan? plan;
   InfluenceMap? influenceMap;
   ProtectionMaps? protectionMaps;
+  TextureConfidenceMap? textureConfidence;
+  Uint8List? sourceRgba;
+  int sourceWidth;
+  int sourceHeight;
   MeshRegion region;
 
   /// Buffers intermediários nomeados (telemetria / debug).
@@ -55,6 +64,7 @@ class BodyPassContext {
     return current;
   }
 }
+
 
 /// Contrato de um passe independente e testável.
 abstract class BodyReshapePass {

@@ -38,10 +38,50 @@ void main() {
       final decoded = WarpTexture.decodeDisplacement(
         disp.rgba[0],
         disp.rgba[1],
-        field.imageSize,
+        disp.displacementScalePx,
       );
       expect(decoded.dx, closeTo(10, 1.5));
       expect(decoded.dy, closeTo(-4, 1.5));
+    });
+
+    test('keeps subpixel displacement precision at preview and 8K sizes', () {
+      for (final size in const [Size(800, 640), Size(7680, 4320)]) {
+        final field = WarpField(
+          gridWidth: 2,
+          gridHeight: 2,
+          imageSize: size,
+          region: MeshRegion.faceOval,
+          displacement: Float32List.fromList([
+            0.25,
+            -0.4,
+            3.75,
+            7.5,
+            -10,
+            0.1,
+            1.2,
+            -6.4,
+          ]),
+          mask: Float32List(4)..fillRange(0, 4, 1),
+        );
+        final texture = WarpTexture.fromDisplacement(field);
+        for (var i = 0; i < 4; i++) {
+          final decoded = WarpTexture.decodeDisplacement(
+            texture.rgba[i * 4],
+            texture.rgba[i * 4 + 1],
+            texture.displacementScalePx,
+          );
+          expect(
+            decoded.dx,
+            closeTo(field.displacement[i * 2], 0.1),
+            reason: 'size=$size, x=$i',
+          );
+          expect(
+            decoded.dy,
+            closeTo(field.displacement[i * 2 + 1], 0.1),
+            reason: 'size=$size, y=$i',
+          );
+        }
+      }
     });
 
     test('constant influence defaults to full weight', () {

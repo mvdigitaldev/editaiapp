@@ -31,8 +31,31 @@ void main() {
       expect(decoded.tune.contrast, 0.2);
       expect(decoded.face.faceSlim, 0.15);
       expect(decoded.body.waistSlim, 0.05);
+      expect(decoded.body.chestExpand, 0);
+      expect(decoded.body.bellyReduce, 0);
       expect(decoded.skin.smooth, 0.3);
       expect(decoded.skin.whitening, 0.1);
+    });
+
+    test('legacy body JSON without Sprint 12 fields remains valid', () {
+      final decoded = BeautyPreset.fromJson({
+        'id': 'legacy',
+        'name': 'Legacy',
+        'version': 1,
+        'body': {'waistSlim': 0.4, 'hip': 0.2},
+        'face': <String, dynamic>{},
+        'skin': <String, dynamic>{},
+        'tune': <String, dynamic>{},
+      });
+
+      expect(decoded.version, 1);
+      expect(decoded.body.waistSlim, 0.4);
+      expect(decoded.body.hip, 0.2);
+      expect(decoded.body.chestExpand, 0);
+      expect(decoded.body.height, 0);
+      expect(decoded.body.armUpperSlim, 0);
+      expect(decoded.toParameterMap()['chest_expand'], 0);
+      expect(decoded.toParameterMap()['waist_slim'], 0.4);
     });
 
     test('toParameterMap flattens nested values', () {

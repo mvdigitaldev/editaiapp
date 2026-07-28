@@ -5,8 +5,8 @@ import 'warp_plan.dart';
 
 /// Traduz parâmetros de presets/UI para o domínio semântico do motor V2.
 ///
-/// Esse adaptador não executa deformação. O pipeline legado continua sendo a
-/// implementação ativa até que os módulos de malha e renderização V2 existam.
+/// Cada spec declara região, limite, direção, peso implícito e política de
+/// oclusão — contrato exigido pela Sprint 12.
 class LegacyBodyParameterAdapter {
   const LegacyBodyParameterAdapter();
 
@@ -19,6 +19,15 @@ class LegacyBodyParameterAdapter {
     'arm_slim',
     'neck_slim',
     'shoulder_width',
+    'chest_expand',
+    'belly_reduce',
+    'butt_expand',
+    'height',
+    'shoulder_reduce',
+    'arm_upper_slim',
+    'arm_forearm_slim',
+    'leg_thigh_slim',
+    'leg_calf_slim',
   ];
 
   static const _specifications = <_AdjustmentSpec>[
@@ -102,7 +111,122 @@ class LegacyBodyParameterAdapter {
       maxIntensity: 0.75,
       influence: 0.65,
     ),
+    _AdjustmentSpec(
+      type: BodyAdjustmentType.chestExpand,
+      parameter: 'chest_expand',
+      regions: {BodyRegion.chest},
+      direction: BodyAdjustmentDirection.outward,
+      maxIntensity: 0.75,
+      influence: 0.65,
+    ),
+    _AdjustmentSpec(
+      type: BodyAdjustmentType.bellyReduce,
+      parameter: 'belly_reduce',
+      regions: {BodyRegion.waist, BodyRegion.torso},
+      direction: BodyAdjustmentDirection.inward,
+      maxIntensity: 0.8,
+      influence: 0.7,
+    ),
+    _AdjustmentSpec(
+      type: BodyAdjustmentType.buttExpand,
+      parameter: 'butt_expand',
+      regions: {BodyRegion.butt},
+      direction: BodyAdjustmentDirection.outward,
+      maxIntensity: 0.75,
+      influence: 0.65,
+    ),
+    _AdjustmentSpec(
+      type: BodyAdjustmentType.height,
+      parameter: 'height',
+      regions: {
+        BodyRegion.torso,
+        BodyRegion.chest,
+        BodyRegion.waist,
+        BodyRegion.shoulders,
+        BodyRegion.neck,
+      },
+      direction: BodyAdjustmentDirection.verticalStretch,
+      maxIntensity: 0.7,
+      influence: 0.8,
+      occlusionPolicy: BodyOcclusionPolicy.rejectAdjustment,
+    ),
+    _AdjustmentSpec(
+      type: BodyAdjustmentType.shoulderReduce,
+      parameter: 'shoulder_reduce',
+      regions: {BodyRegion.shoulders},
+      direction: BodyAdjustmentDirection.horizontalContract,
+      maxIntensity: 0.7,
+      influence: 0.6,
+    ),
+    _AdjustmentSpec(
+      type: BodyAdjustmentType.armSlim,
+      parameter: 'arm_upper_slim',
+      regions: {BodyRegion.leftArm, BodyRegion.rightArm},
+      direction: BodyAdjustmentDirection.inward,
+      maxIntensity: 0.75,
+      influence: 0.55,
+    ),
+    _AdjustmentSpec(
+      type: BodyAdjustmentType.armSlim,
+      parameter: 'arm_forearm_slim',
+      regions: {BodyRegion.leftForearm, BodyRegion.rightForearm},
+      direction: BodyAdjustmentDirection.inward,
+      maxIntensity: 0.7,
+      influence: 0.5,
+    ),
+    _AdjustmentSpec(
+      type: BodyAdjustmentType.legSlim,
+      parameter: 'leg_thigh_slim',
+      regions: {BodyRegion.leftThigh, BodyRegion.rightThigh},
+      direction: BodyAdjustmentDirection.inward,
+      maxIntensity: 0.8,
+      influence: 0.65,
+    ),
+    _AdjustmentSpec(
+      type: BodyAdjustmentType.legSlim,
+      parameter: 'leg_calf_slim',
+      regions: {BodyRegion.leftCalf, BodyRegion.rightCalf},
+      direction: BodyAdjustmentDirection.inward,
+      maxIntensity: 0.75,
+      influence: 0.6,
+    ),
   ];
+
+  /// Specs públicas para UI/testes (região, limite, direção, oclusão).
+  static List<BodyControlSpec> get controlSpecs => [
+        for (final spec in _specifications) spec.toPublicSpec(),
+      ];
+
+  static BodyControlSpec? specFor(String parameter) {
+    for (final spec in _specifications) {
+      if (spec.parameter == parameter) {
+        return spec.toPublicSpec();
+      }
+    }
+    return null;
+  }
+
+  /// Keys sem filtro MLS legado — exigem deformação de malha V2.
+  static const v2MeshParameterKeys = <String>{
+    'chest_expand',
+    'belly_reduce',
+    'butt_expand',
+    'height',
+    'shoulder_reduce',
+    'arm_upper_slim',
+    'arm_forearm_slim',
+    'leg_thigh_slim',
+    'leg_calf_slim',
+  };
+
+  static bool requiresV2Mesh(Map<String, double> parameters) {
+    for (final key in v2MeshParameterKeys) {
+      if (readParameter(parameters, key) > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   WarpPlan buildPlan(BodyReshapeRequest request) {
     final adjustments = <BodyAdjustment>[];
@@ -153,6 +277,27 @@ class LegacyBodyParameterAdapter {
   }
 }
 
+/// Contrato público de um controle body (UI / migração).
+class BodyControlSpec {
+  final BodyAdjustmentType type;
+  final String parameter;
+  final Set<BodyRegion> regions;
+  final BodyAdjustmentDirection direction;
+  final double maxIntensity;
+  final double influence;
+  final BodyOcclusionPolicy occlusionPolicy;
+
+  const BodyControlSpec({
+    required this.type,
+    required this.parameter,
+    required this.regions,
+    required this.direction,
+    required this.maxIntensity,
+    required this.influence,
+    required this.occlusionPolicy,
+  });
+}
+
 class _AdjustmentSpec {
   final BodyAdjustmentType type;
   final String parameter;
@@ -171,6 +316,16 @@ class _AdjustmentSpec {
     required this.influence,
     this.occlusionPolicy = BodyOcclusionPolicy.preserveOccluder,
   });
+
+  BodyControlSpec toPublicSpec() => BodyControlSpec(
+        type: type,
+        parameter: parameter,
+        regions: regions,
+        direction: direction,
+        maxIntensity: maxIntensity,
+        influence: influence,
+        occlusionPolicy: occlusionPolicy,
+      );
 
   BodyAdjustment toAdjustment(double intensity) {
     return BodyAdjustment(

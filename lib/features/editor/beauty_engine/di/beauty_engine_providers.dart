@@ -11,6 +11,7 @@ import '../body_reshape/providers/background_analysis_provider.dart';
 import '../body_reshape/providers/body_mesh_provider.dart';
 import '../body_reshape/providers/body_part_segmentation_provider.dart';
 import '../body_reshape/providers/body_vision_coordinator.dart';
+import '../body_reshape/providers/instance_selection_policy.dart';
 import '../body_reshape/providers/mediapipe_body_mesh_provider.dart';
 import '../body_reshape/providers/mediapipe_person_matte_provider.dart';
 import '../body_reshape/providers/occlusion_provider.dart';
@@ -143,7 +144,12 @@ final personMatteProviderProvider = Provider<PersonMatteProvider>(
 
 final bodyPartSegmentationProviderProvider =
     Provider<BodyPartSegmentationProvider>(
+  // Nenhum modelo é fixado antes do benchmark de precisão/licença/latência.
   (ref) => const UnavailableBodyPartSegmentationProvider(),
+);
+
+final instanceSelectionPolicyProvider = Provider<InstanceSelectionPolicy>(
+  (ref) => const InstanceSelectionPolicy(),
 );
 
 final occlusionProviderProvider = Provider<OcclusionProvider>(
@@ -162,6 +168,7 @@ final bodyVisionCoordinatorProvider = Provider<BodyVisionCoordinator>(
         ref.watch(bodyPartSegmentationProviderProvider),
     occlusionProvider: ref.watch(occlusionProviderProvider),
     backgroundAnalysisProvider: ref.watch(backgroundAnalysisProviderProvider),
+    instanceSelectionPolicy: ref.watch(instanceSelectionPolicyProvider),
   ),
 );
 
