@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/widgets/typewriter_with_delete_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/credit_indicator.dart';
@@ -25,6 +26,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
     final recentEditsAsync = ref.watch(recentEditsProvider);
+    ref.watch(enablePlansProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -68,6 +70,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                         // Credits
                         GestureDetector(
                           onTap: () {
+                            final enabled =
+                                ref.read(enablePlansProvider).valueOrNull ==
+                                    true;
+                            if (!enabled) return;
                             Navigator.of(context).pushNamed('/credits-shop');
                           },
                           child: creditsUsageAsync.when(

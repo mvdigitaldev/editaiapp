@@ -22,8 +22,6 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
-	<key>CFBundleVersion</key>
-	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -37,12 +35,20 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>FlutterDeepLinkingEnabled</key>
 	<true/>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Este app precisa acessar sua câmera para tirar fotos e editá-las.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Este app precisa salvar fotos editadas na sua galeria.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Este app precisa acessar sua galeria de fotos para selecionar e editar imagens.</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>
@@ -86,12 +92,27 @@
 			<string>3qy4746246.skadnetwork</string>
 		</dict>
 	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>Este app precisa acessar sua câmera para tirar fotos e editá-las.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Este app precisa salvar fotos editadas na sua galeria.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Este app precisa acessar sua galeria de fotos para selecionar e editar imagens.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>FlutterSceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
