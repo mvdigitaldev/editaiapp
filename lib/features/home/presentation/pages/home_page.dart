@@ -154,7 +154,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         _HeroActionCard(
                           index: 1,
                           icon: Icons.edit,
-                          title: 'Editar imagem',
+                          title: 'Editar com Inteligência Artificial',
                           description:
                               'Ajuste cores, iluminação e detalhes com IA.',
                           onTap: () =>
