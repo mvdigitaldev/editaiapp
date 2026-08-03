@@ -1,5 +1,4 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../../core/widgets/typewriter_with_delete_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/enable_plans_provider.dart';
@@ -98,51 +97,33 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ],
                     ),
                   ),
-                  // Title Section
+                  // Logo
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Editai',
-                          style: AppTextStyles.displayMedium.copyWith(
-                            color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(
+                            'assets/branding/logo_mark.png',
+                            height: 40,
+                            fit: BoxFit.contain,
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              'Seu estúdio de ',
-                              style: AppTextStyles.bodyMedium.copyWith(
-                                color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                              ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'editaí',
+                            style: AppTextStyles.headingMedium.copyWith(
+                              color: isDark
+                                  ? AppColors.textLight
+                                  : AppColors.textPrimary,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.5,
+                              height: 1,
                             ),
-                            SizedBox(
-                              width: 220,
-                              child: TypewriterWithDeleteText(
-                                phrases: const [
-                                  'edição com IA',
-                                  'criação com IA',
-                                  'transformação com IA',
-                                  'produção com IA',
-                                  'inovação com IA',
-                                ],
-                                textStyle: AppTextStyles.bodyMedium.copyWith(
-                                  color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                                ),
-                                typingSpeed: const Duration(milliseconds: 100),
-                                deletingSpeed: const Duration(milliseconds: 80),
-                                pauseAfterTyping: const Duration(milliseconds: 1500),
-                                pauseAfterDeleting: const Duration(milliseconds: 500),
-                                cursor: '|',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -152,41 +133,55 @@ class _HomePageState extends ConsumerState<HomePage> {
                     child: Column(
                       children: [
                         _HeroActionCard(
-                          index: 1,
-                          icon: Icons.edit,
+                          index: 0,
+                          icon: Icons.landscape_rounded,
+                          accentColor: const Color(0xFF22C55E),
+                          backgroundColor: const Color(0xFFECFDF5),
+                          backgroundColorDark: const Color(0xFF14532D),
+                          previewAsset: 'assets/home/home_preview_edit.png',
                           title: 'Editar com Inteligência Artificial',
                           description:
-                              'Ajuste cores, iluminação e detalhes com IA.',
+                              'Faça montagens, troque o fundo, peça o que quiser…',
                           onTap: () =>
                               Navigator.of(context).pushNamed('/edit-image'),
                         ),
                         const SizedBox(height: 12),
                         _HeroActionCard(
-                          index: 0,
-                          icon: Icons.text_fields,
-                          title: 'Texto para imagem',
-                          description:
-                              'Gere imagens originais a partir de descrições.',
+                          index: 1,
+                          icon: Icons.text_fields_rounded,
+                          accentColor: const Color(0xFF8B5CF6),
+                          backgroundColor: const Color(0xFFF5F3FF),
+                          backgroundColorDark: const Color(0xFF2E1065),
+                          previewAsset: 'assets/home/home_preview_text.png',
+                          title: 'Imagem à partir de Texto',
+                          description: 'Peça o que quer criar do zero.',
                           onTap: () =>
                               Navigator.of(context).pushNamed('/text-to-image'),
                         ),
                         const SizedBox(height: 12),
                         _HeroActionCard(
                           index: 2,
-                          icon: Icons.collections,
-                          title: 'Unir fotos',
+                          icon: Icons.layers_rounded,
+                          accentColor: const Color(0xFFF59E0B),
+                          backgroundColor: const Color(0xFFFFFBEB),
+                          backgroundColorDark: const Color(0xFF78350F),
+                          previewAsset: 'assets/home/home_preview_compose.png',
+                          title: 'Unir várias Fotos',
                           description:
-                              'Combine vários elementos em uma cena única.',
+                              'Combine vários elementos em uma única foto.',
                           onTap: () => Navigator.of(context)
                               .pushNamed('/create-composition'),
                         ),
                         const SizedBox(height: 12),
                         _HeroActionCard(
                           index: 3,
-                          icon: Icons.wallpaper,
-                          title: 'Remover fundo',
-                          description:
-                              'Remova o fundo em segundos, com precisão.',
+                          icon: Icons.grid_on_rounded,
+                          accentColor: const Color(0xFFEC4899),
+                          backgroundColor: const Color(0xFFFDF2F8),
+                          backgroundColorDark: const Color(0xFF831843),
+                          previewAsset: 'assets/home/home_preview_bg.png',
+                          title: 'Remover Fundo',
+                          description: 'Remova com precisão.',
                           onTap: () => Navigator.of(context)
                               .pushNamed('/remove-background'),
                         ),
@@ -420,6 +415,10 @@ class _OptionCard extends StatelessWidget {
 class _HeroActionCard extends StatelessWidget {
   final int index;
   final IconData icon;
+  final Color accentColor;
+  final Color backgroundColor;
+  final Color backgroundColorDark;
+  final String previewAsset;
   final String title;
   final String description;
   final VoidCallback onTap;
@@ -427,6 +426,10 @@ class _HeroActionCard extends StatelessWidget {
   const _HeroActionCard({
     required this.index,
     required this.icon,
+    required this.accentColor,
+    required this.backgroundColor,
+    required this.backgroundColorDark,
+    required this.previewAsset,
     required this.title,
     required this.description,
     required this.onTap,
@@ -435,6 +438,9 @@ class _HeroActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark
+        ? Color.lerp(backgroundColorDark, Colors.black, 0.35)!
+        : backgroundColor;
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
@@ -453,47 +459,32 @@ class _HeroActionCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(22),
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.border,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.25 : 0.06),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+              color: cardBg,
+              borderRadius: BorderRadius.circular(22),
             ),
             child: Row(
               children: [
                 Container(
-                  width: 52,
-                  height: 52,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.primary.withOpacity(0.22),
-                        AppColors.primary.withOpacity(0.06),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    shape: BoxShape.circle,
+                    color: isDark
+                        ? Colors.white.withOpacity(0.12)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
                     icon,
-                    size: 26,
-                    color: AppColors.primary,
+                    size: 24,
+                    color: accentColor,
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -501,22 +492,26 @@ class _HeroActionCard extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: AppTextStyles.headingSmall.copyWith(
+                        style: AppTextStyles.labelLarge.copyWith(
                           color: isDark
                               ? AppColors.textLight
                               : AppColors.textPrimary,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          height: 1.25,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
                       Text(
                         description,
-                        style: AppTextStyles.bodySmall.copyWith(
+                        style: AppTextStyles.caption.copyWith(
                           color: isDark
                               ? AppColors.textTertiary
                               : AppColors.textSecondary,
+                          fontSize: 12,
+                          height: 1.35,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -524,12 +519,48 @@ class _HeroActionCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 16,
-                  color:
-                      isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 78,
+                  height: 78,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.asset(
+                            previewAsset,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: -4,
+                        bottom: -4,
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: accentColor,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: accentColor.withOpacity(0.35),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.arrow_forward_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
