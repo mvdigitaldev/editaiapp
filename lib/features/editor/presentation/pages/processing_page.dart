@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lottie/lottie.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -18,7 +17,7 @@ class ProcessingPage extends ConsumerStatefulWidget {
 }
 
 class _ProcessingPageState extends ConsumerState<ProcessingPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   bool _hasError = false;
   bool _hasTimeout = false;
   bool _hasFinished = false;
@@ -30,10 +29,19 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
   String? _editId;
   String? _taskId;
 
+  late final AnimationController _progressController;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _progressController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 70),
+    )..addListener(() {
+        if (mounted) setState(() {});
+      });
+    _progressController.animateTo(0.88, curve: Curves.easeOutCubic);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initProcessing();
     });
@@ -47,7 +55,8 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
   }
 
   Future<void> _initProcessing() async {
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     _taskId = args != null ? args['taskId'] as String? : null;
     _editId = args != null ? args['editId'] as String? : null;
     _beforePathFromArgs = args != null ? args['beforePath'] as String? : null;
@@ -100,6 +109,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
     if (!mounted || _hasFinished || _hasError) return;
 
     _cleanupChannel();
+    _progressController.stop();
 
     await _recheckStatus();
     if (!mounted || _hasFinished) return;
@@ -178,8 +188,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
   Future<void> _startEditProcessing(String editId) async {
     final supabase = Supabase.instance.client;
 
-    _channel = supabase
-        .channel('edit-$editId')
+    _channel = supabase.channel('edit-$editId')
       ..onPostgresChanges(
         event: PostgresChangeEvent.update,
         schema: 'public',
@@ -238,6 +247,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
         );
       }
     } else if (status == 'failed') {
+      _progressController.stop();
       setState(() {
         _hasError = true;
         _errorMessage = 'Ocorreu um erro ao gerar a imagem.';
@@ -249,8 +259,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
   Future<void> _startFluxProcessing(String taskId) async {
     final supabase = Supabase.instance.client;
 
-    _channel = supabase
-        .channel('flux-task-$taskId')
+    _channel = supabase.channel('flux-task-$taskId')
       ..onPostgresChanges(
         event: PostgresChangeEvent.update,
         schema: 'public',
@@ -309,8 +318,9 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
         );
       }
     } else if (status == 'error') {
-      final message =
-          record['error_message'] as String? ?? 'Ocorreu um erro ao gerar a imagem.';
+      final message = record['error_message'] as String? ??
+          'Ocorreu um erro ao gerar a imagem.';
+      _progressController.stop();
       setState(() {
         _hasError = true;
         _errorMessage = message;
@@ -351,6 +361,7 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _progressController.dispose();
     _cleanupChannel();
     super.dispose();
   }
@@ -362,95 +373,181 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final progress = _progressController.value;
 
     return Scaffold(
+      backgroundColor: isDark ? AppColors.backgroundDark : Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 20,
+            color: isDark ? AppColors.textLight : AppColors.textPrimary,
+          ),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        centerTitle: true,
+        title: Text(
+          'Estamos editando sua foto',
+          style: AppTextStyles.labelLarge.copyWith(
+            color: isDark ? AppColors.textLight : AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+          ),
+        ),
+      ),
       body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(28, 8, 28, 24),
+          child: Column(
+            children: [
+              const Spacer(flex: 2),
+              Image.asset(
+                'assets/illustrations/processing_illustration.png',
+                height: 220,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Container(
                   width: 180,
                   height: 180,
-                  child: Lottie.asset(
-                    'assets/animations/cloud_robotics_abstract.json',
-                    fit: BoxFit.contain,
-                    repeat: true,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.auto_awesome,
-                        size: 60,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.auto_awesome,
+                    size: 64,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 36),
+              Text(
+                _hasError ? 'Não foi possível concluir' : 'Aguarde um momento',
+                style: AppTextStyles.headingMedium.copyWith(
+                  color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 26,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _hasError
+                    ? (_errorMessage ??
+                        'Ocorreu um erro ao processar sua edição. Tente novamente.')
+                    : 'Sua foto fica pronta em alguns segundos.',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: _hasError
+                      ? AppColors.error
+                      : (isDark
+                          ? AppColors.textTertiary
+                          : AppColors.textSecondary),
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 28),
+              if (!_hasError) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: progress.clamp(0.05, 1.0),
+                    minHeight: 10,
+                    backgroundColor: isDark
+                        ? AppColors.primary.withValues(alpha: 0.15)
+                        : const Color(0xFFE8F0FE),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Processando...',
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppColors.primary.withValues(alpha: 0.12)
+                        : const Color(0xFFEAF2FF),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.verified_user_rounded,
+                        size: 18,
                         color: AppColors.primary,
                       ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 32),
-                Text(
-                  'Processando sua edição...',
-                  style: AppTextStyles.headingLarge.copyWith(
-                    color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                if (_hasError) ...[
-                  Text(
-                    _errorMessage ??
-                        'Ocorreu um erro ao processar sua edição. Tente novamente.',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.error,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
-                  if (_hasTimeout)
-                    TextButton(
-                      onPressed: _goHome,
-                      child: Text(
-                        'Ir para o início',
-                        style: AppTextStyles.labelLarge.copyWith(
+                      const SizedBox(width: 8),
+                      Text(
+                        'Sua foto está segura.',
+                        style: AppTextStyles.labelMedium.copyWith(
                           color: isDark
-                              ? AppColors.textTertiary
-                              : AppColors.textSecondary,
+                              ? AppColors.textLight
+                              : AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    )
-                  else
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      child: Text(
-                        'Voltar',
-                        style: AppTextStyles.labelLarge.copyWith(
-                          color: isDark
-                              ? AppColors.textTertiary
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                ] else ...[
-                  Text(
-                    'Nossa IA está trabalhando para criar o melhor resultado',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: isDark
-                          ? AppColors.textTertiary
-                          : AppColors.textSecondary,
-                    ),
-                    textAlign: TextAlign.center,
+                    ],
                   ),
-                ],
+                ),
               ],
-            ),
+              const Spacer(flex: 3),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: _hasError
+                      ? (_hasTimeout
+                          ? _goHome
+                          : () => Navigator.of(context).pop())
+                      : _goHome,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      Text(
+                        _hasError
+                            ? (_hasTimeout ? 'Ir para o início' : 'Voltar')
+                            : 'Continuar no app',
+                        style: AppTextStyles.labelLarge.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const Spacer(),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Colors.white,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

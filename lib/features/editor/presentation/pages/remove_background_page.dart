@@ -67,6 +67,7 @@ class _RemoveBackgroundPageState extends ConsumerState<RemoveBackgroundPage> {
         '/functions/v1/remover-fundo-flux',
         data: {
           'storage_path': storagePath,
+          'client_request_id': const Uuid().v4(),
         },
       );
 

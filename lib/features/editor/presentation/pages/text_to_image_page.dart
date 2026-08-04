@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../subscription/presentation/providers/plan_limits_provider.dart';
@@ -49,6 +50,7 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
           'user_prompt': prompt,
           'width': size.width,
           'height': size.height,
+          'client_request_id': const Uuid().v4(),
         },
       );
 

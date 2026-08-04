@@ -109,6 +109,7 @@ class _EditModelGuidedPageState extends ConsumerState<EditModelGuidedPage> {
           'width': result.width,
           'height': result.height,
           'access_token': accessToken,
+          'client_request_id': const Uuid().v4(),
         },
         options: Options(
           receiveTimeout: const Duration(seconds: 90),
@@ -241,6 +242,7 @@ class _EditModelGuidedPageState extends ConsumerState<EditModelGuidedPage> {
           'selected_improvements': _selectedSuggestions.toList(),
           'user_notes': notes.isEmpty ? null : notes,
           'access_token': accessToken,
+          'client_request_id': const Uuid().v4(),
         },
       );
 

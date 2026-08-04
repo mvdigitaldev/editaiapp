@@ -97,6 +97,7 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
           'width': result.width,
           'height': result.height,
           'access_token': accessToken,
+          'client_request_id': const Uuid().v4(),
         },
       );
 

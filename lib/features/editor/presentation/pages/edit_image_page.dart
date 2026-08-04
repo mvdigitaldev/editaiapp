@@ -73,26 +73,45 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
           'storage_path': storagePath,
           'width': result.width,
           'height': result.height,
+          'client_request_id': const Uuid().v4(),
         },
       );
 
       if (!mounted) return;
 
       final data = response.data;
+      debugPrint('[EditImagePage] Resposta: status=${response.statusCode} data=$data');
+
+      if (data != null && data['success'] == false) {
+        setState(() => _isLoading = false);
+        final apiError = data['error']?.toString() ??
+            'Não foi possível iniciar a edição. Tente novamente.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(apiError)),
+        );
+        return;
+      }
+
       String? taskId;
       String? editId;
       if (data != null) {
-        if (data['task_id'] is String) {
-          final raw = data['task_id'] as String;
-          if (raw.isNotEmpty) taskId = raw;
+        final nested = data['data'];
+        final source = nested is Map ? Map<String, dynamic>.from(nested) : data;
+
+        final rawTask = source['task_id'] ?? source['taskId'];
+        if (rawTask != null) {
+          final raw = rawTask.toString();
+          if (raw.isNotEmpty && raw != 'null') taskId = raw;
         }
-        if (data['edit_id'] is String) {
-          final raw = data['edit_id'] as String;
-          if (raw.isNotEmpty) editId = raw;
+
+        final rawEdit = source['edit_id'] ?? source['editId'];
+        if (rawEdit != null) {
+          final raw = rawEdit.toString();
+          if (raw.isNotEmpty && raw != 'null') editId = raw;
         }
       }
 
-      if (taskId == null) {
+      if (taskId == null && editId == null) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -117,7 +136,12 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      debugPrint('[EditImagePage] Erro ao editar: $e');
       if (e is DioException) {
+        debugPrint(
+          '[EditImagePage] Dio status=${e.response?.statusCode} '
+          'type=${e.type} data=${e.response?.data} message=${e.message}',
+        );
         final statusCode = e.response?.statusCode;
         if (statusCode == 402) {
           ScaffoldMessenger.of(context).showSnackBar(
