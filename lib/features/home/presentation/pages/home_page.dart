@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../../core/widgets/typewriter_with_delete_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/credit_indicator.dart';
@@ -26,6 +26,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
     final recentEditsAsync = ref.watch(recentEditsProvider);
+    ref.watch(enablePlansProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -69,6 +70,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                         // Credits
                         GestureDetector(
                           onTap: () {
+                            final enabled =
+                                ref.read(enablePlansProvider).valueOrNull ==
+                                    true;
+                            if (!enabled) return;
                             Navigator.of(context).pushNamed('/credits-shop');
                           },
                           child: creditsUsageAsync.when(
@@ -93,62 +98,48 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ],
                     ),
                   ),
-                  // Title Section
+                  // Logo
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Editai',
-                          style: AppTextStyles.displayMedium.copyWith(
-                            color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(
+                            'assets/branding/logo_mark.png',
+                            height: 40,
+                            fit: BoxFit.contain,
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              'Seu estúdio de ',
-                              style: AppTextStyles.bodyMedium.copyWith(
-                                color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                              ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'editaí',
+                            style: AppTextStyles.headingMedium.copyWith(
+                              color: isDark
+                                  ? AppColors.textLight
+                                  : AppColors.textPrimary,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.5,
+                              height: 1,
                             ),
-                            SizedBox(
-                              width: 220,
-                              child: TypewriterWithDeleteText(
-                                phrases: const [
-                                  'edição com IA',
-                                  'criação com IA',
-                                  'transformação com IA',
-                                  'produção com IA',
-                                  'inovação com IA',
-                                ],
-                                textStyle: AppTextStyles.bodyMedium.copyWith(
-                                  color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                                ),
-                                typingSpeed: const Duration(milliseconds: 100),
-                                deletingSpeed: const Duration(milliseconds: 80),
-                                pauseAfterTyping: const Duration(milliseconds: 1500),
-                                pauseAfterDeleting: const Duration(milliseconds: 500),
-                                cursor: '|',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // 4 opções principais (cards horizontais)
+                  // Opções principais
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
                       children: [
                         HeroActionCard(
-                          index: 4,
+                          index: 0,
                           icon: Icons.brush_outlined,
+                          accentColor: const Color(0xFF3B82F6),
+                          backgroundColor: const Color(0xFFEFF6FF),
+                          backgroundColorDark: const Color(0xFF1E3A8A),
+                          previewAsset: 'assets/home/home_preview_edit.png',
                           title: 'Editar manualmente',
                           description:
                               'Filtros, retoque beauty, presets e recorte — sem IA.',
@@ -158,40 +149,54 @@ class _HomePageState extends ConsumerState<HomePage> {
                         const SizedBox(height: 12),
                         HeroActionCard(
                           index: 1,
-                          icon: Icons.edit,
-                          title: 'Editar imagem',
+                          icon: Icons.landscape_rounded,
+                          accentColor: const Color(0xFF22C55E),
+                          backgroundColor: const Color(0xFFECFDF5),
+                          backgroundColorDark: const Color(0xFF14532D),
+                          previewAsset: 'assets/home/home_preview_edit.png',
+                          title: 'Editar com Inteligência Artificial',
                           description:
-                              'Ajuste cores, iluminação e detalhes com IA.',
+                              'Faça montagens, troque o fundo, peça o que quiser…',
                           onTap: () =>
                               Navigator.of(context).pushNamed('/edit-image'),
                         ),
                         const SizedBox(height: 12),
                         HeroActionCard(
-                          index: 0,
-                          icon: Icons.text_fields,
-                          title: 'Texto para imagem',
-                          description:
-                              'Gere imagens originais a partir de descrições.',
+                          index: 2,
+                          icon: Icons.text_fields_rounded,
+                          accentColor: const Color(0xFF8B5CF6),
+                          backgroundColor: const Color(0xFFF5F3FF),
+                          backgroundColorDark: const Color(0xFF2E1065),
+                          previewAsset: 'assets/home/home_preview_text.png',
+                          title: 'Imagem à partir de Texto',
+                          description: 'Peça o que quer criar do zero.',
                           onTap: () =>
                               Navigator.of(context).pushNamed('/text-to-image'),
                         ),
                         const SizedBox(height: 12),
                         HeroActionCard(
-                          index: 2,
-                          icon: Icons.collections,
-                          title: 'Unir fotos',
+                          index: 3,
+                          icon: Icons.layers_rounded,
+                          accentColor: const Color(0xFFF59E0B),
+                          backgroundColor: const Color(0xFFFFFBEB),
+                          backgroundColorDark: const Color(0xFF78350F),
+                          previewAsset: 'assets/home/home_preview_compose.png',
+                          title: 'Unir várias Fotos',
                           description:
-                              'Combine vários elementos em uma cena única.',
+                              'Combine vários elementos em uma única foto.',
                           onTap: () => Navigator.of(context)
                               .pushNamed('/create-composition'),
                         ),
                         const SizedBox(height: 12),
                         HeroActionCard(
-                          index: 3,
-                          icon: Icons.wallpaper,
-                          title: 'Remover fundo',
-                          description:
-                              'Remova o fundo em segundos, com precisão.',
+                          index: 4,
+                          icon: Icons.grid_on_rounded,
+                          accentColor: const Color(0xFFEC4899),
+                          backgroundColor: const Color(0xFFFDF2F8),
+                          backgroundColorDark: const Color(0xFF831843),
+                          previewAsset: 'assets/home/home_preview_bg.png',
+                          title: 'Remover Fundo',
+                          description: 'Remova com precisão.',
                           onTap: () => Navigator.of(context)
                               .pushNamed('/remove-background'),
                         ),

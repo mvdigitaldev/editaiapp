@@ -53,6 +53,7 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
           'user_prompt': prompt,
           'width': size.width,
           'height': size.height,
+          'client_request_id': const Uuid().v4(),
         },
       );
 

@@ -198,98 +198,154 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: isDark ? AppColors.backgroundDark : Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 20,
+            color: isDark ? AppColors.textLight : AppColors.textPrimary,
+          ),
+          onPressed: _goBackToHome,
+        ),
+        centerTitle: true,
+        title: Text(
+          'Estamos editando sua foto',
+          style: AppTextStyles.labelLarge.copyWith(
+            color: isDark ? AppColors.textLight : AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+          ),
+        ),
+      ),
       body: SafeArea(
+        top: false,
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(28, 8, 28, 24),
           child: Column(
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new),
-                    onPressed: _goBackToHome,
-                  ),
-                  Expanded(
-                    child: Text(
-                      'Processamento em andamento',
-                      textAlign: TextAlign.center,
-                      style: AppTextStyles.headingMedium.copyWith(
-                        color: isDark
-                            ? AppColors.textLight
-                            : AppColors.textPrimary,
+              const Spacer(flex: 2),
+              Image.asset(
+                'assets/illustrations/processing_illustration.png',
+                height: 200,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => SizedBox(
+                  width: 180,
+                  height: 180,
+                  child: Lottie.asset(
+                    'assets/animations/cloud_robotics_abstract.json',
+                    fit: BoxFit.contain,
+                    repeat: true,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome,
+                        size: 60,
+                        color: AppColors.primary,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 48),
-                ],
-              ),
-              const Spacer(),
-              SizedBox(
-                width: 180,
-                height: 180,
-                child: Lottie.asset(
-                  'assets/animations/cloud_robotics_abstract.json',
-                  fit: BoxFit.contain,
-                  repeat: true,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.auto_awesome,
-                      size: 60,
-                      color: AppColors.primary,
-                    ),
-                  ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
               Text(
                 _hasError
-                    ? 'Sua edição precisa de atenção'
-                    : 'Sua edição continua sendo processada',
-                style: AppTextStyles.headingLarge.copyWith(
-                  color:
-                      isDark ? AppColors.textLight : AppColors.textPrimary,
+                    ? 'Não foi possível concluir'
+                    : 'Aguarde um momento',
+                style: AppTextStyles.headingMedium.copyWith(
+                  color: isDark ? AppColors.textLight : AppColors.textPrimary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 26,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               Text(
                 _hasError
                     ? (_errorMessage ??
                         'Não foi possível concluir esta edição.')
-                    : 'Você pode sair desta tela e continuar usando o app. Vamos avisar quando ela ficar pronta.',
+                    : 'Sua foto fica pronta em alguns segundos. Você pode sair e continuar usando o app.',
                 style: AppTextStyles.bodyMedium.copyWith(
                   color: _hasError
                       ? AppColors.error
                       : (isDark
                           ? AppColors.textTertiary
                           : AppColors.textSecondary),
+                  height: 1.4,
                 ),
                 textAlign: TextAlign.center,
               ),
               if (!_hasError) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    minHeight: 10,
+                    backgroundColor: isDark
+                        ? AppColors.primary.withValues(alpha: 0.15)
+                        : const Color(0xFFE8F0FE),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Text(
                   _isLongRunning
-                      ? 'Ela está levando mais tempo que o normal, mas continua rodando no servidor.'
-                      : 'Sair da tela Não cancela o job, Não perde a edição e Não afeta seus créditos.',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: isDark
-                        ? AppColors.textTertiary
-                        : AppColors.textSecondary,
+                      ? 'Ainda processando… está demorando um pouco mais'
+                      : 'Processando...',
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
                   ),
-                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppColors.primary.withValues(alpha: 0.12)
+                        : const Color(0xFFEAF2FF),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.verified_user_rounded,
+                        size: 18,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Sua foto está segura.',
+                        style: AppTextStyles.labelMedium.copyWith(
+                          color: isDark
+                              ? AppColors.textLight
+                              : AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
-              const Spacer(),
+              const Spacer(flex: 3),
               if (_hasError) ...[
                 SizedBox(
                   width: double.infinity,
+                  height: 52,
                   child: OutlinedButton(
                     onPressed: _openEditDetail,
                     child: const Text('Ver detalhes da edição'),
@@ -299,15 +355,34 @@ class _ProcessingPageState extends ConsumerState<ProcessingPage>
               ],
               SizedBox(
                 width: double.infinity,
-                child: TextButton(
+                height: 56,
+                child: ElevatedButton(
                   onPressed: _goBackToHome,
-                  child: Text(
-                    _hasError ? 'Voltar' : 'Voltar e continuar no app',
-                    style: AppTextStyles.labelLarge.copyWith(
-                      color: isDark
-                          ? AppColors.textTertiary
-                          : AppColors.textSecondary,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
                     ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      Text(
+                        _hasError ? 'Voltar' : 'Continuar no app',
+                        style: AppTextStyles.labelLarge.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const Spacer(),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Colors.white,
+                      ),
+                    ],
                   ),
                 ),
               ),

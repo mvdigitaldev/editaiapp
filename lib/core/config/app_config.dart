@@ -14,7 +14,7 @@ class AppConfig {
 
   // App Configuration
   static const String appName = 'Editai';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.5';
 
   // Storage Configuration
   static const String photosBucket = 'photos';

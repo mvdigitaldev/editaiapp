@@ -92,6 +92,7 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
           'storage_paths': storagePaths,
           'width': size.width,
           'height': size.height,
+          'client_request_id': uuid.v4(),
         },
       );
 

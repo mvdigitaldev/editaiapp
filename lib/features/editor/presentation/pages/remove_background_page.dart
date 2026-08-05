@@ -73,6 +73,7 @@ class _RemoveBackgroundPageState extends ConsumerState<RemoveBackgroundPage> {
         data: {
           'client_request_id': clientRequestId,
           'storage_path': storagePath,
+          'client_request_id': const Uuid().v4(),
         },
       );
 
