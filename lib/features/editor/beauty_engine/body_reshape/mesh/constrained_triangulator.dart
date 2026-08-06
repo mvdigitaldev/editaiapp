@@ -18,8 +18,9 @@ class TriangulationResult {
 
 /// Triangulador por subdivisão adaptativa de células retangulares.
 ///
-/// Vértices são soldados por quantização; triângulos cujos centróides estão
-/// fora do domínio são descartados. Adequado a milhares de vértices.
+/// Usa fila breadth-first para não esgotar o orçamento de vértices num único
+/// lado do corpo. Células que não cabem no orçamento são emitidas no nível
+/// corrente (nunca soldadas a vértices distantes).
 class ConstrainedTriangulator {
   const ConstrainedTriangulator({
     this.quantizeDecimals = 2,
@@ -45,22 +46,15 @@ class ConstrainedTriangulator {
     final vertices = <double>[];
     final indices = <int>[];
 
-    int ensureVertex(Offset point) {
+    int? ensureVertex(Offset point) {
       final key = _quantizeKey(point);
       final existing = vertexIndex[key];
       if (existing != null) {
         return existing;
       }
       if (vertices.length ~/ 2 >= maxVertices) {
-        if (vertices.isEmpty) {
-          final index = 0;
-          vertexIndex[key] = index;
-          vertices
-            ..add(point.dx)
-            ..add(point.dy);
-          return index;
-        }
-        return _nearestExisting(vertices, point);
+        // NÃO soldar a um vértice distante — isso colapsava um lado do corpo.
+        return null;
       }
       final index = vertices.length ~/ 2;
       vertexIndex[key] = index;
@@ -76,36 +70,111 @@ class ConstrainedTriangulator {
       }
     }
 
-    _subdivide(
-      left: bounds.left,
-      top: bounds.top,
-      width: bounds.width,
-      height: bounds.height,
-      isInside: isInside,
-      cellSizeAt: cellSizeAt,
-      ensureVertex: ensureVertex,
-      emitTriangle: (a, b, c) {
-        if (!_isValidTriangle(vertices, a, b, c)) {
-          return;
-        }
-        final centroid = Offset(
-          (vertices[a * 2] + vertices[b * 2] + vertices[c * 2]) / 3,
-          (vertices[a * 2 + 1] + vertices[b * 2 + 1] + vertices[c * 2 + 1]) /
-              3,
-        );
-        if (!isInside(centroid)) {
-          return;
-        }
-        final area2 = _area2(vertices, a, b, c);
-        if (area2 < 0) {
-          indices.addAll([a, c, b]);
-        } else {
-          indices.addAll([a, b, c]);
-        }
-      },
-      depth: 0,
-      maxDepth: 16,
-    );
+    // Breadth-first: cobre o domínio inteiro antes de refinar um canto.
+    final queue = <_Cell>[
+      _Cell(
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+        depth: 0,
+      ),
+    ];
+    const maxDepth = 16;
+
+    while (queue.isNotEmpty) {
+      final cell = queue.removeAt(0);
+      if (cell.width <= 1e-6 || cell.height <= 1e-6) {
+        continue;
+      }
+
+      final right = cell.left + cell.width;
+      final bottom = cell.top + cell.height;
+      final corners = <Offset>[
+        Offset(cell.left, cell.top),
+        Offset(right, cell.top),
+        Offset(right, bottom),
+        Offset(cell.left, bottom),
+      ];
+      final center = Offset(
+        cell.left + cell.width * 0.5,
+        cell.top + cell.height * 0.5,
+      );
+      final anyInside = isInside(center) ||
+          corners.any(isInside) ||
+          _sampleCellInterior(
+            cell.left,
+            cell.top,
+            cell.width,
+            cell.height,
+            isInside,
+          );
+      if (!anyInside) {
+        continue;
+      }
+
+      final target = cellSizeAt(center);
+      final maxSide = math.max(cell.width, cell.height);
+      final budgetLeft = maxVertices - vertices.length ~/ 2;
+      // Só refina se ainda há orçamento para os 4 filhos (~4 cantos novos).
+      final shouldRefine = maxSide > target * 1.15 &&
+          cell.depth < maxDepth &&
+          budgetLeft > 8;
+
+      if (shouldRefine) {
+        final halfW = cell.width * 0.5;
+        final halfH = cell.height * 0.5;
+        // Ordem em Z: NW, NE, SW, SE — mas a fila BFS equilibra os lados.
+        queue
+          ..add(
+            _Cell(
+              left: cell.left,
+              top: cell.top,
+              width: halfW,
+              height: halfH,
+              depth: cell.depth + 1,
+            ),
+          )
+          ..add(
+            _Cell(
+              left: cell.left + halfW,
+              top: cell.top,
+              width: halfW,
+              height: halfH,
+              depth: cell.depth + 1,
+            ),
+          )
+          ..add(
+            _Cell(
+              left: cell.left,
+              top: cell.top + halfH,
+              width: halfW,
+              height: halfH,
+              depth: cell.depth + 1,
+            ),
+          )
+          ..add(
+            _Cell(
+              left: cell.left + halfW,
+              top: cell.top + halfH,
+              width: halfW,
+              height: halfH,
+              depth: cell.depth + 1,
+            ),
+          );
+        continue;
+      }
+
+      final i0 = ensureVertex(corners[0]);
+      final i1 = ensureVertex(corners[1]);
+      final i2 = ensureVertex(corners[2]);
+      final i3 = ensureVertex(corners[3]);
+      if (i0 == null || i1 == null || i2 == null || i3 == null) {
+        continue;
+      }
+      _emitTriangle(vertices, indices, i0, i1, i2, isInside);
+      _emitTriangle(vertices, indices, i0, i2, i3, isInside);
+    }
 
     return TriangulationResult(
       vertices: Float32List.fromList(vertices),
@@ -113,106 +182,35 @@ class ConstrainedTriangulator {
     );
   }
 
-  void _subdivide({
-    required double left,
-    required double top,
-    required double width,
-    required double height,
-    required bool Function(Offset point) isInside,
-    required double Function(Offset point) cellSizeAt,
-    required int Function(Offset point) ensureVertex,
-    required void Function(int a, int b, int c) emitTriangle,
-    required int depth,
-    required int maxDepth,
-  }) {
-    if (width <= 1e-6 || height <= 1e-6) {
+  void _emitTriangle(
+    List<double> vertices,
+    List<int> indices,
+    int a,
+    int b,
+    int c,
+    bool Function(Offset point) isInside,
+  ) {
+    if (a == b || b == c || a == c) {
       return;
     }
-
-    final right = left + width;
-    final bottom = top + height;
-    final corners = <Offset>[
-      Offset(left, top),
-      Offset(right, top),
-      Offset(right, bottom),
-      Offset(left, bottom),
-    ];
-    final center = Offset(left + width * 0.5, top + height * 0.5);
-    final anyInside = isInside(center) ||
-        corners.any(isInside) ||
-        _sampleCellInterior(left, top, width, height, isInside);
-
-    if (!anyInside) {
+    final area2 = _area2(vertices, a, b, c);
+    if (area2.abs() <= 1e-6) {
       return;
     }
-
-    final target = cellSizeAt(center);
-    final maxSide = math.max(width, height);
-    final shouldRefine = maxSide > target * 1.15 && depth < maxDepth;
-
-    if (shouldRefine) {
-      final halfW = width * 0.5;
-      final halfH = height * 0.5;
-      _subdivide(
-        left: left,
-        top: top,
-        width: halfW,
-        height: halfH,
-        isInside: isInside,
-        cellSizeAt: cellSizeAt,
-        ensureVertex: ensureVertex,
-        emitTriangle: emitTriangle,
-        depth: depth + 1,
-        maxDepth: maxDepth,
-      );
-      _subdivide(
-        left: left + halfW,
-        top: top,
-        width: halfW,
-        height: halfH,
-        isInside: isInside,
-        cellSizeAt: cellSizeAt,
-        ensureVertex: ensureVertex,
-        emitTriangle: emitTriangle,
-        depth: depth + 1,
-        maxDepth: maxDepth,
-      );
-      _subdivide(
-        left: left,
-        top: top + halfH,
-        width: halfW,
-        height: halfH,
-        isInside: isInside,
-        cellSizeAt: cellSizeAt,
-        ensureVertex: ensureVertex,
-        emitTriangle: emitTriangle,
-        depth: depth + 1,
-        maxDepth: maxDepth,
-      );
-      _subdivide(
-        left: left + halfW,
-        top: top + halfH,
-        width: halfW,
-        height: halfH,
-        isInside: isInside,
-        cellSizeAt: cellSizeAt,
-        ensureVertex: ensureVertex,
-        emitTriangle: emitTriangle,
-        depth: depth + 1,
-        maxDepth: maxDepth,
-      );
+    final centroid = Offset(
+      (vertices[a * 2] + vertices[b * 2] + vertices[c * 2]) / 3,
+      (vertices[a * 2 + 1] + vertices[b * 2 + 1] + vertices[c * 2 + 1]) / 3,
+    );
+    if (!isInside(centroid)) {
       return;
     }
-
-    final i0 = ensureVertex(corners[0]);
-    final i1 = ensureVertex(corners[1]);
-    final i2 = ensureVertex(corners[2]);
-    final i3 = ensureVertex(corners[3]);
-    emitTriangle(i0, i1, i2);
-    emitTriangle(i0, i2, i3);
+    if (area2 < 0) {
+      indices.addAll([a, c, b]);
+    } else {
+      indices.addAll([a, b, c]);
+    }
   }
 
-  /// Amostra interior da célula para não perder silhuetas finas.
   bool _sampleCellInterior(
     double left,
     double top,
@@ -242,28 +240,6 @@ class ConstrainedTriangulator {
     return Object.hash(x, y);
   }
 
-  int _nearestExisting(List<double> vertices, Offset point) {
-    var best = 0;
-    var bestDist = double.infinity;
-    for (var i = 0; i < vertices.length; i += 2) {
-      final dx = vertices[i] - point.dx;
-      final dy = vertices[i + 1] - point.dy;
-      final d = dx * dx + dy * dy;
-      if (d < bestDist) {
-        bestDist = d;
-        best = i ~/ 2;
-      }
-    }
-    return best;
-  }
-
-  bool _isValidTriangle(List<double> vertices, int a, int b, int c) {
-    if (a == b || b == c || a == c) {
-      return false;
-    }
-    return _area2(vertices, a, b, c).abs() > 1e-6;
-  }
-
   double _area2(List<double> vertices, int a, int b, int c) {
     final ax = vertices[a * 2];
     final ay = vertices[a * 2 + 1];
@@ -273,4 +249,20 @@ class ConstrainedTriangulator {
     final cy = vertices[c * 2 + 1];
     return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
   }
+}
+
+class _Cell {
+  const _Cell({
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+    required this.depth,
+  });
+
+  final double left;
+  final double top;
+  final double width;
+  final double height;
+  final int depth;
 }

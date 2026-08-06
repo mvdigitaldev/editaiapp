@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
+import '../maps/torso_contour_profile.dart';
 import '../mesh/adaptive_body_mesh.dart';
 import '../models/body_adjustment.dart';
 import '../models/body_frame_assets.dart';
@@ -13,18 +14,25 @@ class RegionDeformationContext {
   final BodyFrameAssets assets;
   final BodyAdjustment adjustment;
   final Size imageSize;
+  final TorsoContourProfile? torsoContour;
+
+  /// Escala global de segurança (máscara fraca / oclusão / corpo parcial).
+  final double safetyScale;
 
   const RegionDeformationContext({
     required this.mesh,
     required this.assets,
     required this.adjustment,
     required this.imageSize,
+    this.torsoContour,
+    this.safetyScale = 1,
   });
 
   double get intensity {
-    final raw = adjustment.effectiveIntensity;
-    // Smoothstep — evita over-deformação nos extremos.
-    return raw * raw * (3 - 2 * raw);
+    final raw = (adjustment.effectiveIntensity * safetyScale.clamp(0.0, 1.0))
+        .clamp(0.0, 1.0);
+    // Quase linear: o slider precisa responder desde os primeiros 20%.
+    return raw * (0.82 + 0.18 * raw);
   }
 
   Offset? landmarkPx(BodyJoint joint) {
@@ -69,6 +77,20 @@ mixin RegionDeformationMath on BodyRegionDeformationStrategy {
     }
     deltas[vertexIndex * 2] += dx * weight;
     deltas[vertexIndex * 2 + 1] += dy * weight;
+  }
+
+  /// Confiança do contorno como atenuação suave.
+  ///
+  /// Usar a confiança como fator direto derruba o deslocamento a ~1/3 do alvo
+  /// mesmo com contorno bom; aqui ela só modula a faixa [floor, 1].
+  double softConfidence(double? confidence, {double floor = 0.7}) {
+    final c = (confidence ?? 0.5).clamp(0.0, 1.0);
+    return floor + (1 - floor) * c;
+  }
+
+  /// Peso de deformabilidade do vértice como atenuação suave.
+  double softVertexWeight(double weight, {double floor = 0.55}) {
+    return floor + (1 - floor) * weight.clamp(0.0, 1.0);
   }
 
   double falloffAlongAxis({

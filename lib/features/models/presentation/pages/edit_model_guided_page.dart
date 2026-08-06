@@ -257,7 +257,6 @@ class _EditModelGuidedPageState extends ConsumerState<EditModelGuidedPage> {
           'selected_improvements': _selectedSuggestions.toList(),
           'user_notes': notes.isEmpty ? null : notes,
           'access_token': accessToken,
-          'client_request_id': const Uuid().v4(),
         },
       );
 
@@ -297,6 +296,9 @@ class _EditModelGuidedPageState extends ConsumerState<EditModelGuidedPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      if (showStorageLimitFeedback(context, e)) {
+        return;
+      }
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
         final errMsg = e.response?.data is Map &&

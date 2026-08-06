@@ -81,18 +81,12 @@ class _ManualEditorPageState extends ConsumerState<ManualEditorPage> {
       setState(() => _isSaving = false);
 
       var message = 'Não foi possível salvar a edição. Tente novamente.';
-      if (error is DioException) {
-        final status = error.response?.statusCode;
+      final storageMessage = storageLimitMessageFromError(error);
+      if (storageMessage != null) {
+        message = storageMessage;
+      } else if (error is DioException) {
         final data = error.response?.data;
-        if (status == 403) {
-          final code = data is Map ? data['code'] : null;
-          if (code == 'storage_limit_reached') {
-            message =
-                'Limite de armazenamento atingido. Exclua fotos na galeria para salvar novas.';
-          } else if (data is Map && data['error'] is String) {
-            message = data['error'] as String;
-          }
-        } else if (data is Map && data['error'] is String) {
+        if (data is Map && data['error'] is String) {
           message = data['error'] as String;
         }
       }

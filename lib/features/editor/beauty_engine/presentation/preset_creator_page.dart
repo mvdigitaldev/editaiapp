@@ -15,6 +15,7 @@ import '../../filter_presets/filter_presets_provider.dart';
 import '../di/beauty_engine_feature_flag_provider.dart';
 import '../di/beauty_engine_providers.dart';
 import '../l10n/beauty_engine_labels.dart';
+import '../models/beauty_image_loader.dart';
 import '../models/beauty_preset.dart';
 import '../models/tune_params.dart';
 import '../presets/bundled_presets.dart';
@@ -202,9 +203,13 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
     }
 
     final bytes = await file.readAsBytes();
+    final normalized = await BeautyImageLoader.load(bytes);
+    if (!mounted) {
+      return;
+    }
     setState(() {
-      _imageBytes = bytes;
-      _previewBytes = bytes;
+      _imageBytes = normalized.bytes;
+      _previewBytes = normalized.bytes;
     });
     await _runPreview();
   }

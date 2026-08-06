@@ -48,9 +48,18 @@ app.*.map.json
 # Environment variables
 .env
 .env.local
+secrets/*.json
+!secrets/*.example.json
 
 # Android signing (nunca versionar)
 android/key.properties
 *.jks
 android/KEYSTORE_CREDENTIALS.txt
 upload_certificate.pem
+
+# Corpus de fotos reais do golden testing (pessoas reais — só local)
+test/golden/corpus/photos/
+
+.cursor*
+.cursor-deploy-tmp/mcp-deploy-salvar-edicao-manual.json
+/.cursor-deploy-tmp

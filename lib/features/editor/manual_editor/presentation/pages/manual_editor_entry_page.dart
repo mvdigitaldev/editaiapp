@@ -118,7 +118,7 @@ class _ManualEditorEntryPageState extends ConsumerState<ManualEditorEntryPage> {
                       ),
                     ),
                     child: Text(
-                      'Armazenamento cheio (${limits.storedPhotosCount}/${limits.maxPhotos}). '
+                      'Armazenamento cheio (${limits.storedPhotosCount}/${limits.maxPhotos} fotos). '
                       'Você pode editar, mas precisa excluir fotos na galeria para salvar.',
                       style: AppTextStyles.bodySmall.copyWith(
                         color: isDark

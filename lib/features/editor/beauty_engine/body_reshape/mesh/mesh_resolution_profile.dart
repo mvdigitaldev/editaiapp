@@ -47,7 +47,7 @@ class MeshResolutionProfile {
           baseCellPx: (minDim / 40).clamp(12, 28) / scale,
           minCellPx: (minDim / 90).clamp(5, 12) / scale,
           contourSpacingPx: (minDim / 70).clamp(6, 14) / scale,
-          maxVertices: (6500 * scale).round().clamp(2000, 10000),
+          maxVertices: (9000 * scale).round().clamp(3000, 14000),
           densityScale: scale,
         ),
       WarpQuality.export => MeshResolutionProfile(

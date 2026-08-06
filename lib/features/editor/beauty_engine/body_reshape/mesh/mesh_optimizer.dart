@@ -203,22 +203,95 @@ class MeshOptimizer {
     List<bool> fixed,
   ) {
     var passes = 0;
+    List<List<int>>? neighbors;
     for (var iter = 0; iter < constraints.antiFoldIterations; iter++) {
-      if (!_hasOrientationFlip(mesh, deltas) &&
-          !_hasDegenerate(mesh, deltas)) {
-        break;
+      final problem = _problemVertices(mesh, deltas);
+      if (problem.isEmpty) {
+        return passes;
       }
       passes++;
-      // Escala global suave; bordas já pinadas.
+      neighbors ??= _buildAdjacency(mesh);
+
+      // Relaxamento LOCAL: só os vértices dos triângulos ruins. Escalar a
+      // malha inteira (0.7 por passe) encolhia o efeito ~6× e espalhava a
+      // deformação por todo o corpo em vez da região ajustada.
+      for (final v in problem) {
+        if (fixed[v]) {
+          continue;
+        }
+        final adj = neighbors[v];
+        var ax = 0.0;
+        var ay = 0.0;
+        if (adj.isNotEmpty) {
+          for (final j in adj) {
+            ax += deltas[j * 2];
+            ay += deltas[j * 2 + 1];
+          }
+          ax /= adj.length;
+          ay /= adj.length;
+        }
+        deltas[v * 2] = (deltas[v * 2] * 0.35 + ax * 0.65) * 0.8;
+        deltas[v * 2 + 1] = (deltas[v * 2 + 1] * 0.35 + ay * 0.65) * 0.8;
+      }
+    }
+
+    // Último recurso: atenuação global progressiva só enquanto houver problemas.
+    for (var guard = 0;
+        guard < 6 && _problemVertices(mesh, deltas).isNotEmpty;
+        guard++) {
       for (var i = 0; i < mesh.vertexCount; i++) {
         if (fixed[i]) {
           continue;
         }
-        deltas[i * 2] *= 0.7;
-        deltas[i * 2 + 1] *= 0.7;
+        deltas[i * 2] *= 0.75;
+        deltas[i * 2 + 1] *= 0.75;
       }
+      passes++;
     }
     return passes;
+  }
+
+  /// Vértices que participam de triângulos invertidos ou degenerados.
+  Set<int> _problemVertices(AdaptiveBodyMesh mesh, Float32List deltas) {
+    final problem = <int>{};
+    final indices = mesh.indices;
+    final verts = mesh.vertices;
+    final minArea = constraints.minTriangleArea2;
+    for (var t = 0; t < indices.length; t += 3) {
+      final a = indices[t];
+      final b = indices[t + 1];
+      final c = indices[t + 2];
+      final ax = verts[a * 2] + deltas[a * 2];
+      final ay = verts[a * 2 + 1] + deltas[a * 2 + 1];
+      final bx = verts[b * 2] + deltas[b * 2];
+      final by = verts[b * 2 + 1] + deltas[b * 2 + 1];
+      final cx = verts[c * 2] + deltas[c * 2];
+      final cy = verts[c * 2 + 1] + deltas[c * 2 + 1];
+      final nArea = _area2(ax, ay, bx, by, cx, cy);
+
+      if (nArea.abs() <= minArea) {
+        problem
+          ..add(a)
+          ..add(b)
+          ..add(c);
+        continue;
+      }
+      final oArea = _area2(
+        verts[a * 2],
+        verts[a * 2 + 1],
+        verts[b * 2],
+        verts[b * 2 + 1],
+        verts[c * 2],
+        verts[c * 2 + 1],
+      );
+      if (oArea.abs() > 1e-12 && oArea * nArea < 0) {
+        problem
+          ..add(a)
+          ..add(b)
+          ..add(c);
+      }
+    }
+    return problem;
   }
 
   bool _hasOrientationFlip(AdaptiveBodyMesh mesh, Float32List deltas) {

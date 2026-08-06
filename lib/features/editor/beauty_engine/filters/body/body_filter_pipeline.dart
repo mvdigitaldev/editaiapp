@@ -463,8 +463,8 @@ class BodyFilterPipeline {
     if (interactive) {
       return intensity >= 0.85 ? 2 : 1;
     }
-    if (intensity >= 0.8) return 4;
-    if (intensity >= 0.55) return 3;
+    // Cap em 2: multi-pass agressivo (3–4) gera shrink global / fantasma.
+    if (intensity >= 0.55) return 2;
     return 1;
   }
 

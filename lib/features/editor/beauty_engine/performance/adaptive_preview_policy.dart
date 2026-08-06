@@ -4,6 +4,10 @@ import '../models/image_source.dart';
 
 /// Limites de resolução de preview conforme `09-performance.md` (Sprint 25).
 abstract final class AdaptivePreviewPolicy {
+  /// Teto de resolução na ENTRADA (Sprint 0 do SDK facial): fotos acima
+  /// disso (ex.: 100MP+ de sensores Samsung) são reduzidas no load para
+  /// evitar OOM antes de qualquer análise. Export usa a imagem normalizada.
+  static const inputMaxEdge = 4096;
   static const selfieMaxEdge = 720;
   static const photoMaxEdge = 1080;
   /// Preview interativo de body warp — prioriza latência (~800ms → <200ms).

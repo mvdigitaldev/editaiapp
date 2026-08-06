@@ -28,23 +28,36 @@ class MattePreprocessor {
   const MattePreprocessor({
     this.insideThreshold = 0.42,
     this.defaultTransitionFraction = 0.035,
+    this.defaultOuterBandFraction = 0.03,
     this.minTransitionPx = 2,
     this.maxTransitionPx = 28,
+    this.minOuterBandPx = 3,
+    this.maxOuterBandPx = 36,
+    this.edgeWeightFloor = 0.85,
   });
 
   /// Alfa mínimo para considerar pixel interior.
   final double insideThreshold;
 
-  /// Fração da menor dimensão usada como banda de transição.
+  /// Fração da menor dimensão usada como banda de transição interna.
   final double defaultTransitionFraction;
+
+  /// Fração da menor dimensão usada como banda exterior (arrasta fundo).
+  final double defaultOuterBandFraction;
 
   final double minTransitionPx;
   final double maxTransitionPx;
+  final double minOuterBandPx;
+  final double maxOuterBandPx;
+
+  /// Peso mínimo de warp na borda interna do corpo (silhueta móvel).
+  final double edgeWeightFloor;
 
   ProcessedPersonMatte process(
     PersonMatte matte, {
     Size? imageSize,
     double? transitionPx,
+    double? outerBandPx,
   }) {
     if (matte.isEmpty) {
       return _empty(matte);
@@ -92,12 +105,20 @@ class MattePreprocessor {
       overridePx: transitionPx,
     );
 
+    final resolvedOuter = _resolveOuterBandPx(
+      imageSize: imageSize,
+      matteWidth: width,
+      matteHeight: height,
+      overridePx: outerBandPx,
+    );
+
     final protection = _buildProtectionMaps(
       matte: matte.copyWith(boundingRegion: bounds),
       sdf: sdf,
       contour: contour,
       boundingRegion: bounds,
       transitionPx: resolvedTransition,
+      outerBandPx: resolvedOuter,
     );
 
     return ProcessedPersonMatte(
@@ -114,11 +135,13 @@ class MattePreprocessor {
     PersonMatte matte, {
     Size? imageSize,
     double? transitionPx,
+    double? outerBandPx,
   }) {
     return process(
       matte,
       imageSize: imageSize,
       transitionPx: transitionPx,
+      outerBandPx: outerBandPx,
     ).protection;
   }
 
@@ -149,24 +172,59 @@ class MattePreprocessor {
     return (imageTransition * scale).clamp(1.0, math.min(maxTransitionPx, cap));
   }
 
+  double _resolveOuterBandPx({
+    required Size? imageSize,
+    required int matteWidth,
+    required int matteHeight,
+    required double? overridePx,
+  }) {
+    final matteMin = math.min(matteWidth, matteHeight).toDouble();
+    final cap = math.max(1.0, matteMin * 0.3);
+
+    if (overridePx != null) {
+      return overridePx.clamp(1.0, math.min(maxOuterBandPx, cap));
+    }
+
+    final reference = imageSize == null
+        ? matteMin
+        : math.min(imageSize.width, imageSize.height);
+    final imageBand = (reference * defaultOuterBandFraction)
+        .clamp(minOuterBandPx, maxOuterBandPx);
+    if (imageSize == null) {
+      return imageBand.clamp(1.0, math.min(maxOuterBandPx, cap));
+    }
+
+    final scale = matteWidth / math.max(imageSize.width, 1.0);
+    return (imageBand * scale).clamp(1.0, math.min(maxOuterBandPx, cap));
+  }
+
   ProtectionMaps _buildProtectionMaps({
     required PersonMatte matte,
     required SignedDistanceField sdf,
     required Uint8List contour,
     required Rect boundingRegion,
     required double transitionPx,
+    required double outerBandPx,
   }) {
     final count = matte.width * matte.height;
     final warpWeight = Float32List(count);
     final transitionBand = Float32List(count);
     final confidence = matte.confidence.clamp(0.0, 1.0);
+    final outer = math.max(outerBandPx, 1e-6);
 
     for (var i = 0; i < count; i++) {
       final distance = sdf.distances[i];
       if (distance > 0) {
-        // Exterior: peso identicamente zero (sem anel de fundo).
-        warpWeight[i] = 0;
-        transitionBand[i] = 0;
+        // Exterior: decai até outerBandPx (arrasta fundo vizinho).
+        if (distance >= outer) {
+          warpWeight[i] = 0;
+          transitionBand[i] = 0;
+          continue;
+        }
+        final t = (1.0 - distance / outer).clamp(0.0, 1.0);
+        final edge = _smoothstep(t);
+        warpWeight[i] = confidence * edge;
+        transitionBand[i] = edge;
         continue;
       }
 
@@ -179,8 +237,10 @@ class MattePreprocessor {
 
       final t = (depthInside / math.max(transitionPx, 1e-6)).clamp(0.0, 1.0);
       final edge = _smoothstep(t);
-      // Borda interna suave; nunca estende para fora do matte.
-      warpWeight[i] = confidence * edge;
+      // A borda interna é justamente a silhueta que precisa se mover: zerar o
+      // peso aqui pinava o contorno e tornava o slim invisível. O feather fica
+      // apenas como leve atenuação; a continuidade vem da banda exterior.
+      warpWeight[i] = confidence * (edgeWeightFloor + (1 - edgeWeightFloor) * edge);
       transitionBand[i] = 1.0 - edge;
     }
 
@@ -194,6 +254,7 @@ class MattePreprocessor {
       width: matte.width,
       height: matte.height,
       transitionPx: transitionPx,
+      outerBandPx: outerBandPx,
     );
   }
 
@@ -322,6 +383,7 @@ class MattePreprocessor {
       width: 0,
       height: 0,
       transitionPx: 0,
+      outerBandPx: 0,
     );
     return ProcessedPersonMatte(
       matte: matte,

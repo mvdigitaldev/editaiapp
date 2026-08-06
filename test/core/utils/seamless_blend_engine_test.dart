@@ -43,6 +43,24 @@ void main() {
       expect(fourThree.width, 1200);
       expect(fourThree.height, closeTo(900, 1));
     });
+
+    test('montagem é independente da orientação do canvas', () {
+      const portraitHorizontal = CollageAspectPreset(
+        family: CollageAspectFamily.ratio16x9,
+        orientation: CollageOrientation.portrait,
+        stackDirection: CollageStackDirection.horizontal,
+      );
+      expect(portraitHorizontal.widthOverHeight, closeTo(9 / 16, 0.001));
+      expect(portraitHorizontal.isHorizontalStack, isTrue);
+
+      const landscapeVertical = CollageAspectPreset(
+        family: CollageAspectFamily.ratio16x9,
+        orientation: CollageOrientation.landscape,
+        stackDirection: CollageStackDirection.vertical,
+      );
+      expect(landscapeVertical.widthOverHeight, closeTo(16 / 9, 0.001));
+      expect(landscapeVertical.isHorizontalStack, isFalse);
+    });
   });
 
   group('SeamlessBlendCurve', () {
@@ -115,6 +133,36 @@ void main() {
 
       expect(result.width, 1600);
       expect(result.width / result.height, closeTo(16 / 9, 0.02));
+    });
+
+    test('9:16 com montagem horizontal mantém canvas e empilha lado a lado',
+        () async {
+      final paths = [
+        await writeTemp(solidImage(400, 600, 255, 0, 0)),
+        await writeTemp(solidImage(400, 600, 0, 0, 255)),
+      ];
+
+      final result = await engine.blend(
+        imagePaths: paths,
+        config: const SeamlessBlendConfig(
+          aspect: CollageAspectPreset(
+            family: CollageAspectFamily.ratio16x9,
+            orientation: CollageOrientation.portrait,
+            stackDirection: CollageStackDirection.horizontal,
+          ),
+          fusionStrength: 0.5,
+          maxEdge: 900,
+        ),
+      );
+
+      expect(result.height, 900);
+      expect(result.width / result.height, closeTo(9 / 16, 0.02));
+
+      // Lado a lado: pixel esquerdo vermelho, direito azul (fora da fusão).
+      final left = result.image.getPixel(20, 450);
+      final right = result.image.getPixel(result.width - 20, 450);
+      expect(left.r, greaterThan(200));
+      expect(right.b, greaterThan(200));
     });
 
     test('respeita aspect 1:1', () async {

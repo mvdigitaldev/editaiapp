@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/app_remote_config_provider.dart';
 import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -26,6 +27,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     final user = authState.user;
     final creditsUsageAsync = ref.watch(creditsUsageProvider);
     final recentEditsAsync = ref.watch(recentEditsProvider);
+    final moduleConfig = ref.watch(homeModuleConfigProvider).valueOrNull ??
+        const HomeModuleConfig.allEnabled();
     ref.watch(enablePlansProvider);
 
     return Scaffold(
@@ -33,7 +36,11 @@ class _HomePageState extends ConsumerState<HomePage> {
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(recentEditsProvider);
-            await ref.read(recentEditsProvider.future);
+            ref.invalidate(homeModuleConfigProvider);
+            await Future.wait([
+              ref.read(recentEditsProvider.future),
+              ref.read(homeModuleConfigProvider.future),
+            ]);
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -131,76 +138,90 @@ class _HomePageState extends ConsumerState<HomePage> {
                   // Opções principais
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      children: [
-                        HeroActionCard(
-                          index: 0,
-                          icon: Icons.brush_outlined,
-                          accentColor: const Color(0xFF3B82F6),
-                          backgroundColor: const Color(0xFFEFF6FF),
-                          backgroundColorDark: const Color(0xFF1E3A8A),
-                          previewAsset: 'assets/home/home_preview_edit.png',
-                          title: 'Editar manualmente',
-                          description:
-                              'Filtros, retoque beauty, presets e recorte — sem IA.',
-                          onTap: () => Navigator.of(context)
-                              .pushNamed('/manual-editing-hub'),
-                        ),
-                        const SizedBox(height: 12),
-                        HeroActionCard(
-                          index: 1,
-                          icon: Icons.landscape_rounded,
-                          accentColor: const Color(0xFF22C55E),
-                          backgroundColor: const Color(0xFFECFDF5),
-                          backgroundColorDark: const Color(0xFF14532D),
-                          previewAsset: 'assets/home/home_preview_edit.png',
-                          title: 'Editar com Inteligência Artificial',
-                          description:
-                              'Faça montagens, troque o fundo, peça o que quiser…',
-                          onTap: () =>
-                              Navigator.of(context).pushNamed('/edit-image'),
-                        ),
-                        const SizedBox(height: 12),
-                        HeroActionCard(
-                          index: 2,
-                          icon: Icons.text_fields_rounded,
-                          accentColor: const Color(0xFF8B5CF6),
-                          backgroundColor: const Color(0xFFF5F3FF),
-                          backgroundColorDark: const Color(0xFF2E1065),
-                          previewAsset: 'assets/home/home_preview_text.png',
-                          title: 'Imagem à partir de Texto',
-                          description: 'Peça o que quer criar do zero.',
-                          onTap: () =>
-                              Navigator.of(context).pushNamed('/text-to-image'),
-                        ),
-                        const SizedBox(height: 12),
-                        HeroActionCard(
-                          index: 3,
-                          icon: Icons.layers_rounded,
-                          accentColor: const Color(0xFFF59E0B),
-                          backgroundColor: const Color(0xFFFFFBEB),
-                          backgroundColorDark: const Color(0xFF78350F),
-                          previewAsset: 'assets/home/home_preview_compose.png',
-                          title: 'Unir várias Fotos',
-                          description:
-                              'Combine vários elementos em uma única foto.',
-                          onTap: () => Navigator.of(context)
-                              .pushNamed('/create-composition'),
-                        ),
-                        const SizedBox(height: 12),
-                        HeroActionCard(
-                          index: 4,
-                          icon: Icons.grid_on_rounded,
-                          accentColor: const Color(0xFFEC4899),
-                          backgroundColor: const Color(0xFFFDF2F8),
-                          backgroundColorDark: const Color(0xFF831843),
-                          previewAsset: 'assets/home/home_preview_bg.png',
-                          title: 'Remover Fundo',
-                          description: 'Remova com precisão.',
-                          onTap: () => Navigator.of(context)
-                              .pushNamed('/remove-background'),
-                        ),
-                      ],
+                    child: Builder(
+                      builder: (context) {
+                        final cards = <Widget>[
+                          if (moduleConfig.manualEdit)
+                            HeroActionCard(
+                              index: 0,
+                              icon: Icons.brush_outlined,
+                              accentColor: const Color(0xFF3B82F6),
+                              backgroundColor: const Color(0xFFEFF6FF),
+                              backgroundColorDark: const Color(0xFF1E3A8A),
+                              previewAsset: 'assets/home/home_preview_edit.png',
+                              title: 'Editar manualmente',
+                              description:
+                                  'Filtros, retoque beauty, presets e recorte — sem IA.',
+                              onTap: () => Navigator.of(context)
+                                  .pushNamed('/manual-editing-hub'),
+                            ),
+                          if (moduleConfig.aiEdit)
+                            HeroActionCard(
+                              index: 1,
+                              icon: Icons.landscape_rounded,
+                              accentColor: const Color(0xFF22C55E),
+                              backgroundColor: const Color(0xFFECFDF5),
+                              backgroundColorDark: const Color(0xFF14532D),
+                              previewAsset: 'assets/home/home_preview_edit.png',
+                              title: 'Editar com Inteligência Artificial',
+                              description:
+                                  'Faça montagens, troque o fundo, peça o que quiser…',
+                              onTap: () => Navigator.of(context)
+                                  .pushNamed('/edit-image'),
+                            ),
+                          if (moduleConfig.textToImage)
+                            HeroActionCard(
+                              index: 2,
+                              icon: Icons.text_fields_rounded,
+                              accentColor: const Color(0xFF8B5CF6),
+                              backgroundColor: const Color(0xFFF5F3FF),
+                              backgroundColorDark: const Color(0xFF2E1065),
+                              previewAsset:
+                                  'assets/home/home_preview_text.png',
+                              title: 'Imagem à partir de Texto',
+                              description: 'Peça o que quer criar do zero.',
+                              onTap: () => Navigator.of(context)
+                                  .pushNamed('/text-to-image'),
+                            ),
+                          if (moduleConfig.multiImage)
+                            HeroActionCard(
+                              index: 3,
+                              icon: Icons.layers_rounded,
+                              accentColor: const Color(0xFFF59E0B),
+                              backgroundColor: const Color(0xFFFFFBEB),
+                              backgroundColorDark: const Color(0xFF78350F),
+                              previewAsset:
+                                  'assets/home/home_preview_compose.png',
+                              title: 'Unir várias Fotos',
+                              description:
+                                  'Combine vários elementos em uma única foto.',
+                              onTap: () => Navigator.of(context)
+                                  .pushNamed('/create-composition'),
+                            ),
+                          if (moduleConfig.removeBackground)
+                            HeroActionCard(
+                              index: 4,
+                              icon: Icons.grid_on_rounded,
+                              accentColor: const Color(0xFFEC4899),
+                              backgroundColor: const Color(0xFFFDF2F8),
+                              backgroundColorDark: const Color(0xFF831843),
+                              previewAsset: 'assets/home/home_preview_bg.png',
+                              title: 'Remover Fundo',
+                              description: 'Remova com precisão.',
+                              onTap: () => Navigator.of(context)
+                                  .pushNamed('/remove-background'),
+                            ),
+                        ];
+
+                        return Column(
+                          children: [
+                            for (var i = 0; i < cards.length; i++) ...[
+                              if (i > 0) const SizedBox(height: 12),
+                              cards[i],
+                            ],
+                          ],
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 32),

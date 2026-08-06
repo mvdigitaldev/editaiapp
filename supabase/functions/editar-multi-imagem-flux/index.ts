@@ -9,6 +9,10 @@ import {
   releaseReservedCredits,
 } from "../_shared/credits.ts";
 import { triggerBflInitWorker } from "../_shared/bfl_init_invoke.ts";
+import {
+  getPhotoStorageStatus,
+  storageLimitPayload,
+} from "../_shared/plan_limits.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -94,6 +98,13 @@ Deno.serve(async (req) => {
     }
 
     await enforceBflUserJobLimit(supabase, userId);
+
+    const storage = await getPhotoStorageStatus(supabase, userId, {
+      countPending: true,
+    });
+    if (!storage.ok) {
+      return jsonResponse(storageLimitPayload(storage), 403);
+    }
 
     const creditsMulti = 7 + (storage_paths.length - 1) * 3;
     let editId = "";

@@ -74,7 +74,8 @@ void main() {
         }
       }
       // Permite pequena folga de quantização/contorno; a maioria fica no matte.
-      expect(outside / mesh.vertexCount, lessThan(0.12));
+      // Folga inclui a banda exterior do SDF (arrasta fundo vizinho).
+      expect(outside / mesh.vertexCount, lessThan(0.18));
       expect(mesh.bounds.width, greaterThan(40));
       expect(mesh.bounds.height, greaterThan(80));
     });

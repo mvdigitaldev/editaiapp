@@ -11,14 +11,21 @@ import 'pass_profiler.dart';
 /// φ(p) ≈ p + d(p)·m(p). Se det(∇φ) < 0, escala o deslocamento local.
 class AntiFoldingPass implements BodyReshapePass {
   const AntiFoldingPass({
-    this.maxIterations = 8,
-    this.scaleFactor = 0.7,
+    this.maxIterations = 24,
+    this.scaleFactor = 0.85,
     this.determinantEpsilon = 1e-4,
+    this.minJacobianRatio = 0.2,
   });
 
   final int maxIterations;
   final double scaleFactor;
   final double determinantEpsilon;
+
+  /// Fração mínima da área original que uma célula pode ocupar após o warp.
+  ///
+  /// Só checar `det < 0` deixa passar compressão extrema (célula colapsando),
+  /// que é o que aparece como textura embaralhada / redemoinho.
+  final double minJacobianRatio;
 
   @override
   String get id => 'anti_folding';
@@ -79,31 +86,60 @@ class AntiFoldingPass implements BodyReshapePass {
         gridHeight: gh,
         imageSize: field.imageSize,
       );
+
+      // Difunde o deslocamento na vizinhança da dobra em vez de só encolher:
+      // espalhar o salto por várias células reduz o gradiente preservando a
+      // amplitude do efeito (encolher puro apagava o ajuste do usuário).
+      final next = Float32List.fromList(disp);
       for (var i = 0; i < inverted.length; i++) {
         if (!inverted[i]) {
           continue;
         }
-        disp[i * 2] *= scaleFactor;
-        disp[i * 2 + 1] *= scaleFactor;
-        // Também atenua vizinhos para evitar reintroduzir flip.
         final gx = i % gw;
         final gy = i ~/ gw;
         for (var dy = -1; dy <= 1; dy++) {
           for (var dx = -1; dx <= 1; dx++) {
-            if (dx == 0 && dy == 0) {
-              continue;
-            }
             final x = gx + dx;
             final y = gy + dy;
             if (x < 0 || y < 0 || x >= gw || y >= gh) {
               continue;
             }
             final n = y * gw + x;
-            disp[n * 2] *= math.sqrt(scaleFactor);
-            disp[n * 2 + 1] *= math.sqrt(scaleFactor);
+            var sumX = 0.0;
+            var sumY = 0.0;
+            var count = 0;
+            for (var ny = -1; ny <= 1; ny++) {
+              for (var nx = -1; nx <= 1; nx++) {
+                final sx = x + nx;
+                final sy = y + ny;
+                if (sx < 0 || sy < 0 || sx >= gw || sy >= gh) {
+                  continue;
+                }
+                final s = sy * gw + sx;
+                sumX += disp[s * 2];
+                sumY += disp[s * 2 + 1];
+                count++;
+              }
+            }
+            if (count == 0) {
+              continue;
+            }
+            final avgX = sumX / count;
+            final avgY = sumY / count;
+            final isCore = dx == 0 && dy == 0;
+            final blend = isCore ? 0.75 : 0.45;
+            final shrink = isCore ? scaleFactor : math.sqrt(scaleFactor);
+            next[n * 2] =
+                (disp[n * 2] * (1 - blend) + avgX * blend) * shrink;
+            next[n * 2 + 1] =
+                (disp[n * 2 + 1] * (1 - blend) + avgY * blend) * shrink;
           }
         }
       }
+      for (var i = 0; i < disp.length; i++) {
+        disp[i] = next[i];
+      }
+
       remaining = countInversions(
         displacement: disp,
         mask: mask,
@@ -178,6 +214,12 @@ class AntiFoldingPass implements BodyReshapePass {
       );
     }
 
+    final referenceArea = cellW * cellH;
+    final minDet = math.max(
+      determinantEpsilon,
+      referenceArea * minJacobianRatio.clamp(0.0, 0.95),
+    );
+
     for (var gy = 0; gy < gridHeight - 1; gy++) {
       for (var gx = 0; gx < gridWidth - 1; gx++) {
         final p00 = warped(gx, gy);
@@ -187,8 +229,7 @@ class AntiFoldingPass implements BodyReshapePass {
         final ex = Offset(p10.dx - p00.dx, p10.dy - p00.dy);
         final ey = Offset(p01.dx - p00.dx, p01.dy - p00.dy);
         final det = ex.dx * ey.dy - ex.dy * ey.dx;
-        // Área do cell de referência ≈ cellW * cellH > 0.
-        if (det < determinantEpsilon) {
+        if (det < minDet) {
           flags[gy * gridWidth + gx] = true;
         }
       }

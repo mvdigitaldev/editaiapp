@@ -10,6 +10,7 @@ import '../filters/body/body_filter_pipeline.dart';
 import '../filters/face/face_filter_pipeline.dart';
 import '../filters/face/skin_filter_pipeline.dart';
 import '../l10n/beauty_engine_labels.dart';
+import '../models/beauty_image_loader.dart';
 import '../models/image_source.dart';
 import '../models/processing_pipeline.dart';
 import 'widgets/beauty_accessible_slider.dart';
@@ -50,9 +51,13 @@ class _FaceFiltersDemoPageState extends ConsumerState<FaceFiltersDemoPage> {
       return;
     }
     final bytes = await file.readAsBytes();
+    final normalized = await BeautyImageLoader.load(bytes);
+    if (!mounted) {
+      return;
+    }
     setState(() {
-      _imageBytes = bytes;
-      _previewBytes = bytes;
+      _imageBytes = normalized.bytes;
+      _previewBytes = normalized.bytes;
     });
     await _processPreview();
   }

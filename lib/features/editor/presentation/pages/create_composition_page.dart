@@ -92,7 +92,6 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
           'storage_paths': storagePaths,
           'width': size.width,
           'height': size.height,
-          'client_request_id': uuid.v4(),
         },
       );
 
@@ -130,6 +129,9 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      if (showStorageLimitFeedback(context, e)) {
+        return;
+      }
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
         if (statusCode == 402) {

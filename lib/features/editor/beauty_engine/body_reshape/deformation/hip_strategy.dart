@@ -71,7 +71,8 @@ class HipStrategy extends BodyRegionDeformationStrategy
       final bandSmooth = band * band * (3 - 2 * band);
 
       final t = ((point.dy - shoulderY) / span).clamp(0.0, 1.2);
-      final profile = ((t - 0.62).abs() < 0.18) ? 1.0 : 0.5;
+      // Hip region now starts at t≈0.72; peak a little lower for coverage.
+      final profile = ((t - 0.78).abs() < 0.2) ? 1.0 : 0.55;
 
       final outward = horizontalOutwardFromMidline(
         point: point,
@@ -90,7 +91,7 @@ class HipStrategy extends BodyRegionDeformationStrategy
           bandSmooth *
           profile *
           lateralWeight *
-          mesh.weights[i].clamp(0.0, 1.0);
+          softVertexWeight(mesh.weights[i]);
       accumulateDelta(
         deltas,
         i,

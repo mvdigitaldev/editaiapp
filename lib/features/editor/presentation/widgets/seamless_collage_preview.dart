@@ -60,6 +60,7 @@ class _SeamlessCollagePreviewState extends State<SeamlessCollagePreview> {
     return _pathsChanged(old.imagePaths) ||
         old.aspect.family != widget.aspect.family ||
         old.aspect.orientation != widget.aspect.orientation ||
+        old.aspect.stackDirection != widget.aspect.stackDirection ||
         old.fusionStrength != widget.fusionStrength;
   }
 

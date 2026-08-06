@@ -1,9 +1,67 @@
 PODS:
   - app_links (6.4.1):
     - Flutter
+  - BanubaDesignSystem (1.0.3)
+  - BanubaLicenseServicingSDK (1.53.1):
+    - BNBLicenseUtils (>= 1.53.0)
+  - BanubaPhotoEditorSDK (1.4.1):
+    - BanubaDesignSystem (>= 1.0.3)
+    - BanubaLicenseServicingSDK (>= 1.53.1)
+    - BanubaUtilities (>= 1.53.1)
+    - BNBBackground (~> 1.17.5)
+    - BNBEffectPlayer (~> 1.17.5)
+    - BNBEyes (~> 1.17.5)
+    - BNBHair (~> 1.17.5)
+    - BNBLips (~> 1.17.5)
+    - BNBMakeup (~> 1.17.5)
+    - BNBScripting (~> 1.17.5)
+    - BNBSdkApi (~> 1.17.5)
+    - BNBSdkCore (~> 1.17.5)
+    - BNBSkin (~> 1.17.5)
+  - BanubaUtilities (1.53.1):
+    - BanubaDesignSystem (>= 1.0.3)
   - beauty_mediapipe (0.1.0):
     - Flutter
     - MediaPipeTasksVision (= 0.10.21)
+  - BNBBackground (1.17.7):
+    - BNBEffectPlayer (= 1.17.7)
+    - BNBScripting (= 1.17.7)
+    - BNBSdkCore (= 1.17.7)
+  - BNBEffectPlayer (1.17.7)
+  - BNBEyes (1.17.7):
+    - BNBEffectPlayer (= 1.17.7)
+    - BNBFaceTracker (= 1.17.7)
+    - BNBScripting (= 1.17.7)
+    - BNBSdkCore (= 1.17.7)
+  - BNBFaceTracker (1.17.7):
+    - BNBEffectPlayer (= 1.17.7)
+    - BNBScripting (= 1.17.7)
+    - BNBSdkCore (= 1.17.7)
+  - BNBHair (1.17.7):
+    - BNBEffectPlayer (= 1.17.7)
+    - BNBScripting (= 1.17.7)
+    - BNBSdkCore (= 1.17.7)
+  - BNBLicenseUtils (1.53.1)
+  - BNBLips (1.17.7):
+    - BNBEffectPlayer (= 1.17.7)
+    - BNBFaceTracker (= 1.17.7)
+    - BNBScripting (= 1.17.7)
+    - BNBSdkCore (= 1.17.7)
+  - BNBMakeup (1.17.7):
+    - BNBEffectPlayer (= 1.17.7)
+    - BNBFaceTracker (= 1.17.7)
+    - BNBLips (= 1.17.7)
+    - BNBScripting (= 1.17.7)
+    - BNBSdkCore (= 1.17.7)
+    - BNBSkin (= 1.17.7)
+  - BNBScripting (1.17.7)
+  - BNBSdkApi (1.17.7):
+    - BNBSdkCore (= 1.17.7)
+  - BNBSdkCore (1.17.7)
+  - BNBSkin (1.17.7):
+    - BNBEffectPlayer (= 1.17.7)
+    - BNBScripting (= 1.17.7)
+    - BNBSdkCore (= 1.17.7)
   - CwlCatchException (2.2.1):
     - CwlCatchExceptionSupport (~> 2.2.1)
   - CwlCatchExceptionSupport (2.2.1)
@@ -128,6 +186,9 @@ PODS:
   - path_provider_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
+  - pe_sdk_flutter (0.6.0):
+    - BanubaPhotoEditorSDK (= 1.4.1)
+    - Flutter
   - PromisesObjC (2.4.1)
   - saver_gallery (0.0.1):
     - Flutter
@@ -156,6 +217,8 @@ PODS:
 
 DEPENDENCIES:
   - app_links (from `.symlinks/plugins/app_links/ios`)
+  - BanubaLicenseServicingSDK (= 1.53.1)
+  - BanubaUtilities (= 1.53.1)
   - beauty_mediapipe (from `.symlinks/plugins/beauty_mediapipe/ios`)
   - file_picker (from `.symlinks/plugins/file_picker/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
@@ -167,6 +230,7 @@ DEPENDENCIES:
   - image_cropper (from `.symlinks/plugins/image_cropper/ios`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
+  - pe_sdk_flutter (from `.symlinks/plugins/pe_sdk_flutter/ios`)
   - saver_gallery (from `.symlinks/plugins/saver_gallery/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
@@ -176,6 +240,24 @@ DEPENDENCIES:
   - webview_flutter_wkwebview (from `.symlinks/plugins/webview_flutter_wkwebview/darwin`)
 
 SPEC REPOS:
+  https://github.com/Banuba/specs.git:
+    - BanubaDesignSystem
+    - BanubaLicenseServicingSDK
+    - BanubaPhotoEditorSDK
+    - BanubaUtilities
+    - BNBLicenseUtils
+  https://github.com/sdk-banuba/banuba-sdk-podspecs.git:
+    - BNBBackground
+    - BNBEffectPlayer
+    - BNBEyes
+    - BNBFaceTracker
+    - BNBHair
+    - BNBLips
+    - BNBMakeup
+    - BNBScripting
+    - BNBSdkApi
+    - BNBSdkCore
+    - BNBSkin
   trunk:
     - CwlCatchException
     - CwlCatchExceptionSupport
@@ -223,6 +305,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/image_picker_ios/ios"
   path_provider_foundation:
     :path: ".symlinks/plugins/path_provider_foundation/darwin"
+  pe_sdk_flutter:
+    :path: ".symlinks/plugins/pe_sdk_flutter/ios"
   saver_gallery:
     :path: ".symlinks/plugins/saver_gallery/ios"
   share_plus:
@@ -240,7 +324,23 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   app_links: 3dbc685f76b1693c66a6d9dd1e9ab6f73d97dc0a
+  BanubaDesignSystem: c2cf257a256f2c03c5af4bf97a83935bb4ba956b
+  BanubaLicenseServicingSDK: a20271746d4ffa44d69173d005bbea021174bce4
+  BanubaPhotoEditorSDK: bcfaf1cf609103a39de5f07e78217ad1979522c1
+  BanubaUtilities: 633d3cc8f0d986f69af6baaa5cfbfac611c13278
   beauty_mediapipe: 01a5ea76fbef42d1206827270a496d22c9a2e113
+  BNBBackground: 1a20f411b5bbd59ad754d6cc47fb1486bae7651a
+  BNBEffectPlayer: 1c9ba42c55d31989b82e445d8c1b6b0bf33d5652
+  BNBEyes: 7f1d309b15b8f999eea1e0211b2fa6c22aa57640
+  BNBFaceTracker: dc143f12b1e0c19fda273f6675028a83aae5d5d2
+  BNBHair: 3a7283153ccdb326428a3c32e0f9ff5096ae4b2b
+  BNBLicenseUtils: 8fb45920b15985c7d2c76701a2e14f919936f18b
+  BNBLips: 898957ae1e960501a96b3c1b1d71d344797f5e09
+  BNBMakeup: b04c5be9198c8342dad9dc751176c7bb63d91278
+  BNBScripting: 157a37e96ef00f6e2e004e11832e180be60b2828
+  BNBSdkApi: 6e8a2f7eca6bc4f6a2b9c13097792264e1e85df8
+  BNBSdkCore: 97dfc7c28033fad51fff04befa453117a9e9d2f0
+  BNBSkin: 4a1ea3741a257c098d776cbfd6e879e9adbd14ef
   CwlCatchException: 7acc161b299a6de7f0a46a6ed741eae2c8b4d75a
   CwlCatchExceptionSupport: 54ccab8d8c78907b57f99717fb19d4cc3bce02dc
   DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
@@ -267,6 +367,7 @@ SPEC CHECKSUMS:
   MediaPipeTasksVision: 7b1c0f5a5820e87e9d96926f5e65d8cd3744fac2
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
+  pe_sdk_flutter: 23bd24860e3fb8fa94b9d2a945d9ce35600a0b28
   PromisesObjC: 752c3227f599e3467650e47ea36f433eeb10c273
   saver_gallery: af2d0c762dafda254e0ad025ef0dabd6506cd490
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
@@ -279,6 +380,6 @@ SPEC CHECKSUMS:
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
   webview_flutter_wkwebview: 8ebf4fded22593026f7dbff1fbff31ea98573c8d
 
-PODFILE CHECKSUM: 01885b1961c1da1e994b23d1d6633a6b91f1abdb
+PODFILE CHECKSUM: af85ed678ce6a421f99800abd494abc76511508d
 
 COCOAPODS: 1.17.0

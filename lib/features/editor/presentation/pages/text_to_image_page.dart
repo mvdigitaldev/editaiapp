@@ -53,7 +53,6 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
           'user_prompt': prompt,
           'width': size.width,
           'height': size.height,
-          'client_request_id': const Uuid().v4(),
         },
       );
 
@@ -101,6 +100,9 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      if (showStorageLimitFeedback(context, e)) {
+        return;
+      }
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
         if (statusCode == 402) {

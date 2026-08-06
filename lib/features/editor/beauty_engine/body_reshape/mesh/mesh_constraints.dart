@@ -25,9 +25,11 @@ class MeshConstraints {
   const MeshConstraints({
     this.maxDisplacementFraction = defaultMaxDisplacementFraction,
     this.minTriangleArea2 = 1e-4,
-    this.boundaryPinWeightThreshold = 0.08,
+    // Só pinar fundo verdadeiro — a silhueta (peso ~0.85+) precisa se mover.
+    this.boundaryPinWeightThreshold = 0.05,
     this.antiFoldIterations = 8,
-    this.laplacianBlend = 0.35,
+    // Blend alto achata o pico do delta na borda da silhueta (efeito invisível).
+    this.laplacianBlend = 0.2,
     this.laplacianPasses = 2,
   })  : assert(minTriangleArea2 >= 0),
         assert(boundaryPinWeightThreshold >= 0 &&
@@ -37,8 +39,8 @@ class MeshConstraints {
         assert(laplacianPasses >= 0);
 
   static const defaultMaxDisplacementFraction = <BodyRegion, double>{
-    BodyRegion.waist: 0.045,
-    BodyRegion.hip: 0.04,
+    BodyRegion.waist: 0.08,
+    BodyRegion.hip: 0.055,
     BodyRegion.chest: 0.035,
     BodyRegion.butt: 0.035,
     BodyRegion.torso: 0.03,

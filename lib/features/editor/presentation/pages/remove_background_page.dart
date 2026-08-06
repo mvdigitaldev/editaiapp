@@ -73,7 +73,6 @@ class _RemoveBackgroundPageState extends ConsumerState<RemoveBackgroundPage> {
         data: {
           'client_request_id': clientRequestId,
           'storage_path': storagePath,
-          'client_request_id': const Uuid().v4(),
         },
       );
 
@@ -112,6 +111,9 @@ class _RemoveBackgroundPageState extends ConsumerState<RemoveBackgroundPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      if (showStorageLimitFeedback(context, e)) {
+        return;
+      }
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
         if (statusCode == 402) {

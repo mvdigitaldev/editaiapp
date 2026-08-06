@@ -44,6 +44,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
     required this.onParamChanged,
     required this.onLinkEyesChanged,
     this.bodyWarpPlan,
+    this.bodyOnly = false,
   });
 
   final Map<String, double> params;
@@ -51,6 +52,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
   final bool linkEyes;
   final void Function(String key, double value) onParamChanged;
   final ValueChanged<bool> onLinkEyesChanged;
+  final bool bodyOnly;
 
   /// Último plano V2 — usado para hints de oclusão/confiança (Sprint 12).
   final WarpPlan? bodyWarpPlan;
@@ -136,13 +138,27 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
 }
 
 class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
-  BeautyAdjustmentCategory _category = BeautyAdjustmentCategory.rosto;
+  late BeautyAdjustmentCategory _category;
   String? _selectedKey;
 
+  List<BeautyAdjustmentCategoryDef> get _visibleCategories => widget.bodyOnly
+      ? BeautyAdjustmentsPanel.categories
+          .where((def) => def.category == BeautyAdjustmentCategory.corpo)
+          .toList(growable: false)
+      : BeautyAdjustmentsPanel.categories;
+
   BeautyAdjustmentCategoryDef get _activeCategoryDef =>
-      BeautyAdjustmentsPanel.categories.firstWhere(
+      _visibleCategories.firstWhere(
         (def) => def.category == _category,
       );
+
+  @override
+  void initState() {
+    super.initState();
+    _category = widget.bodyOnly
+        ? BeautyAdjustmentCategory.corpo
+        : BeautyAdjustmentCategory.rosto;
+  }
 
   String get _activeParamKey {
     final keys = _activeCategoryDef.parameterKeys;
@@ -171,9 +187,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: isDark
-            ? AppColors.backgroundDarkSecondary
-            : AppColors.surfaceLight,
+        color:
+            isDark ? AppColors.backgroundDarkSecondary : AppColors.surfaceLight,
         border: Border(
           top: BorderSide(
             color: isDark ? AppColors.borderDark : AppColors.border,
@@ -206,8 +221,7 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: limitationHint != null
                           ? theme.colorScheme.error
-                          : theme.colorScheme.onSurface
-                              .withValues(alpha: 0.55),
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.55),
                     ),
                   ),
                 ),
@@ -255,7 +269,7 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
               height: 72,
               child: Row(
                 children: [
-                  for (final def in BeautyAdjustmentsPanel.categories)
+                  for (final def in _visibleCategories)
                     Expanded(
                       child: _CategoryNavItem(
                         icon: def.icon,

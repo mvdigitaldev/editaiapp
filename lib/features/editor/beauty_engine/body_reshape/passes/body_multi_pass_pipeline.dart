@@ -72,7 +72,7 @@ class BodyMultiPassResult {
 
 /// Orquestra passes S10–S11.
 ///
-/// Ordem: BodyMeshWarp → LocalMls → AntiFolding → EdgeRefinement →
+/// Ordem: BodyMeshWarp → LocalMls → EdgeRefinement → AntiFolding →
 /// TpsRefinement → TextureStabilization → BackgroundCorrection.
 class BodyMultiPassPipeline {
   BodyMultiPassPipeline({
@@ -101,11 +101,13 @@ class BodyMultiPassPipeline {
   final TextureStabilizationPass _textureStabilization;
   final BackgroundCorrectionPass _backgroundCorrection;
 
+  /// EdgeRefinement roda antes do AntiFolding: ele reescreve deslocamento e
+  /// máscara, então checar injetividade antes dele deixava dobras passar.
   List<BodyReshapePass> get passes => [
         _bodyMeshWarp,
         _localMls,
-        _antiFolding,
         _edgeRefinement,
+        _antiFolding,
         _tpsRefinement,
         _textureStabilization,
         _backgroundCorrection,

@@ -77,7 +77,7 @@ class ButtStrategy extends BodyRegionDeformationStrategy
       final w = regionWeight *
           bandSmooth *
           (0.4 + 0.6 * lateral) *
-          mesh.weights[i].clamp(0.0, 1.0);
+          softVertexWeight(mesh.weights[i]);
       accumulateDelta(
         deltas,
         i,

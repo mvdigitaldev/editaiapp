@@ -80,7 +80,7 @@ class HeightStrategy extends BodyRegionDeformationStrategy
           i,
           0,
           targetY - point.dy,
-          weight * mesh.weights[i].clamp(0.0, 1.0),
+          weight * softVertexWeight(mesh.weights[i]),
         );
       } else {
         // Alongar pernas: só abaixo do quadril.
@@ -95,7 +95,7 @@ class HeightStrategy extends BodyRegionDeformationStrategy
           i,
           0,
           targetY - point.dy,
-          weight * mesh.weights[i].clamp(0.0, 1.0),
+          weight * softVertexWeight(mesh.weights[i]),
         );
       }
     }

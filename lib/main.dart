@@ -24,6 +24,8 @@ import 'features/auth/presentation/pages/reset_password_page.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/home/presentation/pages/manual_editing_hub_page.dart';
 import 'features/editor/manual_editor/presentation/pages/manual_editor_entry_page.dart';
+import 'features/editor/banuba_editor/presentation/banuba_beauty_editor_page.dart';
+import 'features/editor/banuba_editor/presentation/beauty_retouch_hub_page.dart';
 import 'features/editor/beauty_engine/presentation/beauty_editor_page.dart';
 import 'features/editor/beauty_engine/presentation/face_filters_demo_page.dart';
 import 'features/editor/beauty_engine/presentation/preset_creator_page.dart';
@@ -215,8 +217,14 @@ class MyApp extends ConsumerWidget {
         '/manual-editing-hub': (context) => const ManualEditingHubPage(),
         '/seamless-collage': (context) => const SeamlessCollagePage(),
         '/manual-editor': (context) => const ManualEditorEntryPage(),
-        '/beauty-editor': (context) =>
-            const BeautyEngineGate(child: BeautyEditorPage()),
+        '/beauty-editor': (context) => const BeautyRetouchHubPage(),
+        '/face-retouch': (context) => const BanubaBeautyEditorPage(),
+        '/face-retouch-lab': (context) => const BeautyEngineGate(
+              child: BeautyEditorPage(),
+            ),
+        '/body-reshape': (context) => const BeautyEngineGate(
+              child: BeautyEditorPage(bodyOnly: true),
+            ),
         '/beauty-preset-creator': (context) {
           final editId = ModalRoute.of(context)?.settings.arguments as String?;
           return BeautyEngineGate(

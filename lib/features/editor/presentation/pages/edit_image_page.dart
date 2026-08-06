@@ -117,6 +117,9 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      if (showStorageLimitFeedback(context, e)) {
+        return;
+      }
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
         if (statusCode == 402) {

@@ -39,6 +39,7 @@ import '../presets/lut_engine.dart';
 import '../presets/preset_file_service.dart';
 import '../presets/preset_sync_service.dart';
 import '../presets/preset_thumbnail_service.dart';
+import '../performance/beauty_benchmark_aggregator.dart';
 import '../performance/beauty_profiler.dart';
 import '../performance/shader_prewarm_service.dart';
 import '../performance/tiled_export_engine.dart';
@@ -235,6 +236,10 @@ final presetFileServiceProvider = Provider<PresetFileService>(
 
 final beautyProfilerProvider = Provider<BeautyProfiler>(
   (ref) => BeautyProfiler(),
+);
+
+final beautyBenchmarkProvider = Provider<BeautyBenchmarkAggregator>(
+  (ref) => BeautyBenchmarkAggregator(),
 );
 
 final shaderPrewarmServiceProvider = Provider<ShaderPrewarmService>(

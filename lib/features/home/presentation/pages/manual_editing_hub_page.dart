@@ -27,9 +27,8 @@ class ManualEditingHubPage extends ConsumerWidget {
               Text(
                 'Edição local no dispositivo',
                 style: AppTextStyles.headingSmall.copyWith(
-                  color: isDark
-                      ? Theme.of(context).colorScheme.onSurface
-                      : null,
+                  color:
+                      isDark ? Theme.of(context).colorScheme.onSurface : null,
                 ),
               ),
               const SizedBox(height: 8),
@@ -44,10 +43,8 @@ class ManualEditingHubPage extends ConsumerWidget {
                 index: 0,
                 icon: Icons.brush_outlined,
                 title: 'Editar manualmente',
-                description:
-                    'Filtros, ajustes e recorte — sem IA, grátis.',
-                onTap: () =>
-                    Navigator.of(context).pushNamed('/manual-editor'),
+                description: 'Filtros, ajustes e recorte — sem IA, grátis.',
+                onTap: () => Navigator.of(context).pushNamed('/manual-editor'),
               ),
               const SizedBox(height: 12),
               HeroActionCard(
@@ -59,6 +56,14 @@ class ManualEditingHubPage extends ConsumerWidget {
                 onTap: () =>
                     Navigator.of(context).pushNamed('/seamless-collage'),
               ),
+              const SizedBox(height: 12),
+              HeroActionCard(
+                index: 2,
+                icon: Icons.auto_fix_high,
+                title: 'Retoque beauty',
+                description: 'Ajustes de rosto, pele, maquiagem e corpo.',
+                onTap: () => Navigator.of(context).pushNamed('/beauty-editor'),
+              ),
               beautyEnabledAsync.when(
                 loading: () => const SizedBox.shrink(),
                 error: (_, __) => const SizedBox.shrink(),
@@ -66,16 +71,6 @@ class ManualEditingHubPage extends ConsumerWidget {
                   if (!enabled) return const SizedBox.shrink();
                   return Column(
                     children: [
-                      const SizedBox(height: 12),
-                      HeroActionCard(
-                        index: 2,
-                        icon: Icons.auto_fix_high,
-                        title: 'Retoque beauty',
-                        description:
-                            'Ajustes manuais de rosto, corpo e pele.',
-                        onTap: () => Navigator.of(context)
-                            .pushNamed('/beauty-editor'),
-                      ),
                       const SizedBox(height: 12),
                       HeroActionCard(
                         index: 3,

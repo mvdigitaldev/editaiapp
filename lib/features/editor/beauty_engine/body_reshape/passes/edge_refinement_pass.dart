@@ -9,18 +9,19 @@ import 'pass_profiler.dart';
 
 /// Refina máscara/deslocamento na borda do matte (anti-ghosting / silhueta).
 ///
-/// Suaviza o campo onde o matte está em transição e zera fora do corpo.
+/// Suaviza o campo na transição e atenua gradualmente na banda exterior —
+/// NÃO zera abruptamente fora do corpo (evita borda dupla ao afinar).
 class EdgeRefinementPass implements BodyReshapePass {
   const EdgeRefinementPass({
     this.edgeSoftness = 0.12,
-    this.exteriorKill = true,
+    this.preserveOuterBand = true,
   });
 
   /// Largura relativa da zona de feather na borda (0–1 do matte).
   final double edgeSoftness;
 
-  /// Fora do matte (alfa ≈ 0) força máscara zero.
-  final bool exteriorKill;
+  /// Mantém deslocamento na banda exterior (fundo vizinho).
+  final bool preserveOuterBand;
 
   @override
   String get id => 'edge_refinement';
@@ -71,14 +72,15 @@ class EdgeRefinementPass implements BodyReshapePass {
         final ny = gy / (gh - 1);
         final idx = gy * gw + gx;
 
-        final bodyAlpha = _sampleBodyAlpha(
+        final bodyWeight = _sampleBodyWeight(
           nx: nx,
           ny: ny,
           matte: matte,
           protectionMaps: protectionMaps,
         );
 
-        if (exteriorKill && bodyAlpha <= 0.001) {
+        // Fundo rígido (além da banda): zera.
+        if (bodyWeight <= 0.001) {
           if (outMask[idx] > 0) {
             refinedCells++;
           }
@@ -88,16 +90,17 @@ class EdgeRefinementPass implements BodyReshapePass {
           continue;
         }
 
-        // Na faixa de borda, atenua deslocamento e alinha máscara ao alfa.
+        // Na faixa de borda / banda exterior, alinha máscara ao peso.
         final soft = edgeSoftness.clamp(0.02, 0.5);
-        final edgeWeight = _edgeWeight(bodyAlpha, soft);
-        if (edgeWeight < 0.999) {
+        final edgeWeight = _edgeWeight(bodyWeight, soft);
+        final targetMask = math.min(outMask[idx], bodyWeight * edgeWeight);
+        if ((targetMask - outMask[idx]).abs() > 1e-4 || edgeWeight < 0.999) {
           outDisp[idx * 2] *= edgeWeight;
           outDisp[idx * 2 + 1] *= edgeWeight;
-          outMask[idx] = math.min(outMask[idx], bodyAlpha * edgeWeight);
+          outMask[idx] = targetMask;
           refinedCells++;
         } else {
-          outMask[idx] = math.min(outMask[idx], bodyAlpha);
+          outMask[idx] = math.min(outMask[idx], bodyWeight);
         }
       }
     }
@@ -113,7 +116,7 @@ class EdgeRefinementPass implements BodyReshapePass {
     );
   }
 
-  double _sampleBodyAlpha({
+  double _sampleBodyWeight({
     required double nx,
     required double ny,
     PersonMatte? matte,
@@ -123,22 +126,28 @@ class EdgeRefinementPass implements BodyReshapePass {
       return protectionMaps.sampleWarpWeight(nx, ny).clamp(0.0, 1.0);
     }
     if (matte != null && !matte.isEmpty) {
-      return matte.sampleNormalized(nx, ny).clamp(0.0, 1.0);
+      // Sem protection maps: matte binário + pequena banda soft no exterior.
+      final alpha = matte.sampleNormalized(nx, ny).clamp(0.0, 1.0);
+      if (alpha > 0.05 || !preserveOuterBand) {
+        return alpha;
+      }
+      return 0.0;
     }
     return 1.0;
   }
 
-  /// 1 no interior, cai para 0 na borda (alfa baixo).
+  /// 1 no interior, cai para 0 só na borda real (alfa baixo).
+  ///
+  /// Antes decaía linearmente por todo o corpo (0.35 no meio), o que somado ao
+  /// `edgeScale²` do shader deixava o warp interno quase imperceptível.
   double _edgeWeight(double alpha, double softness) {
-    final soft = softness <= 1e-6 ? 1e-6 : softness;
-    if (alpha >= 1.0 - soft) {
+    final soft = softness.clamp(1e-6, 0.5);
+    final knee = soft * 2;
+    if (alpha >= knee) {
       return 1.0;
     }
-    if (alpha <= soft) {
-      return (alpha / soft).clamp(0.0, 1.0);
-    }
-    final t = ((alpha - soft) / (1.0 - 2 * soft)).clamp(0.0, 1.0);
-    return 0.35 + 0.65 * t;
+    final t = (alpha / knee).clamp(0.0, 1.0);
+    return t * t * (3 - 2 * t);
   }
 
   Float32List _smoothMask(Float32List mask, int gw, int gh) {

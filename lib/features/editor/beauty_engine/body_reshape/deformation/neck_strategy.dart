@@ -80,7 +80,7 @@ class NeckStrategy extends BodyRegionDeformationStrategy
       final w = regionWeight *
           falloff *
           profile *
-          mesh.weights[i].clamp(0.0, 1.0);
+          softVertexWeight(mesh.weights[i]);
       accumulateDelta(
         deltas,
         i,

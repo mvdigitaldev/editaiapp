@@ -73,7 +73,7 @@ class ShoulderStrategy extends BodyRegionDeformationStrategy
       }
 
       final dir = expand ? 1.0 : -1.0;
-      final w = regionWeight * bandSmooth * mesh.weights[i].clamp(0.0, 1.0);
+      final w = regionWeight * bandSmooth * softVertexWeight(mesh.weights[i]);
       accumulateDelta(
         deltas,
         i,

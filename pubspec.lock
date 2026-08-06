@@ -1071,6 +1071,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.0"
+  pe_sdk_flutter:
+    dependency: "direct main"
+    description:
+      path: "packages/pe_sdk_flutter"
+      relative: true
+    source: path
+    version: "0.6.0"
   petitparser:
     dependency: transitive
     description:

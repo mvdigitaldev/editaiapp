@@ -110,7 +110,6 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
           'width': result.width,
           'height': result.height,
           'access_token': accessToken,
-          'client_request_id': const Uuid().v4(),
         },
       );
 
@@ -150,6 +149,9 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      if (showStorageLimitFeedback(context, e)) {
+        return;
+      }
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
         final errMsg = e.response?.data is Map &&

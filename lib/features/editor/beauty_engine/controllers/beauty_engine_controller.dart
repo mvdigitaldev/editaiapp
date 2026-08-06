@@ -1,12 +1,15 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
+import '../body_reshape/maps/matte_preprocessor.dart';
+import '../body_reshape/maps/person_mask_bridge.dart';
 import '../body_reshape/models/body_frame_assets.dart';
 import '../body_reshape/models/body_reshape_request.dart';
 import '../body_reshape/models/legacy_body_parameter_adapter.dart';
 import '../body_reshape/models/warp_plan.dart';
 import '../body_reshape/occlusion/conservative_occlusion_provider.dart';
 import '../body_reshape/occlusion/occlusion_engine.dart';
+import '../body_reshape/passes/anti_folding_pass.dart';
 import '../body_reshape/providers/body_vision_coordinator.dart';
 import '../body_reshape/providers/mediapipe_body_joint_mapper.dart';
 import '../body_reshape/providers/vision_capabilities.dart';
@@ -60,6 +63,10 @@ class BeautyEngineController {
 
   final MediaPipeBodyJointMapper _poseJointMapper =
       const MediaPipeBodyJointMapper();
+  final MattePreprocessor _mattePreprocessor = const MattePreprocessor();
+
+  /// Campo de pincel manual acumulado (coordenadas normalizadas → grade).
+  WarpField? manualBrushField;
 
   BeautyEngineController({
     required this.faceDetector,
@@ -257,17 +264,57 @@ class BeautyEngineController {
   }
 
   /// Assets a partir da pose (rápido) ou do coordinator (matte/oclusão).
+  ///
+  /// Quando [personMask] está disponível, anexa [PersonMatte] e (se possível)
+  /// oclusão conservadora — necessário para o path V2 guiado por contorno.
   BodyFrameAssets? resolveBodyFrameAssets({
     required PoseResult? pose,
     ImageSource? source,
+    PersonMask? personMask,
+    Size? imageSize,
   }) {
+    BodyFrameAssets? assets;
     if (pose != null) {
-      final fromPose = _poseJointMapper.fromPoseResult(pose);
-      if (fromPose != null) {
-        return fromPose;
+      assets = _poseJointMapper.fromPoseResult(pose);
+    }
+    if (assets == null) {
+      return null;
+    }
+
+    final size = imageSize ??
+        (source != null
+            ? Size(source.width.toDouble(), source.height.toDouble())
+            : null);
+
+    if (personMask != null &&
+        personMask.width > 0 &&
+        personMask.height > 0 &&
+        (assets.personMatte == null || assets.personMatte!.isEmpty)) {
+      assets = assets.copyWith(
+        personMatte: personMask.toPersonMatte(),
+        capabilities: assets.capabilities.merge(
+          const VisionCapabilities(personMatte: true),
+        ),
+      );
+    }
+
+    if (size != null &&
+        (assets.occlusionMap == null || assets.occlusionMap!.isEmpty)) {
+      final inferred = conservativeOcclusionProvider.inferFromAssets(
+        assets,
+        imageSize: size,
+      );
+      if (inferred != null) {
+        assets = assets.copyWith(
+          occlusionMap: inferred.map,
+          capabilities: assets.capabilities.merge(
+            const VisionCapabilities(occlusionMap: true),
+          ),
+        );
       }
     }
-    return null;
+
+    return assets;
   }
 
   WarpField? composeBodyField({
@@ -279,24 +326,84 @@ class BeautyEngineController {
     BodyFrameAssets? assets,
     BodyMultiPassConfig? multiPassConfig,
   }) {
+    // O pincel manual é independente dos sliders: sem este bypass, um traço
+    // sozinho nunca chegava ao render.
+    final brushField = manualBrushField;
+    final hasBrush = brushField != null && !brushField.isIdentity;
+
     if (pose == null || !bodyFilterPipeline.hasActiveBodyWarp(parameters)) {
-      return null;
+      return hasBrush ? _guardField(brushField) : null;
     }
     if (!bodyFilterPipeline.canApply(pose, parameters)) {
-      return null;
+      return hasBrush ? _guardField(brushField) : null;
     }
 
     var config = multiPassConfig ?? bodyMultiPassConfig;
-    final frameAssets =
-        assets ?? resolveBodyFrameAssets(pose: pose);
-    if (LegacyBodyParameterAdapter.requiresV2Mesh(parameters) &&
-        !config.bodyMeshWarp) {
+    var frameAssets = assets ??
+        resolveBodyFrameAssets(
+          pose: pose,
+          personMask: personMask,
+          imageSize: imageSize,
+        );
+
+    // Garante matte/oclusão mesmo quando o caller passou assets só da pose.
+    if (frameAssets != null &&
+        personMask != null &&
+        (frameAssets.personMatte == null || frameAssets.personMatte!.isEmpty)) {
+      frameAssets = frameAssets.copyWith(
+        personMatte: personMask.toPersonMatte(),
+        capabilities: frameAssets.capabilities.merge(
+          const VisionCapabilities(personMatte: true),
+        ),
+      );
+    }
+    if (frameAssets != null &&
+        (frameAssets.occlusionMap == null ||
+            frameAssets.occlusionMap!.isEmpty)) {
+      final inferred = conservativeOcclusionProvider.inferFromAssets(
+        frameAssets,
+        imageSize: imageSize,
+      );
+      if (inferred != null) {
+        frameAssets = frameAssets.copyWith(
+          occlusionMap: inferred.map,
+          capabilities: frameAssets.capabilities.merge(
+            const VisionCapabilities(occlusionMap: true),
+          ),
+        );
+      }
+    }
+
+    final hasUsableMatte = frameAssets?.personMatte != null &&
+        !(frameAssets!.personMatte!.isEmpty);
+    // Com matte: todos os controles de corpo vão para a malha (caminho único).
+    // Sem matte: V2 só para keys exclusivas; demais ficam no MLS legado.
+    final wantsMesh = hasUsableMatte
+        ? bodyFilterPipeline.hasActiveBodyWarp(parameters)
+        : LegacyBodyParameterAdapter.requiresV2Mesh(parameters);
+    if (wantsMesh && !config.bodyMeshWarp) {
       config = config.copyWith(
         bodyMeshWarp: true,
         antiFolding: true,
+        edgeRefinement: hasUsableMatte,
+      );
+    } else if (config.bodyMeshWarp && hasUsableMatte && !config.edgeRefinement) {
+      config = config.copyWith(edgeRefinement: true);
+    }
+
+    // Fallback seguro: máscara fraca / corpo parcial → path legado.
+    if (frameAssets != null &&
+        config.bodyMeshWarp &&
+        _shouldPreferLegacyBodyPath(frameAssets)) {
+      config = config.copyWith(
+        bodyMeshWarp: false,
+        localMls: false,
+        edgeRefinement: false,
+        antiFolding: false,
       );
     }
 
+    WarpField? autoField;
     if ((config.bodyMeshWarp || config.localMls) && frameAssets != null) {
       final v2 = composeBodyMultiPassField(
         assets: frameAssets,
@@ -306,7 +413,7 @@ class BeautyEngineController {
         config: config,
       );
       if (v2 != null && !v2.isIdentity) {
-        return v2;
+        autoField = v2;
       }
     } else if (frameAssets != null) {
       // Mantém plano atualizado para hints da UI mesmo no path legado.
@@ -318,40 +425,75 @@ class BeautyEngineController {
       );
     }
 
-    final bodyMesh = meshEngine.buildBodyMesh(pose, imageSize);
-    var field = bodyFilterPipeline.compose(
-      mesh: bodyMesh,
-      pose: pose,
-      imageSize: imageSize,
-      parameters: parameters,
-      interactive: interactive,
-      personMask: personMask,
-    );
+    if (autoField == null) {
+      final bodyMesh = meshEngine.buildBodyMesh(pose, imageSize);
+      var legacy = bodyFilterPipeline.compose(
+        mesh: bodyMesh,
+        pose: pose,
+        imageSize: imageSize,
+        parameters: parameters,
+        interactive: interactive,
+        personMask: personMask,
+      );
 
-    // Pós-processamento V2 parcial sobre o campo legado (anti-fold / edge).
-    if (config.antiFolding || config.edgeRefinement) {
-      final partial = BodyMultiPassConfig(
-        bodyMeshWarp: false,
-        localMls: false,
-        antiFolding: config.antiFolding,
-        edgeRefinement: config.edgeRefinement,
-        profilePasses: config.profilePasses,
-      );
-      final result = warpEngine.composeBodyMultiPass(
-        BodyMultiPassInput(
-          imageSize: imageSize,
-          config: partial,
-          seedField: field,
-          assets: assets,
-        ),
-      );
-      if (result != null) {
-        lastBodyMultiPassResult = result;
-        field = result.field;
+      // Pós-processamento V2 parcial sobre o campo legado (anti-fold / edge).
+      if (config.antiFolding || config.edgeRefinement) {
+        final partial = BodyMultiPassConfig(
+          bodyMeshWarp: false,
+          localMls: false,
+          antiFolding: config.antiFolding,
+          edgeRefinement: config.edgeRefinement,
+          profilePasses: config.profilePasses,
+        );
+        final result = warpEngine.composeBodyMultiPass(
+          BodyMultiPassInput(
+            imageSize: imageSize,
+            config: partial,
+            seedField: legacy,
+            assets: frameAssets,
+          ),
+        );
+        if (result != null) {
+          lastBodyMultiPassResult = result;
+          legacy = result.field;
+        }
       }
+      autoField = legacy;
     }
 
-    return field;
+    // Compõe pincel manual (se houver) após o campo automático.
+    if (hasBrush) {
+      if (autoField.isIdentity) {
+        return _guardField(brushField);
+      }
+      return _guardField(WarpField.composeSequential(autoField, brushField));
+    }
+
+    return _guardField(autoField);
+  }
+
+  /// Rede de segurança final: remove dobras/compressão extrema do campo.
+  ///
+  /// Vale para qualquer caminho (V2, legado ou pincel) — é o que evita o
+  /// "redemoinho" de pixels quando o deslocamento fica agressivo.
+  WarpField _guardField(WarpField field) {
+    if (field.isIdentity) {
+      return field;
+    }
+    return const AntiFoldingPass().resolve(field).field;
+  }
+
+  /// Preferir path legado quando evidência de silhueta/confiança é insuficiente.
+  bool _shouldPreferLegacyBodyPath(BodyFrameAssets assets) {
+    final matte = assets.personMatte;
+    final hasMatte = matte != null && !matte.isEmpty;
+    // Com matte, o caminho V2 é sempre preferível: o MLS legado é o que produz
+    // fantasma/redemoinho. Confiança baixa já reduz amplitude via safetyScale.
+    if (hasMatte) {
+      return false;
+    }
+    // Sem matte e pose parcial: V2 cápsula óssea costuma amassar fundo.
+    return assets.isPartial;
   }
 
   /// Executa o pipeline multi-passe V2 a partir de assets + plano semântico.
@@ -386,6 +528,15 @@ class BeautyEngineController {
       qualityProfile: quality,
     );
 
+    // Protection maps com banda exterior (fecha gap ao afinar).
+    final matte = assets.personMatte;
+    final protection = matte == null || matte.isEmpty
+        ? null
+        : _mattePreprocessor.buildProtectionMaps(
+            matte,
+            imageSize: imageSize,
+          );
+
     final result = warpEngine.composeBodyMultiPass(
       BodyMultiPassInput(
         imageSize: imageSize,
@@ -393,6 +544,7 @@ class BeautyEngineController {
         sourceMesh: adaptive,
         assets: assets,
         plan: plan,
+        protectionMaps: protection,
       ),
     );
     lastBodyMultiPassResult = result;
@@ -486,7 +638,11 @@ class BeautyEngineController {
     );
 
     final bodyAssets = bodyFilterPipeline.hasActiveBodyWarp(params)
-        ? resolveBodyFrameAssets(pose: pose)
+        ? resolveBodyFrameAssets(
+            pose: pose,
+            personMask: personMask,
+            imageSize: imageSize,
+          )
         : null;
     final bodyField = composeBodyField(
       pose: pose,

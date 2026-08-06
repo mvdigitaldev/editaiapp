@@ -10,6 +10,10 @@ import {
 } from "../_shared/credits.ts";
 import { triggerBflInitWorker } from "../_shared/bfl_init_invoke.ts";
 import {
+  getPhotoStorageStatus,
+  storageLimitPayload,
+} from "../_shared/plan_limits.ts";
+import {
   EDIT_PROMPT_OPTIMIZER_SYSTEM,
   INTENT_CLASSIFIER_SYSTEM_SINGLE,
   MINIMAL_EDIT_PROMPT_SYSTEM,
@@ -216,6 +220,13 @@ Deno.serve(async (req) => {
     }
 
     await enforceBflUserJobLimit(supabase, userId);
+
+    const storage = await getPhotoStorageStatus(supabase, userId, {
+      countPending: true,
+    });
+    if (!storage.ok) {
+      return jsonResponse(storageLimitPayload(storage), 403);
+    }
 
     const { improvedPrompt, intent, avgSimilarity, matchedIds } = await optimizePrompt(
       user_prompt.trim(),

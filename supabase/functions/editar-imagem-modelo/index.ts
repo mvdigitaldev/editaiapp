@@ -10,6 +10,10 @@ import {
 } from "../_shared/credits.ts";
 import { triggerBflInitWorker } from "../_shared/bfl_init_invoke.ts";
 import {
+  getPhotoStorageStatus,
+  storageLimitPayload,
+} from "../_shared/plan_limits.ts";
+import {
   IMAGE_CONTEXT_VISION_PROMPT,
   ensureSubjectPreservation,
 } from "../_shared/flux_prompt_optimizer.ts";
@@ -161,6 +165,13 @@ Deno.serve(async (req) => {
     }
 
     await enforceBflUserJobLimit(supabase, userId);
+
+    const storage = await getPhotoStorageStatus(supabase, userId, {
+      countPending: true,
+    });
+    if (!storage.ok) {
+      return jsonResponse(storageLimitPayload(storage), 403);
+    }
 
     const { data: bytes, error: downloadErr } = await supabase.storage
       .from(EDIT_INPUTS_BUCKET)

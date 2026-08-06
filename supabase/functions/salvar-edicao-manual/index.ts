@@ -3,6 +3,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
   getExpirationDays,
   getPhotoStorageStatus,
+  storageLimitPayload,
 } from "../_shared/plan_limits.ts";
 
 const BUCKET_NAME = "flux-imagens";
@@ -121,15 +122,7 @@ Deno.serve(async (req) => {
 
     const storage = await getPhotoStorageStatus(supabase, userId);
     if (!storage.ok) {
-      return jsonResponse(
-        {
-          error: "Limite de armazenamento atingido",
-          code: "storage_limit_reached",
-          max_photos: storage.maxPhotos,
-          stored_photos_count: storage.storedCount,
-        },
-        403,
-      );
+      return jsonResponse(storageLimitPayload(storage), 403);
     }
 
     const editedBytes = decodeBase64(imageBase64);

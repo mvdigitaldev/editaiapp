@@ -6,6 +6,10 @@ import {
   releaseReservedCredits,
 } from "../_shared/credits.ts";
 import { registerFluxTask } from "../_shared/flux_tasks.ts";
+import {
+  getPhotoStorageStatus,
+  storageLimitPayload,
+} from "../_shared/plan_limits.ts";
 
 const FAL_API_URL = "https://fal.run/fal-ai/birefnet";
 const BUCKET_NAME = "flux-imagens";
@@ -90,6 +94,13 @@ Deno.serve(async (req) => {
 
     if (!storage_path.startsWith(`${userId}/`)) {
       return jsonResponse({ success: false, error: "Path inválido: não pertence ao usuário" }, 403);
+    }
+
+    const storage = await getPhotoStorageStatus(supabase, userId, {
+      countPending: true,
+    });
+    if (!storage.ok) {
+      return jsonResponse(storageLimitPayload(storage), 403);
     }
 
     const { data: bytes, error: downloadErr } = await supabase.storage

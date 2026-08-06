@@ -33,7 +33,7 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
       _imagePaths.length >= SeamlessBlendEngine.minPhotos && !_isExporting;
 
   String get _previewKey =>
-      '$_collageRevision|${_aspect.family}|${_aspect.orientation}|${_imagePaths.join('\u0001')}';
+      '$_collageRevision|${_aspect.family}|${_aspect.orientation}|${_aspect.stackDirection}|${_imagePaths.join('\u0001')}';
 
   SeamlessBlendConfig get _config => SeamlessBlendConfig(
         aspect: _aspect,

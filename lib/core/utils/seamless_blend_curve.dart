@@ -7,43 +7,70 @@ enum CollageAspectFamily {
   square,
 }
 
-/// Orientação (ignorada para quadrado).
+/// Orientação do canvas (ignorada para quadrado). Independente da montagem.
 enum CollageOrientation {
   landscape,
   portrait,
 }
 
-/// Preset completo: proporção + orientação → ratio e eixo de empilhamento.
+/// Direção da montagem (empilhamento das fotos), independente da proporção.
+enum CollageStackDirection {
+  /// Fotos uma em cima da outra (cima → baixo).
+  vertical,
+
+  /// Fotos lado a lado (esquerda → direita).
+  horizontal,
+}
+
+/// Preset: proporção do canvas + orientação + direção da montagem.
 class CollageAspectPreset {
   const CollageAspectPreset({
     required this.family,
     this.orientation = CollageOrientation.portrait,
+    this.stackDirection = CollageStackDirection.vertical,
   });
 
   final CollageAspectFamily family;
   final CollageOrientation orientation;
+  final CollageStackDirection stackDirection;
 
   static const square = CollageAspectPreset(family: CollageAspectFamily.square);
 
   static const ratio16x9Portrait = CollageAspectPreset(
     family: CollageAspectFamily.ratio16x9,
     orientation: CollageOrientation.portrait,
+    stackDirection: CollageStackDirection.vertical,
   );
 
   static const ratio16x9Landscape = CollageAspectPreset(
     family: CollageAspectFamily.ratio16x9,
     orientation: CollageOrientation.landscape,
+    stackDirection: CollageStackDirection.horizontal,
   );
 
   static const ratio4x3Portrait = CollageAspectPreset(
     family: CollageAspectFamily.ratio4x3,
     orientation: CollageOrientation.portrait,
+    stackDirection: CollageStackDirection.vertical,
   );
 
   static const ratio4x3Landscape = CollageAspectPreset(
     family: CollageAspectFamily.ratio4x3,
     orientation: CollageOrientation.landscape,
+    stackDirection: CollageStackDirection.horizontal,
   );
+
+  CollageAspectPreset copyWith({
+    CollageAspectFamily? family,
+    CollageOrientation? orientation,
+    CollageStackDirection? stackDirection,
+  }) {
+    return CollageAspectPreset(
+      family: family ?? this.family,
+      orientation: orientation ?? this.orientation,
+      stackDirection: stackDirection ?? this.stackDirection,
+    );
+  }
 
   /// Largura / altura do canvas.
   double get widthOverHeight {
@@ -57,10 +84,9 @@ class CollageAspectPreset {
     }
   }
 
-  /// Landscape → empilha na horizontal; portrait/square → vertical.
+  /// Empilha na horizontal (lado a lado).
   bool get isHorizontalStack =>
-      family != CollageAspectFamily.square &&
-      orientation == CollageOrientation.landscape;
+      stackDirection == CollageStackDirection.horizontal;
 
   /// Dimensões do canvas com maior lado = [maxEdge].
   ({int width, int height}) canvasSize(int maxEdge) {

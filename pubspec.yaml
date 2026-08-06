@@ -1,7 +1,7 @@
 name: editaiapp
 description: App nativo de edição de fotos com IA
 publish_to: 'none'
-version: 1.0.7+8
+version: 1.0.8+9
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -72,6 +72,10 @@ dependencies:
     path: packages/beauty_mediapipe
   pro_image_editor: 11.3.0
   flutter_image_filters: 0.0.28
+  # Fork local do plugin oficial: apenas o pin do pod iOS muda (1.4.0 -> 1.4.1),
+  # porque a 1.4.0 publicada não linka com o BanubaDesignSystem disponível.
+  pe_sdk_flutter:
+    path: packages/pe_sdk_flutter
 
 dev_dependencies:
   flutter_test:

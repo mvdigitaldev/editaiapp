@@ -87,7 +87,7 @@ class LimbSlimStrategy extends BodyRegionDeformationStrategy
         continue;
       }
 
-      final w = bestFalloff * mesh.weights[i].clamp(0.0, 1.0);
+      final w = bestFalloff * softVertexWeight(mesh.weights[i]);
       accumulateDelta(
         deltas,
         i,

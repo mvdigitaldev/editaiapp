@@ -9,7 +9,6 @@ import '../models/body_frame_assets.dart';
 import '../models/body_joint.dart';
 import '../models/body_region.dart';
 import '../models/body_reshape_request.dart';
-import '../models/person_matte.dart';
 import 'adaptive_body_mesh.dart';
 import 'constrained_triangulator.dart';
 import 'mesh_resolution_profile.dart';
@@ -26,8 +25,8 @@ class AdaptiveMeshGenerator {
 
   /// Multiplicadores < 1 → mais densidade (células menores).
   static const regionDensityFactors = <BodyRegion, double>{
-    BodyRegion.waist: 0.42,
-    BodyRegion.hip: 0.45,
+    BodyRegion.waist: 0.5,
+    BodyRegion.hip: 0.52,
     BodyRegion.chest: 0.48,
     BodyRegion.butt: 0.48,
     BodyRegion.leftArm: 0.50,
@@ -337,6 +336,50 @@ class AdaptiveMeshGenerator {
         ),
     ];
 
+    final leftShoulder = px(BodyJoint.leftShoulder);
+    final rightShoulder = px(BodyJoint.rightShoulder);
+    final leftHip = px(BodyJoint.leftHip);
+    final rightHip = px(BodyJoint.rightHip);
+
+    // Torso primeiro: braços colados ao corpo não podem "roubar" a cintura —
+    // isso zerava o slim no lado do braço próximo.
+    if (leftShoulder != null &&
+        rightShoulder != null &&
+        leftHip != null &&
+        rightHip != null &&
+        _isInsideTorsoQuad(
+          point,
+          leftShoulder,
+          rightShoulder,
+          rightHip,
+          leftHip,
+        )) {
+      final shoulderY = (leftShoulder.dy + rightShoulder.dy) * 0.5;
+      final hipY = (leftHip.dy + rightHip.dy) * 0.5;
+      final span = math.max(hipY - shoulderY, 1.0);
+      final t = ((point.dy - shoulderY) / span).clamp(0.0, 1.0);
+
+      if (point.dy < shoulderY - span * 0.12) {
+        return BodyRegion.neck;
+      }
+      if (t < 0.18) {
+        return BodyRegion.shoulders;
+      }
+      if (t < 0.38) {
+        return BodyRegion.chest;
+      }
+      if (t < 0.72) {
+        return BodyRegion.waist;
+      }
+      if (t < 0.85) {
+        return BodyRegion.hip;
+      }
+      if (t < 0.95) {
+        return BodyRegion.butt;
+      }
+      return BodyRegion.torso;
+    }
+
     final limbThreshold = math.min(imageSize.width, imageSize.height) * 0.06;
     var bestRegion = BodyRegion.torso;
     var bestDist = double.infinity;
@@ -351,10 +394,6 @@ class AdaptiveMeshGenerator {
       return bestRegion;
     }
 
-    final leftShoulder = px(BodyJoint.leftShoulder);
-    final rightShoulder = px(BodyJoint.rightShoulder);
-    final leftHip = px(BodyJoint.leftHip);
-    final rightHip = px(BodyJoint.rightHip);
     if (leftShoulder == null ||
         rightShoulder == null ||
         leftHip == null ||
@@ -376,16 +415,44 @@ class AdaptiveMeshGenerator {
     if (t < 0.38) {
       return BodyRegion.chest;
     }
-    if (t < 0.58) {
+    if (t < 0.72) {
       return BodyRegion.waist;
     }
-    if (t < 0.78) {
+    if (t < 0.85) {
       return BodyRegion.hip;
     }
-    if (t < 0.92) {
+    if (t < 0.95) {
       return BodyRegion.butt;
     }
     return BodyRegion.torso;
+  }
+
+  /// Ponto dentro do quadrilátero ombroE–ombroD–quadrilD–quadrilE (com folga).
+  bool _isInsideTorsoQuad(
+    Offset point,
+    Offset leftShoulder,
+    Offset rightShoulder,
+    Offset rightHip,
+    Offset leftHip,
+  ) {
+    final midShoulderX = (leftShoulder.dx + rightShoulder.dx) * 0.5;
+    final midHipX = (leftHip.dx + rightHip.dx) * 0.5;
+    // Folga larga: landmarks são internos à silhueta — sem isso a borda do
+    // matte cai em "braço" e o slim some num dos lados.
+    final shoulderHalf =
+        (rightShoulder.dx - leftShoulder.dx).abs() * 0.5 * 1.55;
+    final hipHalf = (rightHip.dx - leftHip.dx).abs() * 0.5 * 1.85;
+    final top = math.min(leftShoulder.dy, rightShoulder.dy) -
+        (rightShoulder.dy - leftHip.dy).abs() * 0.05;
+    final bottom = math.max(leftHip.dy, rightHip.dy) +
+        (rightShoulder.dy - leftHip.dy).abs() * 0.08;
+    if (point.dy < top || point.dy > bottom) {
+      return false;
+    }
+    final t = ((point.dy - top) / math.max(bottom - top, 1.0)).clamp(0.0, 1.0);
+    final half = shoulderHalf + (hipHalf - shoulderHalf) * t;
+    final midX = midShoulderX + (midHipX - midShoulderX) * t;
+    return (point.dx - midX).abs() <= half;
   }
 
   BodyRegion _majorityRegion(Int32List codes, int a, int b, int c) {
