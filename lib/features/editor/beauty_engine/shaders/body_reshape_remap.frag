@@ -28,11 +28,9 @@ void main() {
   float mask = texture(uMaskMap, uv).r;
   float influence = texture(uInfluenceMap, uv).r;
   float protection = texture(uProtectionMap, uv).r;
-  // Igual ao WarpCpuRemap: suaviza o pull na transição da máscara sem
-  // misturar cor original e cor deformada.
-  float edgeScale = clamp(mask / 0.88, 0.0, 1.0);
-  float effectiveMask = mask * influence * (1.0 - protection)
-      * edgeScale * edgeScale;
+  // Suaviza transição da máscara sem degrau brusco (menos blockiness nas bordas).
+  float edgeScale = smoothstep(0.0, 1.0, clamp(mask / 0.94, 0.0, 1.0));
+  float effectiveMask = mask * influence * (1.0 - protection) * edgeScale;
 
   if (effectiveMask <= 0.001) {
     vec2 identityLocal = local / uTileSize;

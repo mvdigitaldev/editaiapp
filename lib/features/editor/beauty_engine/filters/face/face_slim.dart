@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import '../../models/mesh_region.dart';
@@ -27,7 +28,10 @@ class FaceSlimFilter extends FaceWarpFilter {
     }
 
     final points = FaceWarpUtils.anchorPoints(context.mesh);
-    final maxShift = context.imageSize.width * 0.12 * intensity;
+    final maxShift = context.imageSize.width * 0.125 * intensity;
+    final centerX = context.centerX;
+    final fseProxy = math.min(context.imageSize.width, context.imageSize.height) *
+        0.42;
 
     for (final region in [MeshRegion.jawLeft, MeshRegion.jawRight]) {
       for (final index in FaceWarpUtils.regionIndices(region)) {
@@ -35,9 +39,13 @@ class FaceSlimFilter extends FaceWarpFilter {
         if (source == null) {
           continue;
         }
-        final towardCenter = context.centerX - source.dx;
-        final ratio = towardCenter.abs() / (context.imageSize.width * 0.5);
-        final shift = towardCenter.sign * maxShift * ratio;
+        final towardCenter = centerX - source.dx;
+        final lateral = (source.dx - centerX).abs();
+        final halfFace = fseProxy * 0.48;
+        final edgeWeight = halfFace <= 1e-6
+            ? 1.0
+            : math.pow((lateral / halfFace).clamp(0.0, 1.0), 0.75).toDouble();
+        final shift = towardCenter.sign * maxShift * edgeWeight;
         points.add(
           ControlPoint(
             source: source,

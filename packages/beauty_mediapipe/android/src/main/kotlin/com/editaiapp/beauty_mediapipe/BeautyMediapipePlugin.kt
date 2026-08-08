@@ -8,22 +8,29 @@ import io.flutter.plugin.common.MethodChannel.Result
 
 class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
     private lateinit var channel: MethodChannel
+    private var applicationContext: android.content.Context? = null
     private var faceBridge: FaceLandmarkerBridge? = null
     private var poseBridge: PoseLandmarkerBridge? = null
     private var segmenterBridge: ImageSegmenterBridge? = null
     private var exportBackend: BodyReshapeVulkanBackend? = null
+    private var skinBackend: SkinRetouchBackend? = null
+    private var faceMeshBackend: FaceMeshGlesBackend? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        applicationContext = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, CHANNEL_NAME)
         channel.setMethodCallHandler(this)
         faceBridge = FaceLandmarkerBridge(binding.applicationContext)
         poseBridge = PoseLandmarkerBridge(binding.applicationContext)
         segmenterBridge = ImageSegmenterBridge(binding.applicationContext)
         exportBackend = BodyReshapeVulkanBackend()
+        skinBackend = SkinRetouchBackend()
+        faceMeshBackend = FaceMeshGlesBackend()
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        applicationContext = null
         faceBridge?.dispose()
         faceBridge = null
         poseBridge?.dispose()
@@ -32,6 +39,9 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
         segmenterBridge = null
         exportBackend?.dispose()
         exportBackend = null
+        skinBackend?.dispose()
+        skinBackend = null
+        faceMeshBackend = null
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
@@ -40,6 +50,7 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
                 val facePath = call.argument<String>("faceModelPath")
                 val posePath = call.argument<String>("poseModelPath")
                 val segmenterPath = call.argument<String>("segmenterModelPath")
+                val facePartsPath = call.argument<String>("facePartsModelPath")
                 if (facePath.isNullOrBlank()) {
                     result.error("invalid_args", "faceModelPath is required", null)
                     return
@@ -51,6 +62,18 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
                     }
                     if (!segmenterPath.isNullOrBlank()) {
                         segmenterBridge?.initialize(segmenterPath)
+                    }
+                    if (!facePartsPath.isNullOrBlank()) {
+                        // Falha no multiclass não pode derrubar a inicialização:
+                        // a pele cai no fallback geométrico.
+                        try {
+                            segmenterBridge?.initializeFaceParts(facePartsPath)
+                        } catch (e: Throwable) {
+                            android.util.Log.w(
+                                CHANNEL_NAME,
+                                "faceParts segmenter unavailable: ${e.message}",
+                            )
+                        }
                     }
                     result.success(null)
                 } catch (e: Throwable) {
@@ -75,6 +98,27 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
                 try {
                     val mapped = bridge.detectFace(bytes, width, height, rotation)
                     result.success(mapped)
+                } catch (e: Throwable) {
+                    result.error("detect_failed", e.message ?: e.toString(), null)
+                }
+            }
+
+            "detectFaces" -> {
+                val bridge = faceBridge
+                if (bridge == null) {
+                    result.error("not_initialized", "Face bridge unavailable", null)
+                    return
+                }
+                val bytes = call.argument<ByteArray>("bytes")
+                val width = call.argument<Int>("width") ?: 0
+                val height = call.argument<Int>("height") ?: 0
+                val rotation = call.argument<Int>("rotation") ?: 0
+                if (bytes == null || bytes.isEmpty()) {
+                    result.error("invalid_args", "bytes is required", null)
+                    return
+                }
+                try {
+                    result.success(bridge.detectFaces(bytes, width, height, rotation))
                 } catch (e: Throwable) {
                     result.error("detect_failed", e.message ?: e.toString(), null)
                 }
@@ -124,6 +168,32 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
                 }
             }
 
+            "detectFaceParts" -> {
+                val bridge = segmenterBridge
+                if (bridge == null) {
+                    result.error("not_initialized", "Segmenter bridge unavailable", null)
+                    return
+                }
+                val bytes = call.argument<ByteArray>("bytes")
+                val width = call.argument<Int>("width") ?: 0
+                val height = call.argument<Int>("height") ?: 0
+                val rotation = call.argument<Int>("rotation") ?: 0
+                if (bytes == null || bytes.isEmpty()) {
+                    result.error("invalid_args", "bytes is required", null)
+                    return
+                }
+                try {
+                    result.success(bridge.detectFaceParts(bytes, width, height, rotation))
+                } catch (e: Throwable) {
+                    result.error("detect_failed", e.message ?: e.toString(), null)
+                }
+            }
+
+            "detectFaceParsing" -> {
+                // BiSeNet TFLite ainda não empacotado — mapper Dart assume (Sprint 4).
+                result.success(null)
+            }
+
             "dispose" -> {
                 faceBridge?.dispose()
                 poseBridge?.dispose()
@@ -132,14 +202,56 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
             }
 
             "probeExportCapabilities" -> {
-                result.success(
-                    exportBackend?.capabilities() ?: mapOf(
-                        "metal" to false,
-                        "vulkan" to false,
-                        "openGlEs" to false,
-                        "nativeJpegEncode" to false,
-                    ),
+                val base = exportBackend?.capabilities()?.toMutableMap() ?: mutableMapOf(
+                    "metal" to false,
+                    "vulkan" to false,
+                    "openGlEs" to false,
+                    "nativeJpegEncode" to false,
                 )
+                val skin = skinBackend
+                base["skinRetouch"] = skin?.isAvailable() == true
+                base["skinGpu"] = skin?.isGpuAvailable() == true
+                base["faceMeshMetal"] = false
+                base["faceMeshGles"] = faceMeshBackend?.isAvailable() == true
+                result.success(base)
+            }
+
+            "faceMeshWarpExport" -> {
+                val backend = faceMeshBackend
+                if (backend == null || !backend.isAvailable()) {
+                    result.error("unavailable", "Face mesh GLES export unavailable", null)
+                    return
+                }
+                @Suppress("UNCHECKED_CAST")
+                val args = call.arguments as? Map<String, Any?>
+                if (args == null) {
+                    result.error("invalid_args", "args required", null)
+                    return
+                }
+                try {
+                    result.success(backend.warpExport(args))
+                } catch (e: Throwable) {
+                    result.error("face_mesh_warp_failed", e.message ?: e.toString(), null)
+                }
+            }
+
+            "skinRetouchExport" -> {
+                val backend = skinBackend
+                if (backend == null || !backend.isAvailable()) {
+                    result.error("unavailable", "Skin retouch unavailable", null)
+                    return
+                }
+                @Suppress("UNCHECKED_CAST")
+                val args = call.arguments as? Map<String, Any?>
+                if (args == null) {
+                    result.error("invalid_args", "args required", null)
+                    return
+                }
+                try {
+                    result.success(backend.skinRetouch(args))
+                } catch (e: Throwable) {
+                    result.error("skin_failed", e.message ?: e.toString(), null)
+                }
             }
 
             "warpExport" -> {
@@ -181,6 +293,38 @@ class BeautyMediapipePlugin : FlutterPlugin, MethodCallHandler {
             }
 
             "releaseExportResource" -> result.success(null)
+
+            "getThermalState" -> {
+                val ctx = applicationContext
+                val status = if (ctx != null && android.os.Build.VERSION.SDK_INT >= 29) {
+                    val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE)
+                        as? android.os.PowerManager
+                    pm?.currentThermalStatus
+                        ?: android.os.PowerManager.THERMAL_STATUS_NONE
+                } else {
+                    android.os.PowerManager.THERMAL_STATUS_NONE
+                }
+                val mapped = when (status) {
+                    android.os.PowerManager.THERMAL_STATUS_NONE,
+                    android.os.PowerManager.THERMAL_STATUS_LIGHT -> "nominal"
+                    android.os.PowerManager.THERMAL_STATUS_MODERATE -> "fair"
+                    android.os.PowerManager.THERMAL_STATUS_SEVERE -> "serious"
+                    android.os.PowerManager.THERMAL_STATUS_CRITICAL,
+                    android.os.PowerManager.THERMAL_STATUS_EMERGENCY,
+                    android.os.PowerManager.THERMAL_STATUS_SHUTDOWN -> "critical"
+                    else -> "nominal"
+                }
+                result.success(mapped)
+            }
+
+            "probeHotPathCapabilities" -> {
+                result.success(
+                    mapOf(
+                        "ffiAvailable" to false,
+                        "sharedMemorySupported" to false,
+                    ),
+                )
+            }
 
             else -> result.notImplemented()
         }

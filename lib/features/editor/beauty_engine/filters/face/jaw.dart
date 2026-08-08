@@ -29,7 +29,13 @@ class JawFilter extends FaceWarpFilter {
       return const [];
     }
 
-    final points = FaceWarpUtils.anchorPoints(context.mesh);
+    final points = [
+      ...FaceWarpUtils.anchorPoints(context.mesh),
+      ...FaceWarpUtils.upperFaceStabilizerPoints(context.mesh),
+    ];
+    final centerX = context.centerX;
+    final halfFace =
+        (context.imageSize.width * 0.5).clamp(1.0, double.infinity);
     final maxShift = context.imageSize.width * 0.09 * intensity;
 
     for (final index in _jawLeft) {
@@ -37,8 +43,8 @@ class JawFilter extends FaceWarpFilter {
       if (source == null) {
         continue;
       }
-      final towardCenter = context.centerX - source.dx;
-      final ratio = towardCenter.abs() / (context.imageSize.width * 0.5);
+      final towardCenter = centerX - source.dx;
+      final ratio = towardCenter.abs() / halfFace;
       points.add(
         ControlPoint(
           source: source,
@@ -55,8 +61,8 @@ class JawFilter extends FaceWarpFilter {
       if (source == null) {
         continue;
       }
-      final towardCenter = context.centerX - source.dx;
-      final ratio = towardCenter.abs() / (context.imageSize.width * 0.5);
+      final towardCenter = centerX - source.dx;
+      final ratio = towardCenter.abs() / halfFace;
       points.add(
         ControlPoint(
           source: source,

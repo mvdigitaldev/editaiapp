@@ -26,8 +26,8 @@ class EyeScaleFilter extends FaceWarpFilter {
       return const [];
     }
 
-    final scale = 1 + 0.12 * intensity;
-    final points = FaceWarpUtils.anchorPoints(context.mesh);
+    final scale = 1 + 0.18 * intensity;
+    final points = FaceWarpUtils.eyeWarpAnchors(context.mesh);
 
     for (final region in [MeshRegion.leftEye, MeshRegion.rightEye]) {
       points.addAll(

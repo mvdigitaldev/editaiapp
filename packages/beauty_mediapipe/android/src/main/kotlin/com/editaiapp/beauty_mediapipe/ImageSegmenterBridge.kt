@@ -14,9 +14,11 @@ import java.nio.ByteOrder
 
 class ImageSegmenterBridge(private val context: Context) {
     private var imageSegmenter: ImageSegmenter? = null
+    private var facePartsSegmenter: ImageSegmenter? = null
 
     fun initialize(modelPath: String) {
-        dispose()
+        imageSegmenter?.close()
+        imageSegmenter = null
         val modelFile = File(modelPath)
         if (!modelFile.exists()) {
             throw IllegalArgumentException("Model file not found: $modelPath")
@@ -34,6 +36,31 @@ class ImageSegmenterBridge(private val context: Context) {
             .build()
 
         imageSegmenter = ImageSegmenter.createFromOptions(context, options)
+    }
+
+    /// Segmentação semântica multiclass (selfie_multiclass_256x256): usa
+    /// category mask, um byte de classe por pixel, em vez das confidence
+    /// masks do segmenter binário de pessoa.
+    fun initializeFaceParts(modelPath: String) {
+        facePartsSegmenter?.close()
+        facePartsSegmenter = null
+        val modelFile = File(modelPath)
+        if (!modelFile.exists()) {
+            throw IllegalArgumentException("Model file not found: $modelPath")
+        }
+
+        val options = ImageSegmenter.ImageSegmenterOptions.builder()
+            .setBaseOptions(
+                BaseOptions.builder()
+                    .setModelAssetPath(modelPath)
+                    .build(),
+            )
+            .setRunningMode(RunningMode.IMAGE)
+            .setOutputConfidenceMasks(false)
+            .setOutputCategoryMask(true)
+            .build()
+
+        facePartsSegmenter = ImageSegmenter.createFromOptions(context, options)
     }
 
     fun detectPersonMask(
@@ -60,9 +87,34 @@ class ImageSegmenterBridge(private val context: Context) {
         }
     }
 
+    fun detectFaceParts(
+        imageBytes: ByteArray,
+        width: Int,
+        height: Int,
+        rotation: Int,
+    ): Map<String, Any?>? {
+        val segmenter = facePartsSegmenter ?: return null
+
+        val bitmap = ImageBitmapDecoder.decode(imageBytes, width, height, rotation) ?: return null
+        val mpImage = BitmapImageBuilder(bitmap).build()
+
+        return try {
+            mapCategoryMask(segmenter.segment(mpImage))
+        } catch (e: Exception) {
+            Log.e(TAG, "detectFaceParts failed", e)
+            null
+        } finally {
+            if (!bitmap.isRecycled) {
+                bitmap.recycle()
+            }
+        }
+    }
+
     fun dispose() {
         imageSegmenter?.close()
         imageSegmenter = null
+        facePartsSegmenter?.close()
+        facePartsSegmenter = null
     }
 
     private fun mapResult(result: ImageSegmenterResult): Map<String, Any?>? {
@@ -83,6 +135,25 @@ class ImageSegmenterBridge(private val context: Context) {
         for (i in bytes.indices) {
             val v = floatBuffer.get(i).coerceIn(0f, 1f)
             bytes[i] = (v * 255f).toInt().toByte()
+        }
+
+        return mapOf(
+            "bytes" to bytes,
+            "width" to maskWidth,
+            "height" to maskHeight,
+        )
+    }
+
+    private fun mapCategoryMask(result: ImageSegmenterResult): Map<String, Any?>? {
+        val mask: MPImage = result.categoryMask().orElse(null) ?: return null
+        val maskWidth = mask.width
+        val maskHeight = mask.height
+        val buffer = ByteBufferExtractor.extract(mask)
+
+        val bytes = ByteArray(maskWidth * maskHeight)
+        val available = minOf(bytes.size, buffer.capacity())
+        for (i in 0 until available) {
+            bytes[i] = buffer.get(i)
         }
 
         return mapOf(

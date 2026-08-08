@@ -113,12 +113,13 @@ class HeroActionCard extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         description,
-                        style: AppTextStyles.caption.copyWith(
+                        style: AppTextStyles.labelLarge.copyWith(
                           color: isDark
                               ? AppColors.textTertiary
                               : AppColors.textSecondary,
-                          fontSize: 12,
-                          height: 1.35,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 15,
+                          height: 1.25,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -258,22 +259,27 @@ class _SimpleCard extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: AppTextStyles.headingSmall.copyWith(
+                        style: AppTextStyles.labelLarge.copyWith(
                           color: isDark
                               ? AppColors.textLight
                               : AppColors.textPrimary,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          height: 1.25,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
                       Text(
                         description,
-                        style: AppTextStyles.bodySmall.copyWith(
+                        style: AppTextStyles.labelLarge.copyWith(
                           color: isDark
                               ? AppColors.textTertiary
                               : AppColors.textSecondary,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 15,
+                          height: 1.25,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,

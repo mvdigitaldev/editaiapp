@@ -72,10 +72,6 @@ dependencies:
     path: packages/beauty_mediapipe
   pro_image_editor: 11.3.0
   flutter_image_filters: 0.0.28
-  # Fork local do plugin oficial: apenas o pin do pod iOS muda (1.4.0 -> 1.4.1),
-  # porque a 1.4.0 publicada não linka com o BanubaDesignSystem disponível.
-  pe_sdk_flutter:
-    path: packages/pe_sdk_flutter
 
 dev_dependencies:
   flutter_test:
@@ -94,6 +90,9 @@ flutter:
   uses-material-design: true
   shaders:
     - lib/features/editor/beauty_engine/shaders/body_reshape_remap.frag
+    - lib/features/editor/beauty_engine/shaders/face_mesh_piecewise.frag
+    - lib/features/editor/beauty_engine/shaders/face_warp_inpaint.frag
+    - lib/features/editor/beauty_engine/shaders/makeup_blend.frag
   assets:
     - assets/animations/
     - assets/filters/lut/
@@ -102,6 +101,7 @@ flutter:
     - assets/mediapipe/face_landmarker.task
     - assets/mediapipe/pose_landmarker_lite.task
     - assets/mediapipe/selfie_segmenter.tflite
+    - assets/mediapipe/selfie_multiclass_256x256.tflite
     - assets/branding/
     - assets/home/
     - assets/illustrations/

@@ -17,6 +17,7 @@ class BundledPresetLoader {
     'assets/beauty/presets/studio.json',
     'assets/beauty/presets/soft.json',
     'assets/beauty/presets/cinema.json',
+    'assets/beauty/presets/glam.json',
   ];
 
   Future<List<BeautyPreset>> load() async {

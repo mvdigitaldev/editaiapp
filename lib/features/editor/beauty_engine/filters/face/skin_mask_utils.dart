@@ -14,6 +14,7 @@ class SkinProcessingMask {
     required this.faceBounds,
     required this.protectedRegions,
     required this.cheekRegions,
+    required this.cheekEllipses,
     required this.underEyeRegions,
     required this.underEyeEllipses,
     required this.eyebrowRegions,
@@ -27,6 +28,7 @@ class SkinProcessingMask {
   final Rect faceBounds;
   final List<Rect> protectedRegions;
   final List<Rect> cheekRegions;
+  final List<NormalizedEllipse> cheekEllipses;
   final List<Rect> underEyeRegions;
   final List<NormalizedEllipse> underEyeEllipses;
   final List<Rect> eyebrowRegions;
@@ -75,6 +77,19 @@ abstract final class SkinMaskUtils {
     final protected = [leftEye, rightEye, mouth]
         .where((r) => !r.isEmpty)
         .toList();
+
+    final leftCheekEllipse = _ellipseForIndices(
+      face,
+      FaceWarpUtils.cheekboneLeft,
+      padX: 0.028,
+      padY: 0.022,
+    );
+    final rightCheekEllipse = _ellipseForIndices(
+      face,
+      FaceWarpUtils.cheekboneRight,
+      padX: 0.028,
+      padY: 0.022,
+    );
 
     final leftCheek = _boundsForIndices(
       face,
@@ -160,6 +175,10 @@ abstract final class SkinMaskUtils {
       faceBounds: faceBounds,
       protectedRegions: protected,
       cheekRegions: [leftCheek, rightCheek].where((r) => !r.isEmpty).toList(),
+      cheekEllipses: [
+        if (leftCheekEllipse != null) leftCheekEllipse,
+        if (rightCheekEllipse != null) rightCheekEllipse,
+      ].where((e) => e.isValid).toList(),
       underEyeRegions: [underEyeLeft, underEyeRight].where((r) => !r.isEmpty).toList(),
       underEyeEllipses: underEyeEllipses,
       eyebrowRegions: [leftBrow, rightBrow].where((r) => !r.isEmpty).toList(),
@@ -261,6 +280,38 @@ abstract final class SkinMaskUtils {
       );
     }
     return weight;
+  }
+
+  /// Blush via elipses nas maçãs, excluindo testa e olhos.
+  static double blushWeight(
+    double nx,
+    double ny,
+    SkinProcessingMask mask, {
+    double skinWeight = 1.0,
+  }) {
+    if (skinWeight <= 0) {
+      return 0;
+    }
+    for (final region in mask.foreheadRegions) {
+      if (region.inflate(0.02).contains(Offset(nx, ny))) {
+        return 0;
+      }
+    }
+    if (isProtected(nx, ny, mask)) {
+      return 0;
+    }
+    var weight = 0.0;
+    for (final ellipse in mask.cheekEllipses) {
+      weight = math.max(weight, ellipse.weight(nx, ny, edgeFeather: 0.07));
+    }
+    if (weight <= 0) {
+      weight = softRegionsWeight(nx, ny, mask.cheekRegions, edgeFeather: 0.04);
+    }
+    return weight * skinWeight;
+  }
+
+  static double foreheadWeight(double nx, double ny, SkinProcessingMask mask) {
+    return softRegionsWeight(nx, ny, mask.foreheadRegions, edgeFeather: 0.035);
   }
 
   static NormalizedEllipse? _ellipseForIndices(

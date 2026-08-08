@@ -1,7 +1,11 @@
 import 'dart:ui';
 
 import '../../models/face_mesh_result.dart';
+import '../../models/warp_field.dart';
 import '../../rendering/render_target.dart';
+import '../../segment/face_parts_segmentation.dart';
+import '../../segment/face_parsing_result.dart';
+import 'skin/skin_weight_map.dart';
 import 'skin_mask_utils.dart';
 
 /// Orquestra passes de pele/makeup (Sprint 17).
@@ -14,15 +18,58 @@ class SkinFilterPipeline {
     'remove_acne',
     'remove_wrinkles',
     'remove_dark_circles',
+    'skin_shine',
     'teeth_whitening',
     'blush',
     'contour',
     'eyebrows',
     'eyelashes',
+    'iris_enhance',
   ];
+
+  /// Makeup overlays (CPU darken) — ocultos no lab nativo até Sprint 42+.
+  static const makeupParameterKeys = {
+    'blush',
+    'contour',
+    'eyebrows',
+    'eyelashes',
+  };
+
+  /// Keys visíveis no painel de ajustes.
+  static List<String> uiParameterKeys({required bool labMode}) {
+    if (!labMode) {
+      return skinParameterKeys;
+    }
+    return skinParameterKeys
+        .where((key) => !makeupParameterKeys.contains(key))
+        .toList(growable: false);
+  }
 
   bool hasActiveSkin(Map<String, double> parameters) {
     for (final key in skinParameterKeys) {
+      if (_read(parameters, key) > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Parsing semântico (BiSeNet/mapper) só é necessário para retouch e
+  /// makeup que dependem de máscaras derivadas — não para clarear pele/blush.
+  bool needsSemanticParsing(Map<String, double> parameters) {
+    const parsingKeys = {
+      'skin_smooth',
+      'remove_acne',
+      'remove_wrinkles',
+      'remove_dark_circles',
+      'skin_shine',
+      'teeth_whitening',
+      'contour',
+      'eyebrows',
+      'eyelashes',
+      'iris_enhance',
+    };
+    for (final key in parsingKeys) {
       if (_read(parameters, key) > 0) {
         return true;
       }
@@ -34,6 +81,10 @@ class SkinFilterPipeline {
     required Map<String, double> parameters,
     required FaceMeshResult face,
     required Size imageSize,
+    FacePartsSegmentation? faceParts,
+    FaceParsingResult? faceParsing,
+    WarpField? faceWarp,
+    Offset tileOrigin = Offset.zero,
   }) {
     if (!hasActiveSkin(parameters)) {
       return const [];
@@ -44,7 +95,24 @@ class SkinFilterPipeline {
       return const [];
     }
 
-    final uniforms = <String, Object>{'mask': mask};
+    final uniforms = <String, Object>{
+      'mask': mask,
+      'tileMapping': SkinTileMapping(
+        originX: tileOrigin.dx.round(),
+        originY: tileOrigin.dy.round(),
+        fullWidth: imageSize.width.round(),
+        fullHeight: imageSize.height.round(),
+      ),
+    };
+    if (faceParts != null && !faceParts.isEmpty) {
+      uniforms['faceParts'] = faceParts;
+    }
+    if (faceParsing != null && !faceParsing.isEmpty) {
+      uniforms['faceParsing'] = faceParsing;
+    }
+    if (faceWarp != null && !faceWarp.isIdentity) {
+      uniforms['faceWarp'] = faceWarp;
+    }
     for (final key in skinParameterKeys) {
       uniforms[key] = _read(parameters, key);
     }

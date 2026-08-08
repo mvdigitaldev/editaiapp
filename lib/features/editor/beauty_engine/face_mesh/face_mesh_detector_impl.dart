@@ -2,6 +2,7 @@ import 'package:beauty_mediapipe/beauty_mediapipe.dart';
 
 import '../models/face_mesh_result.dart';
 import '../models/image_source.dart';
+import '../models/multi_face_detection.dart';
 import 'face_landmark_mapper.dart';
 import 'face_mesh_detector.dart';
 import '../di/mediapipe_init_coordinator.dart';
@@ -19,10 +20,16 @@ class FaceMeshDetectorImpl implements FaceMeshDetector {
 
   @override
   Future<FaceMeshResult?> detect(ImageSource source) async {
+    final faces = await detectAll(source);
+    return MultiFaceDetection.primaryFace(faces);
+  }
+
+  @override
+  Future<List<FaceMeshResult>> detectAll(ImageSource source) async {
     try {
       await _coordinator.ensureInitialized();
     } catch (_) {
-      return null;
+      return const [];
     }
 
     final buffer = NativeImageBuffer(
@@ -32,11 +39,27 @@ class FaceMeshDetectorImpl implements FaceMeshDetector {
       rotation: source.rotation,
     );
 
-    final native = await _bindings.detectFace(buffer);
-    if (native == null) {
-      return null;
+    List<FaceLandmarkerNativeResult> natives;
+    try {
+      natives = await _bindings.detectFaces(buffer);
+    } catch (_) {
+      final single = await _bindings.detectFace(buffer);
+      natives = single == null ? const [] : [single];
     }
-
-    return FaceLandmarkMapper.toFaceMeshResult(native);
+    final faces = <FaceMeshResult>[];
+    for (final native in natives) {
+      final mapped = FaceLandmarkMapper.toFaceMeshResult(native);
+      if (mapped != null) {
+        faces.add(mapped);
+      }
+    }
+    if (faces.isEmpty) {
+      return const [];
+    }
+    faces.sort(
+      (a, b) => (b.boundingBox.width * b.boundingBox.height)
+          .compareTo(a.boundingBox.width * a.boundingBox.height),
+    );
+    return faces;
   }
 }

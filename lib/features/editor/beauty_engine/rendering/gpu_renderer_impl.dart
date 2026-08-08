@@ -4,6 +4,7 @@ import '../body_reshape/rendering/export_warp.dart';
 import '../body_reshape/rendering/fragment_program_warp_backend.dart';
 import '../body_reshape/rendering/method_channel_native_export_backend.dart';
 import '../body_reshape/rendering/native_export_backend.dart';
+import '../filters/face/skin/native_skin_backend.dart';
 import 'export_encoder.dart';
 import 'fragment_program_backend.dart';
 import 'gpu_texture_store.dart';
@@ -25,6 +26,7 @@ class GpuRendererImpl implements GPURenderer {
     required NativeExportBackend nativeExportBackend,
     required ExportWarp resolvedExportWarp,
     required ExportEncoder resolvedExportEncoder,
+    NativeSkinBackend? nativeSkinBackend,
     ShaderProgramCache? shaderCache,
   })  : _pool = pool,
         _forceCpuWarp = forceCpuWarp,
@@ -35,6 +37,7 @@ class GpuRendererImpl implements GPURenderer {
         _shaderCache = shaderCache ??
             ShaderProgramCache(
               warpBackend: warpBackend,
+              nativeSkinBackend: nativeSkinBackend,
               preferGpuWarp: !forceCpuWarp,
             );
 
@@ -44,6 +47,7 @@ class GpuRendererImpl implements GPURenderer {
     ExportEncoder? exportEncoder,
     FragmentProgramWarpBackend? warpBackend,
     NativeExportBackend? nativeExportBackend,
+    NativeSkinBackend? nativeSkinBackend,
     ExportWarp? exportWarp,
     bool forceCpuWarp = false,
   }) {
@@ -52,6 +56,8 @@ class GpuRendererImpl implements GPURenderer {
         FragmentProgramWarpBackend(forceCpuFallback: forceCpuWarp);
     final resolvedNative =
         nativeExportBackend ?? MethodChannelNativeExportBackend();
+    final resolvedSkin =
+        nativeSkinBackend ?? MethodChannelNativeSkinBackend();
     final resolvedExport = exportWarp ??
         ExportWarp(
           fragmentBackend: resolvedWarp,
@@ -65,6 +71,7 @@ class GpuRendererImpl implements GPURenderer {
       resolvedExportWarp: resolvedExport,
       resolvedExportEncoder:
           exportEncoder ?? ExportEncoder(exportWarp: resolvedExport),
+      nativeSkinBackend: resolvedSkin,
       shaderCache: shaderCache,
     );
   }
@@ -167,6 +174,9 @@ class GpuRendererImpl implements GPURenderer {
   void release(TextureHandle texture) {
     _pool.release(texture);
   }
+
+  /// Cópia independente — usada pelo cache de estágio pós-pele.
+  TextureHandle copyTexture(TextureHandle source) => _pool.acquireCopy(source);
 
   @override
   void dispose() {

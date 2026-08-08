@@ -26,7 +26,7 @@ class MouthWidthFilter extends FaceWarpFilter {
     }
 
     final points = FaceWarpUtils.anchorPoints(context.mesh);
-    final shift = context.imageSize.width * 0.022 * intensity;
+    final shift = context.imageSize.width * 0.028 * intensity;
 
     points.addAll(
       FaceWarpUtils.shiftLipIndices(

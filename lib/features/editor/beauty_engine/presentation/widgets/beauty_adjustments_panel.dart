@@ -4,7 +4,9 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../body_reshape/models/warp_plan.dart';
 import '../../filters/body/body_filter_pipeline.dart';
 import '../../filters/face/face_filter_pipeline.dart';
+import '../../filters/color/color_filter_pipeline.dart';
 import '../../filters/face/skin_filter_pipeline.dart';
+import '../../tools/tool_gate_decision.dart';
 import '../../l10n/beauty_engine_labels.dart';
 import '../../l10n/body_reshape_labels.dart';
 import 'beauty_accessible_slider.dart';
@@ -17,6 +19,7 @@ enum BeautyAdjustmentCategory {
   boca,
   corpo,
   pele,
+  cor,
 }
 
 /// Definição de uma categoria com ícone e parâmetros associados.
@@ -45,6 +48,8 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
     required this.onLinkEyesChanged,
     this.bodyWarpPlan,
     this.bodyOnly = false,
+    this.labMode = false,
+    this.gatePlan,
   });
 
   final Map<String, double> params;
@@ -53,6 +58,8 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
   final void Function(String key, double value) onParamChanged;
   final ValueChanged<bool> onLinkEyesChanged;
   final bool bodyOnly;
+  final bool labMode;
+  final ToolGatePlan? gatePlan;
 
   /// Último plano V2 — usado para hints de oclusão/confiança (Sprint 12).
   final WarpPlan? bodyWarpPlan;
@@ -120,6 +127,12 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       label: BeautyEngineLabels.sectionSkin,
       parameterKeys: SkinFilterPipeline.skinParameterKeys,
     ),
+    BeautyAdjustmentCategoryDef(
+      category: BeautyAdjustmentCategory.cor,
+      icon: Icons.palette_outlined,
+      label: BeautyEngineLabels.sectionColor,
+      parameterKeys: ColorFilterPipeline.colorParameterKeys,
+    ),
   ];
 
   /// Inicializa mapa de parâmetros com zeros para todas as keys conhecidas.
@@ -128,6 +141,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       for (final key in FaceFilterPipeline.faceWarpParameterKeys) key: 0,
       for (final key in BodyFilterPipeline.bodyWarpParameterKeys) key: 0,
       for (final key in SkinFilterPipeline.skinParameterKeys) key: 0,
+      for (final key in ColorFilterPipeline.colorParameterKeys) key: 0,
       'link_eyes': linkEyes ? 1 : 0,
     };
     return params;
@@ -141,11 +155,32 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
   late BeautyAdjustmentCategory _category;
   String? _selectedKey;
 
-  List<BeautyAdjustmentCategoryDef> get _visibleCategories => widget.bodyOnly
-      ? BeautyAdjustmentsPanel.categories
+  List<BeautyAdjustmentCategoryDef> get _visibleCategories {
+    if (widget.bodyOnly) {
+      return BeautyAdjustmentsPanel.categories
           .where((def) => def.category == BeautyAdjustmentCategory.corpo)
-          .toList(growable: false)
-      : BeautyAdjustmentsPanel.categories;
+          .toList(growable: false);
+    }
+    // Retoque facial — corpo fica em menu/rota separada (`bodyOnly`).
+    return BeautyAdjustmentsPanel.categories
+        .where((def) => def.category != BeautyAdjustmentCategory.corpo)
+        .map(_resolveCategoryDef)
+        .toList(growable: false);
+  }
+
+  BeautyAdjustmentCategoryDef _resolveCategoryDef(
+    BeautyAdjustmentCategoryDef def,
+  ) {
+    if (def.category != BeautyAdjustmentCategory.pele || !widget.labMode) {
+      return def;
+    }
+    return BeautyAdjustmentCategoryDef(
+      category: def.category,
+      icon: def.icon,
+      label: def.label,
+      parameterKeys: SkinFilterPipeline.uiParameterKeys(labMode: true),
+    );
+  }
 
   BeautyAdjustmentCategoryDef get _activeCategoryDef =>
       _visibleCategories.firstWhere(
@@ -175,6 +210,11 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     final activeKey = _activeParamKey;
     final activeValue = widget.params[activeKey] ?? 0;
     final isBody = _category == BeautyAdjustmentCategory.corpo;
+    final sliderRange = _sliderRangeForKey(activeKey);
+    final gate = widget.gatePlan?.decisionFor(activeKey);
+    final paramEnabled =
+        widget.enabled && (gate == null || !gate.isDisabled);
+    final gateHint = BeautyEngineLabels.gateHint(gate?.hintKey);
     final limitationHint = isBody
         ? BodyReshapeLabels.limitationHint(
             parameterKey: activeKey,
@@ -183,7 +223,7 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         : null;
     final limitHint =
         isBody ? BodyReshapeLabels.controlLimitHint(activeKey) : null;
-    final hintText = limitationHint ?? limitHint;
+    final hintText = limitationHint ?? limitHint ?? gateHint;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -205,8 +245,11 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
               child: BeautyAccessibleSlider(
                 label: BeautyEngineLabels.parameterLabel(activeKey),
                 value: activeValue,
-                enabled: widget.enabled,
-                onChanged: widget.enabled
+                min: sliderRange.min,
+                max: sliderRange.max,
+                divisions: sliderRange.divisions,
+                enabled: paramEnabled,
+                onChanged: paramEnabled
                     ? (value) => widget.onParamChanged(activeKey, value)
                     : null,
               ),
@@ -247,6 +290,11 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                 itemBuilder: (context, index) {
                   final key = _activeCategoryDef.parameterKeys[index];
                   final selected = key == activeKey;
+                  final disabled =
+                      widget.gatePlan?.decisionFor(key).isDisabled ?? false;
+                  if (disabled) {
+                    return const SizedBox.shrink();
+                  }
                   return ChoiceChip(
                     label: Text(
                       BeautyEngineLabels.parameterLabel(key),
@@ -292,6 +340,24 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
       ),
     );
   }
+
+  _SliderRange _sliderRangeForKey(String key) {
+    if (key == 'temperature') {
+      return const _SliderRange(min: -0.5, max: 0.5, divisions: 200);
+    }
+    if (ColorFilterPipeline.isColorKey(key)) {
+      return const _SliderRange(min: -1, max: 1, divisions: 200);
+    }
+    return const _SliderRange();
+  }
+}
+
+class _SliderRange {
+  const _SliderRange({this.min = 0, this.max = 1, this.divisions});
+
+  final double min;
+  final double max;
+  final int? divisions;
 }
 
 class _CategoryNavItem extends StatelessWidget {

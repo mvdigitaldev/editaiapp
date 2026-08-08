@@ -22,3 +22,8 @@ download "pose_landmarker_lite.task" \
 
 download "selfie_segmenter.tflite" \
   "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite"
+
+# Segmentação semântica multiclass (background/hair/body-skin/face-skin/
+# clothes/others) usada pela máscara de pele do Beauty Engine.
+download "selfie_multiclass_256x256.tflite" \
+  "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite"

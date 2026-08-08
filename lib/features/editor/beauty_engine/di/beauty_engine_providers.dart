@@ -26,6 +26,8 @@ import '../mesh/mesh_engine_impl.dart';
 import '../pose/pose_detector.dart';
 import '../pose/pose_detector_impl.dart';
 import '../pose/pose_detector_stub.dart';
+import '../segment/face_parsing_detector.dart';
+import '../segment/face_parts_detector.dart';
 import '../segment/person_mask.dart';
 import '../segment/person_mask_detector_impl.dart';
 import '../segment/person_mask_detector_stub.dart';
@@ -39,9 +41,14 @@ import '../presets/lut_engine.dart';
 import '../presets/preset_file_service.dart';
 import '../presets/preset_sync_service.dart';
 import '../presets/preset_thumbnail_service.dart';
+import '../filters/face/skin/native_skin_backend.dart';
 import '../performance/beauty_benchmark_aggregator.dart';
 import '../performance/beauty_profiler.dart';
+import '../performance/device_capability.dart';
+import '../performance/device_capability_manager.dart';
+import '../performance/hot_path/hot_path_renderer.dart';
 import '../performance/shader_prewarm_service.dart';
+import '../performance/thermal_monitor.dart';
 import '../performance/tiled_export_engine.dart';
 import '../rendering/gpu_renderer.dart';
 import '../rendering/gpu_renderer_impl.dart';
@@ -65,6 +72,10 @@ final mediapipeSegmenterModelPathProvider = Provider<Future<String>>(
   (ref) => MediapipeModelLoader.ensureSegmenterModelOnDisk(),
 );
 
+final mediapipeFacePartsModelPathProvider = Provider<Future<String>>(
+  (ref) => MediapipeModelLoader.ensureFacePartsModelOnDisk(),
+);
+
 final mediapipeInitCoordinatorProvider = Provider<MediapipeInitCoordinator>(
   (ref) => MediapipeInitCoordinator(
     bindings: ref.watch(mediapipeBindingsProvider),
@@ -72,6 +83,8 @@ final mediapipeInitCoordinatorProvider = Provider<MediapipeInitCoordinator>(
     resolvePoseModelPath: () => ref.read(mediapipePoseModelPathProvider),
     resolveSegmenterModelPath: () =>
         ref.read(mediapipeSegmenterModelPathProvider),
+    resolveFacePartsModelPath: () =>
+        ref.read(mediapipeFacePartsModelPathProvider),
   ),
 );
 
@@ -117,6 +130,33 @@ final personMaskDetectorProvider = Provider<PersonMaskDetector>(
     return PersonMaskDetectorImpl(
       bindings: ref.watch(mediapipeBindingsProvider),
       coordinator: ref.watch(mediapipeInitCoordinatorProvider),
+    );
+  },
+);
+
+final facePartsDetectorProvider = Provider<FacePartsDetector>(
+  (ref) {
+    if (!_supportsNativeMediapipe) {
+      return const FacePartsDetectorStub();
+    }
+
+    return FacePartsDetectorImpl(
+      bindings: ref.watch(mediapipeBindingsProvider),
+      coordinator: ref.watch(mediapipeInitCoordinatorProvider),
+    );
+  },
+);
+
+final faceParsingDetectorProvider = Provider<FaceParsingDetector>(
+  (ref) {
+    if (!_supportsNativeMediapipe) {
+      return const FaceParsingDetectorStub();
+    }
+
+    return FaceParsingDetectorImpl(
+      bindings: ref.watch(mediapipeBindingsProvider),
+      coordinator: ref.watch(mediapipeInitCoordinatorProvider),
+      facePartsDetector: ref.watch(facePartsDetectorProvider),
     );
   },
 );
@@ -181,8 +221,14 @@ final warpEngineProvider = Provider<WarpEngine>(
   (ref) => MlsWarpEngine(),
 );
 
+final nativeSkinBackendProvider = Provider<NativeSkinBackend>(
+  (ref) => MethodChannelNativeSkinBackend(),
+);
+
 final gpuRendererProvider = Provider<GPURenderer>(
-  (ref) => GpuRendererImpl(),
+  (ref) => GpuRendererImpl(
+    nativeSkinBackend: ref.watch(nativeSkinBackendProvider),
+  ),
 );
 
 final lutEngineProvider = Provider<LutEngine>(
@@ -242,24 +288,49 @@ final beautyBenchmarkProvider = Provider<BeautyBenchmarkAggregator>(
   (ref) => BeautyBenchmarkAggregator(),
 );
 
+final deviceCapabilityManagerProvider = Provider<DeviceCapabilityManager>(
+  (ref) => DeviceCapabilityManager(),
+);
+
+final thermalMonitorProvider = Provider<ThermalMonitor>(
+  (ref) => PlatformThermalMonitor(),
+);
+
+final hotPathRendererProvider = Provider<HotPathRenderer>(
+  (ref) => MethodChannelHotPathRenderer(),
+);
+
+final deviceCapabilityProfileProvider =
+    FutureProvider<DeviceCapabilityProfile>((ref) async {
+  return ref.read(deviceCapabilityManagerProvider).resolve();
+});
+
 final shaderPrewarmServiceProvider = Provider<ShaderPrewarmService>(
   (ref) => const ShaderPrewarmService(),
 );
 
 final tiledExportEngineProvider = Provider<TiledExportEngine>(
-  (ref) => TiledExportEngine(),
+  (ref) => TiledExportEngine(
+    thermalMonitor: ref.watch(thermalMonitorProvider),
+  ),
 );
 
 final beautyEngineControllerProvider = Provider<BeautyEngineController>(
-  (ref) => BeautyEngineController(
-    faceDetector: ref.watch(faceMeshDetectorProvider),
-    poseDetector: ref.watch(poseDetectorProvider),
-    personMaskDetector: ref.watch(personMaskDetectorProvider),
-    bodyVisionCoordinator: ref.watch(bodyVisionCoordinatorProvider),
-    meshEngine: ref.watch(meshEngineProvider),
-    warpEngine: ref.watch(warpEngineProvider),
-    gpuRenderer: ref.watch(gpuRendererProvider),
-    profiler: ref.watch(beautyProfilerProvider),
-    tiledExportEngine: ref.watch(tiledExportEngineProvider),
-  ),
+  (ref) {
+    final controller = BeautyEngineController(
+      faceDetector: ref.watch(faceMeshDetectorProvider),
+      poseDetector: ref.watch(poseDetectorProvider),
+      personMaskDetector: ref.watch(personMaskDetectorProvider),
+      facePartsDetector: ref.watch(facePartsDetectorProvider),
+      faceParsingDetector: ref.watch(faceParsingDetectorProvider),
+      bodyVisionCoordinator: ref.watch(bodyVisionCoordinatorProvider),
+      meshEngine: ref.watch(meshEngineProvider),
+      warpEngine: ref.watch(warpEngineProvider),
+      gpuRenderer: ref.watch(gpuRendererProvider),
+      profiler: ref.watch(beautyProfilerProvider),
+      tiledExportEngine: ref.watch(tiledExportEngineProvider),
+    );
+    controller.hotPathRenderer = ref.watch(hotPathRendererProvider);
+    return controller;
+  },
 );

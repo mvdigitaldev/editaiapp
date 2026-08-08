@@ -18,12 +18,13 @@ class SmileFilter extends FaceWarpFilter {
   @override
   List<String> get affectedRegions => ['lips'];
 
-  static final _smileLowIndices = {
+  /// Índices do sorriso sutil (≤0.5 slider) — compartilhado com V3 pilot.
+  static final smileLowIndices = {
     ...FaceWarpUtils.mouthCornerLeft,
     ...FaceWarpUtils.mouthCornerRight,
   };
 
-  static const _smileHighExtra = {185, 409, 146, 405};
+  static const smileHighExtraIndices = {185, 409, 146, 405};
 
   @override
   List<ControlPoint> buildControlPoints(FaceWarpContext context) {
@@ -37,8 +38,8 @@ class SmileFilter extends FaceWarpFilter {
     final delta = Offset(0, -lift);
 
     final indices = intensity <= 0.5
-        ? _smileLowIndices
-        : {..._smileLowIndices, ..._smileHighExtra};
+        ? smileLowIndices
+        : {...smileLowIndices, ...smileHighExtraIndices};
 
     for (final index in indices) {
       if (FaceWarpUtils.innerMouthExcluded.contains(index)) {

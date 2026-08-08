@@ -25,7 +25,7 @@ class DoubleEyelidFilter extends FaceWarpFilter {
       return const [];
     }
 
-    final points = FaceWarpUtils.anchorPoints(context.mesh);
+    final points = FaceWarpUtils.eyeWarpAnchors(context.mesh);
     final foldShift = context.imageSize.height * 0.012 * intensity;
 
     for (final indices in [

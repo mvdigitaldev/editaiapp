@@ -14,8 +14,10 @@ import 'eye_height.dart';
 import 'eye_rotation.dart';
 import 'eye_scale.dart';
 import 'face_slim.dart';
+import 'face_influence_map_builder.dart';
 import 'face_warp_context.dart';
 import 'face_warp_filter.dart';
+import 'face_warp_region.dart';
 import 'face_warp_utils.dart';
 import 'forehead.dart';
 import 'head_size.dart';
@@ -98,9 +100,33 @@ class FaceFilterPipeline {
     required FaceMeshResult face,
     required Size imageSize,
     required Map<String, double> parameters,
+    bool unified = false,
+  }) {
+    if (unified) {
+      return _composeUnified(
+        mesh: mesh,
+        face: face,
+        imageSize: imageSize,
+        parameters: parameters,
+      );
+    }
+    return _composeRegional(
+      mesh: mesh,
+      face: face,
+      imageSize: imageSize,
+      parameters: parameters,
+    );
+  }
+
+  WarpField _composeUnified({
+    required TriMesh mesh,
+    required FaceMeshResult face,
+    required Size imageSize,
+    required Map<String, double> parameters,
   }) {
     final yawFactor = FaceWarpUtils.yawClampFactor(face);
     final linkEyes = _readLinkEyes(parameters);
+    final builder = _fieldBuilder ?? WarpFieldBuilder.forImageSize(imageSize);
     final controlPoints = <ControlPoint>[];
     var maxIntensity = 0.0;
 
@@ -109,7 +135,6 @@ class FaceFilterPipeline {
       if (raw <= 0) {
         continue;
       }
-
       final warpContext = FaceWarpContext(
         mesh: mesh,
         face: face,
@@ -118,25 +143,111 @@ class FaceFilterPipeline {
         yawFactor: yawFactor,
         linkEyes: linkEyes,
       );
-
       controlPoints.addAll(filter.buildControlPoints(warpContext));
-      maxIntensity = maxIntensity > warpContext.effectiveIntensity
-          ? maxIntensity
-          : warpContext.effectiveIntensity;
+      if (warpContext.effectiveIntensity > maxIntensity) {
+        maxIntensity = warpContext.effectiveIntensity;
+      }
     }
 
     if (controlPoints.isEmpty || maxIntensity <= 0) {
       return WarpField.identity(
-          imageSize: imageSize, region: MeshRegion.faceOval);
+        imageSize: imageSize,
+        region: MeshRegion.faceOval,
+      );
     }
 
-    final builder = _fieldBuilder ?? WarpFieldBuilder.forImageSize(imageSize);
+    // Preview: um único MLS com cápsula — contínuo, sem artefato de camadas.
     return builder.build(
       controlPoints: controlPoints,
       imageSize: imageSize,
       region: MeshRegion.faceOval,
       intensity: maxIntensity,
     );
+  }
+
+  WarpField _composeRegional({
+    required TriMesh mesh,
+    required FaceMeshResult face,
+    required Size imageSize,
+    required Map<String, double> parameters,
+  }) {
+    final yawFactor = FaceWarpUtils.yawClampFactor(face);
+    final linkEyes = _readLinkEyes(parameters);
+    final builder = _fieldBuilder ?? WarpFieldBuilder.forImageSize(imageSize);
+
+    final filtersByRegion = <FaceWarpRegion, List<FaceWarpFilter>>{};
+    for (final filter in allFilters) {
+      if (_readParameter(parameters, filter.parameterKey) <= 0) {
+        continue;
+      }
+      final region = FaceWarpRegionMap.regionForKey(filter.parameterKey);
+      if (region == null) {
+        continue;
+      }
+      filtersByRegion.putIfAbsent(region, () => []).add(filter);
+    }
+
+    if (filtersByRegion.isEmpty) {
+      return WarpField.identity(
+        imageSize: imageSize,
+        region: MeshRegion.faceOval,
+      );
+    }
+
+    WarpField? composed;
+    for (final region in FaceWarpRegionMap.regionOrder) {
+      final filters = filtersByRegion[region];
+      if (filters == null || filters.isEmpty) {
+        continue;
+      }
+
+      final controlPoints = <ControlPoint>[];
+      var maxIntensity = 0.0;
+      for (final filter in filters) {
+        final raw = _readParameter(parameters, filter.parameterKey);
+        final warpContext = FaceWarpContext(
+          mesh: mesh,
+          face: face,
+          imageSize: imageSize,
+          intensity: raw,
+          yawFactor: yawFactor,
+          linkEyes: linkEyes,
+        );
+        controlPoints.addAll(filter.buildControlPoints(warpContext));
+        if (warpContext.effectiveIntensity > maxIntensity) {
+          maxIntensity = warpContext.effectiveIntensity;
+        }
+      }
+
+      if (controlPoints.isEmpty || maxIntensity <= 0) {
+        continue;
+      }
+
+      final influenceMap = FaceInfluenceMapBuilder.build(
+        region: region,
+        face: face,
+        imageSize: imageSize,
+      );
+
+      final field = builder.build(
+        controlPoints: controlPoints,
+        imageSize: imageSize,
+        region: MeshRegion.faceOval,
+        intensity: maxIntensity,
+        influenceMap: influenceMap,
+      );
+
+      if (field.isIdentity) {
+        continue;
+      }
+
+      composed = composed == null
+          ? field
+          : WarpField.composeSequential(field, composed);
+    }
+
+    return composed ??
+        WarpField.identity(imageSize: imageSize, region: MeshRegion.faceOval);
   }
 
   bool hasActiveWarp(Map<String, double> parameters) {

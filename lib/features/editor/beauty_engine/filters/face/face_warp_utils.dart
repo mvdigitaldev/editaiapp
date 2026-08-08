@@ -47,6 +47,21 @@ abstract final class FaceWarpUtils {
     return (1 - asymmetry * 2.5).clamp(0.35, 1.0).toDouble();
   }
 
+  /// Ancoras extras para estabilizar boca/nariz durante warps oculares.
+  static List<ControlPoint> mouthStabilizerPoints(TriMesh mesh) {
+    const indices = {
+      61, 78, 291, 308, 13, 14, 17, 0, 37, 267, 269, 270,
+    };
+    final points = <ControlPoint>[];
+    for (final index in indices) {
+      final source = vertexAt(mesh, index);
+      if (source != null) {
+        points.add(ControlPoint(source: source, target: source));
+      }
+    }
+    return points;
+  }
+
   static List<ControlPoint> anchorPoints(TriMesh mesh) {
     final points = <ControlPoint>[];
     for (final index in anchorLandmarkIndices) {
@@ -56,6 +71,85 @@ abstract final class FaceWarpUtils {
       }
     }
     return points;
+  }
+
+  /// Ancoras + estabilizadores da boca para filtros oculares.
+  static List<ControlPoint> eyeWarpAnchors(TriMesh mesh) {
+    return [
+      ...anchorPoints(mesh),
+      ...mouthStabilizerPoints(mesh),
+    ];
+  }
+
+  /// Estabiliza testa/têmporas durante warp de mandíbula inferior.
+  static List<ControlPoint> upperFaceStabilizerPoints(TriMesh mesh) {
+    const indices = {
+      10, 338, 151, 9, 67, 109, 103, 54, 21, 162, 127, 234,
+    };
+    final points = <ControlPoint>[];
+    for (final index in indices) {
+      final source = vertexAt(mesh, index);
+      if (source != null) {
+        points.add(ControlPoint(source: source, target: source));
+      }
+    }
+    return points;
+  }
+
+  /// Estabiliza lábio inferior durante warp de queixo.
+  static List<ControlPoint> lipStabilizerPoints(TriMesh mesh) {
+    const indices = {13, 14, 17, 0, 37, 267, 269, 270, 61, 291};
+    final points = <ControlPoint>[];
+    for (final index in indices) {
+      final source = vertexAt(mesh, index);
+      if (source != null) {
+        points.add(ControlPoint(source: source, target: source));
+      }
+    }
+    return points;
+  }
+
+  /// Centro facial derivado de landmarks centrais (não centro da imagem).
+  static Offset? faceCenter(FaceMeshResult face, Size imageSize) {
+    final points = [1, 168, 152]
+        .map((i) => landmarkPoint(face, i, imageSize))
+        .whereType<Offset>()
+        .toList();
+    if (points.isEmpty) {
+      final oval = MeshTopology.faceRegionLandmarks[MeshRegion.faceOval];
+      if (oval == null) {
+        return null;
+      }
+      final bounds = landmarkBounds(face, imageSize, oval);
+      if (bounds == null || bounds.isEmpty) {
+        return null;
+      }
+      return bounds.center;
+    }
+    var x = 0.0;
+    var y = 0.0;
+    for (final p in points) {
+      x += p.dx;
+      y += p.dy;
+    }
+    return Offset(x / points.length, y / points.length);
+  }
+
+  static double faceCenterX(FaceMeshResult face, Size imageSize) {
+    return faceCenter(face, imageSize)?.dx ?? imageSize.width * 0.5;
+  }
+
+  /// Centro geométrico do faceOval para escala de cabeça simétrica.
+  static Offset? faceOvalCenter(FaceMeshResult face, Size imageSize) {
+    final oval = MeshTopology.faceRegionLandmarks[MeshRegion.faceOval];
+    if (oval == null) {
+      return null;
+    }
+    final bounds = landmarkBounds(face, imageSize, oval);
+    if (bounds == null || bounds.isEmpty) {
+      return null;
+    }
+    return bounds.center;
   }
 
   static Offset? vertexAt(TriMesh mesh, int landmarkIndex) {

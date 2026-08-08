@@ -18,8 +18,10 @@ class NoseSlimFilter extends FaceWarpFilter {
   @override
   List<String> get affectedRegions => ['nose'];
 
-  static const _lateralIndices = {
+  /// Landmarks laterais do nariz (compartilhado com V3 pilot).
+  static const lateralIndices = {
     48, 64, 115, 220, 45, 275, 440, 344, 278, 294, 327, 326,
+    49, 131, 134, 51, 3, 195, 197, 419, 248, 456,
   };
 
   @override
@@ -29,11 +31,14 @@ class NoseSlimFilter extends FaceWarpFilter {
       return const [];
     }
 
-    final points = FaceWarpUtils.anchorPoints(context.mesh);
+    final points = [
+      ...FaceWarpUtils.mouthStabilizerPoints(context.mesh),
+      ...FaceWarpUtils.anchorPoints(context.mesh),
+    ];
     final axis = FaceWarpUtils.noseAxisCenter(context.mesh);
-    final maxShift = context.imageSize.width * 0.035 * intensity;
+    final maxShift = context.imageSize.width * 0.045 * intensity;
 
-    for (final index in _lateralIndices) {
+    for (final index in lateralIndices) {
       final source = FaceWarpUtils.vertexAt(context.mesh, index);
       if (source == null) {
         continue;

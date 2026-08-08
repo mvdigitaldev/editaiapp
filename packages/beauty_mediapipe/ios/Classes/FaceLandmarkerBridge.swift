@@ -18,7 +18,7 @@ final class FaceLandmarkerBridge {
     var options = FaceLandmarkerOptions()
     options.baseOptions.modelAssetPath = modelPath
     options.runningMode = .image
-    options.numFaces = 1
+    options.numFaces = Self.maxFaces
     options.minFaceDetectionConfidence = 0.5
     options.minFacePresenceConfidence = 0.5
     options.minTrackingConfidence = 0.5
@@ -27,22 +27,34 @@ final class FaceLandmarkerBridge {
   }
 
   func detectFace(imageBytes: Data, width: Int, height: Int, rotation: Int) throws -> [String: Any]? {
-    guard let landmarker = faceLandmarker else { return nil }
+    let faces = try detectFaces(imageBytes: imageBytes, width: width, height: height, rotation: rotation)
+    return faces.max(by: { faceArea($0) < faceArea($1) })
+  }
+
+  func detectFaces(imageBytes: Data, width: Int, height: Int, rotation: Int) throws -> [[String: Any]] {
+    guard let landmarker = faceLandmarker else { return [] }
     guard let image = Self.decodeImage(
       imageBytes: imageBytes,
       width: width,
       height: height
-    ) else { return nil }
+    ) else { return [] }
 
     let oriented = rotate(image: image, degrees: rotation)
-    guard let cgImage = oriented.cgImage else { return nil }
+    guard let cgImage = oriented.cgImage else { return [] }
 
     let mpImage = try MPImage(uiImage: UIImage(cgImage: cgImage))
     let result = try landmarker.detect(image: mpImage)
 
-    guard let landmarks = result.faceLandmarks.first, !landmarks.isEmpty else {
-      return nil
-    }
+    let mapped = result.faceLandmarks.compactMap { mapLandmarks($0) }
+    return mapped.sorted { faceArea($0) > faceArea($1) }
+  }
+
+  func dispose() {
+    faceLandmarker = nil
+  }
+
+  private func mapLandmarks(_ landmarks: [NormalizedLandmark]) -> [String: Any]? {
+    guard !landmarks.isEmpty else { return nil }
 
     var mappedLandmarks: [[String: Any]] = []
     var minX = 1.0, minY = 1.0, maxX = 0.0, maxY = 0.0
@@ -75,8 +87,15 @@ final class FaceLandmarkerBridge {
     ]
   }
 
-  func dispose() {
-    faceLandmarker = nil
+  private func faceArea(_ face: [String: Any]) -> Double {
+    guard let box = face["boundingBox"] as? [String: Any],
+          let left = box["left"] as? Double,
+          let top = box["top"] as? Double,
+          let right = box["right"] as? Double,
+          let bottom = box["bottom"] as? Double else {
+      return 0
+    }
+    return (right - left) * (bottom - top)
   }
 
   private static func decodeImage(imageBytes: Data, width: Int, height: Int) -> UIImage? {
@@ -118,17 +137,16 @@ final class FaceLandmarkerBridge {
     UIGraphicsBeginImageContext(newSize)
     defer { UIGraphicsEndImageContext() }
     guard let context = UIGraphicsGetCurrentContext() else { return image }
-
     context.translateBy(x: newSize.width / 2, y: newSize.height / 2)
     context.rotate(by: radians)
-    image.draw(
-      in: CGRect(
-        x: -image.size.width / 2,
-        y: -image.size.height / 2,
-        width: image.size.width,
-        height: image.size.height
-      )
-    )
+    image.draw(in: CGRect(
+      x: -image.size.width / 2,
+      y: -image.size.height / 2,
+      width: image.size.width,
+      height: image.size.height
+    ))
     return UIGraphicsGetImageFromCurrentImageContext() ?? image
   }
+
+  static let maxFaces = 5
 }

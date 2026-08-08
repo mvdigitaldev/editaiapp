@@ -27,7 +27,7 @@ class EyeRotationFilter extends FaceWarpFilter {
     }
 
     final angle = 0.08 * intensity;
-    final points = FaceWarpUtils.anchorPoints(context.mesh);
+    final points = FaceWarpUtils.eyeWarpAnchors(context.mesh);
 
     points.addAll(
       FaceWarpUtils.rotateEyeRegion(

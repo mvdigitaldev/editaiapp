@@ -1,8 +1,8 @@
 # Visual Quality Targets — catálogo de fichas por ferramenta
 
 Contrato de qualidade por ferramenta (cap. 19 do plano do SDK facial).
-Sprint 0 cobre os Grupos A (pele) e B (warp) — 11 fichas. Grupos C
-(regiões) e D (cor) entram nos Sprints 2 e 5.
+Sprint 0 cobre os Grupos A (pele) e B (warp) — 11 fichas. Grupo D (cor)
+entrou no Sprint 2. Grupo C (regiões) entra no Sprint 5.
 
 Cada invariante mensurável vira asserção no golden testing
 (`test/golden/`); cada regra de gating vira predicado no registry de
@@ -181,6 +181,42 @@ Template:
 - **Desabilitar quando**: sobrancelhas totalmente oclusas.
 - **Avisar quando**: sobrancelha muito fina/depilada — realce pode marcar
   borda dura.
+
+---
+
+## Grupo D — Cor global (color engine)
+
+### D1. Exposição / contraste / saturação / temperatura
+
+- **Objetivo**: grade global estilo Lightroom em um único pass combinável.
+- **Targets**: pixels médios respondem monotonicamente ao slider; brancos/pretos
+  respeitam highlights/shadows/whites/blacks.
+- **Invariantes**: sem banding visível em gradientes suaves no golden; sem shift
+  de matiz >5° em neutros (cinzas) com temperatura em zero.
+- **Reduzir quando**: foto já clipada (exposição estourada).
+- **Desabilitar quando**: n/a (sempre disponível).
+- **Avisar quando**: n/a.
+
+### D2. Vinheta
+
+- **Objetivo**: escurecer/clarear bordas com falloff radial suave.
+- **Targets**: centro preservado; cantos escurecem proporcionalmente ao slider.
+- **Invariantes**: simetria radial; sem degrau na transição centro→borda.
+- **Reduzir quando**: composição já tem vinheta forte da câmera.
+- **Desabilitar quando**: n/a.
+- **Avisar quando**: n/a.
+
+### D3. Nitidez
+
+- **Objetivo**: realçar detalhe de alta frequência sem acentuar poros em pele
+  suavizada.
+- **Targets**: bordas de alto contraste (tecido, cabelo, fundo) ganham definição;
+  pele com `skin_smooth` ativo recebe ≤15% do efeito.
+- **Invariantes**: sem halos >2px em bordas duras no golden; pele protegida não
+  ganha granulação extra vs. centro do rosto.
+- **Reduzir quando**: ruído alto (nitidez + ruído = granulado).
+- **Desabilitar quando**: n/a.
+- **Avisar quando**: foto muito borrada — nitidez não recupera foco perdido.
 
 ---
 

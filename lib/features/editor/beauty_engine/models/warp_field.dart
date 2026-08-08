@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import '../body_reshape/passes/pass_profiler.dart';
 import '../body_reshape/protection/rigidity_map.dart';
+import '../warp/mls_solver.dart';
 import '../warp/models/control_point.dart';
 import 'mesh_region.dart';
 import 'tri_mesh.dart';
@@ -54,12 +55,17 @@ class WarpField {
     this.foldingCellsAfter = 0,
   });
 
-  /// Identidade: sem intensidade, ou sem CPs e sem máscara ativa (mesh raster).
+  /// Identidade: sem intensidade, sem CPs móveis e sem deslocamento na grade.
   bool get isIdentity {
     if (intensity <= 0) {
       return true;
     }
-    if (controlPoints.isNotEmpty) {
+    for (final point in controlPoints) {
+      if (!point.isAnchor && point.delta.distance > 0.25) {
+        return false;
+      }
+    }
+    if (maxDisplacementMagnitude > 0.25) {
       return false;
     }
     for (final value in mask) {
@@ -187,6 +193,24 @@ class WarpField {
     return _lerp(_lerp(m00, m10, tx), _lerp(m01, m11, tx), ty);
   }
 
+  /// Posição normalizada na imagem PRÉ-warp correspondente ao pixel de saída.
+  ///
+  /// Convenção do remap: `output[gx] = input[gx + disp*mask]`. A máscara
+  /// anatômica deve ser amostrada em `gx + disp`, não em `gx`.
+  Offset sourceNormalizedForMask(Offset outputNormalized) {
+    if (isIdentity) {
+      return outputNormalized;
+    }
+    final warpMask = sampleMask(outputNormalized);
+    final disp = sampleDisplacement(outputNormalized);
+    final srcX = outputNormalized.dx * imageSize.width + disp.dx * warpMask;
+    final srcY = outputNormalized.dy * imageSize.height + disp.dy * warpMask;
+    return Offset(
+      (srcX / imageSize.width).clamp(0.0, 1.0),
+      (srcY / imageSize.height).clamp(0.0, 1.0),
+    );
+  }
+
   Offset _cellDisplacement(int x, int y) {
     final idx = (y * gridWidth + x) * 2;
     return Offset(displacement[idx], displacement[idx + 1]);
@@ -234,6 +258,186 @@ class WarpField {
     return Rect.fromLTRB(left, top, right, bottom);
   }
 
+  /// Interpola a grade MLS (remove degraus visíveis em olhos/lábios no GPU).
+  WarpField upsampleBilinear(int factor) {
+    if (factor <= 1 || isIdentity) {
+      return this;
+    }
+    final newW = (gridWidth - 1) * factor + 1;
+    final newH = (gridHeight - 1) * factor + 1;
+    final outDisp = Float32List(newW * newH * 2);
+    final outMask = Float32List(newW * newH);
+
+    for (var gy = 0; gy < newH; gy++) {
+      for (var gx = 0; gx < newW; gx++) {
+        final nx = gx / (newW - 1);
+        final ny = gy / (newH - 1);
+        final n = Offset(nx, ny);
+        final disp = sampleDisplacement(n);
+        final idx = gy * newW + gx;
+        outDisp[idx * 2] = disp.dx;
+        outDisp[idx * 2 + 1] = disp.dy;
+        outMask[idx] = sampleMask(n);
+      }
+    }
+
+    return WarpField(
+      gridWidth: newW,
+      gridHeight: newH,
+      displacement: outDisp,
+      mask: outMask,
+      imageSize: imageSize,
+      region: region,
+      controlPoints: controlPoints,
+      intensity: intensity,
+      rigidityMap: rigidityMap,
+      passId: passId,
+      activeCellCount: activeCellCount,
+      passProfiles: passProfiles,
+      foldingCellsBefore: foldingCellsBefore,
+      foldingCellsAfter: foldingCellsAfter,
+    );
+  }
+
+  /// Densifica levemente para preview interativo (sem re-solve MLS — rápido).
+  WarpField refinedForGpuPreview() {
+    if (isIdentity) {
+      return this;
+    }
+    final minDim = math.min(imageSize.width, imageSize.height);
+    final targetCells = (minDim / 5).round().clamp(96, 160);
+    if (gridWidth >= targetCells) {
+      return this;
+    }
+    final factor = (targetCells / gridWidth).ceil().clamp(2, 3);
+    return upsampleBilinear(factor);
+  }
+
+  /// Densifica para export; reexecuta MLS nos nós novos.
+  WarpField refinedForRender({bool exportQuality = false}) {
+    if (isIdentity) {
+      return this;
+    }
+    final minDim = math.min(imageSize.width, imageSize.height);
+    final cellPx = exportQuality ? 3.5 : 4.0;
+    final maxCells = exportQuality ? 320 : 200;
+    final targetCells =
+        (minDim / cellPx).round().clamp(gridWidth, maxCells);
+    if (gridWidth >= targetCells) {
+      return this;
+    }
+    final factor = (targetCells / gridWidth).ceil().clamp(2, 4);
+    var refined = upsampleBilinear(factor);
+    if (controlPoints.isNotEmpty) {
+      refined = refined._resolveWithMls(iterations: exportQuality ? 8 : 6);
+    }
+    return refined;
+  }
+
+  /// Suaviza deslocamento na grade (remove degraus visíveis no GPU).
+  WarpField smoothDisplacement({int iterations = 2}) {
+    if (isIdentity || iterations <= 0) {
+      return this;
+    }
+    final outDisp = Float32List.fromList(displacement);
+    final outMask = Float32List.fromList(mask);
+
+    for (var iter = 0; iter < iterations; iter++) {
+      final next = Float32List.fromList(outDisp);
+      for (var gy = 0; gy < gridHeight; gy++) {
+        for (var gx = 0; gx < gridWidth; gx++) {
+          final idx = gy * gridWidth + gx;
+          if (mask[idx] <= 0.001) {
+            continue;
+          }
+          var sumDx = 0.0;
+          var sumDy = 0.0;
+          var wSum = 0.0;
+          for (var dy = -1; dy <= 1; dy++) {
+            for (var dx = -1; dx <= 1; dx++) {
+              final nx = gx + dx;
+              final ny = gy + dy;
+              if (nx < 0 || ny < 0 || nx >= gridWidth || ny >= gridHeight) {
+                continue;
+              }
+              final nIdx = ny * gridWidth + nx;
+              final mw = mask[nIdx];
+              if (mw <= 0.001) {
+                continue;
+              }
+              final weight = dx == 0 && dy == 0 ? 2.0 : 1.0;
+              sumDx += outDisp[nIdx * 2] * weight;
+              sumDy += outDisp[nIdx * 2 + 1] * weight;
+              wSum += weight;
+            }
+          }
+          if (wSum > 0) {
+            next[idx * 2] = sumDx / wSum;
+            next[idx * 2 + 1] = sumDy / wSum;
+          }
+        }
+      }
+      outDisp.setAll(0, next);
+    }
+
+    return WarpField(
+      gridWidth: gridWidth,
+      gridHeight: gridHeight,
+      displacement: outDisp,
+      mask: outMask,
+      imageSize: imageSize,
+      region: region,
+      controlPoints: controlPoints,
+      intensity: intensity,
+      rigidityMap: rigidityMap,
+      passId: passId,
+      passProfiles: passProfiles,
+      foldingCellsBefore: foldingCellsBefore,
+      foldingCellsAfter: foldingCellsAfter,
+    );
+  }
+
+  /// Reexecuta MLS nos nós da grade (elimina degraus do upsample bilinear).
+  WarpField _resolveWithMls({required int iterations}) {
+    if (controlPoints.isEmpty) {
+      return this;
+    }
+    final outDisp = Float32List(gridWidth * gridHeight * 2);
+    final outMask = Float32List.fromList(mask);
+    for (var gy = 0; gy < gridHeight; gy++) {
+      for (var gx = 0; gx < gridWidth; gx++) {
+        final idx = gy * gridWidth + gx;
+        if (mask[idx] <= 0.001) {
+          continue;
+        }
+        final px = (gx / (gridWidth - 1)) * imageSize.width;
+        final py = (gy / (gridHeight - 1)) * imageSize.height;
+        final src = MlsSolver.inverse(
+          controlPoints,
+          Offset(px, py),
+          iterations: iterations,
+        );
+        outDisp[idx * 2] = src.dx - px;
+        outDisp[idx * 2 + 1] = src.dy - py;
+      }
+    }
+    return WarpField(
+      gridWidth: gridWidth,
+      gridHeight: gridHeight,
+      displacement: outDisp,
+      mask: outMask,
+      imageSize: imageSize,
+      region: region,
+      controlPoints: controlPoints,
+      intensity: intensity,
+      rigidityMap: rigidityMap,
+      passId: passId,
+      passProfiles: passProfiles,
+      foldingCellsBefore: foldingCellsBefore,
+      foldingCellsAfter: foldingCellsAfter,
+    );
+  }
+
   /// Compõe dois warps sequenciais (aplica [first], depois [second] no resultado).
   ///
   /// Remap: `src = p + d_eff(p)`. Composição:
@@ -271,7 +475,7 @@ class WarpField {
         final effDy = db.dy * mb + da.dy * ma;
         outDisp[idx * 2] = effDx;
         outDisp[idx * 2 + 1] = effDy;
-        outMask[idx] = math.max(ma, mb);
+        outMask[idx] = 1 - (1 - ma) * (1 - mb);
       }
     }
 

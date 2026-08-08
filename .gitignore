@@ -59,6 +59,7 @@ upload_certificate.pem
 
 # Corpus de fotos reais do golden testing (pessoas reais — só local)
 test/golden/corpus/photos/
+test/golden/fixtures/photos/
 
 .cursor*
 .cursor-deploy-tmp/mcp-deploy-salvar-edicao-manual.json

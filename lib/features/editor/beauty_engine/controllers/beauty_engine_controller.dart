@@ -14,6 +14,9 @@ import '../body_reshape/providers/body_vision_coordinator.dart';
 import '../body_reshape/providers/mediapipe_body_joint_mapper.dart';
 import '../body_reshape/providers/vision_capabilities.dart';
 import '../filters/body/body_filter_pipeline.dart';
+import '../filters/color/color_filter_pipeline.dart';
+import '../body_reshape/maps/influence_map.dart';
+import '../config/face_warp_v3_config.dart';
 import '../filters/face/face_filter_pipeline.dart';
 import '../filters/face/face_warp_utils.dart';
 import '../filters/face/skin_filter_pipeline.dart';
@@ -22,22 +25,47 @@ import '../face_mesh/face_mesh_detector.dart';
 import '../mesh/mesh_engine.dart';
 import '../models/image_source.dart';
 import '../models/image_source_rgba.dart';
+import '../models/warp_field.dart';
 import '../models/processed_frame.dart';
 import '../models/processing_pipeline.dart';
 import '../models/pose_result.dart';
 import '../performance/beauty_profiler.dart';
+import '../performance/device_capability.dart';
+import '../performance/face_warp_isolate.dart';
+import '../performance/hot_path/hot_path_renderer.dart';
+import '../presets/adaptive_preset_engine.dart';
+import '../quality/face_quality_assessment.dart';
+import '../quality/face_quality_context.dart';
 import '../performance/landmark_throttle.dart';
 import '../performance/tiled_export_engine.dart';
 import '../pose/pose_detector.dart';
-import '../rendering/gpu_renderer.dart';
+import '../rendering/gpu_renderer_impl.dart';
+import '../rendering/render_stage_cache.dart';
+import '../rendering/render_target.dart';
+import '../rendering/texture_handle.dart';
+import '../filters/face/mask_factory.dart';
+import '../segment/face_parts_detector.dart';
+import '../segment/face_parts_segmentation.dart';
+import '../segment/face_parsing_detector.dart';
+import '../segment/face_parsing_result.dart';
 import '../segment/person_mask.dart';
+import '../tools/tool_gate_decision.dart';
+import '../tools/tool_gate_engine.dart';
+import '../warp/anatomy/anatomical_intent.dart';
+import '../warp/anatomy/face_matte_roi.dart';
+import '../warp/anatomy/face_mesh_deformation_engine.dart';
+import '../warp/anatomy/face_warp_debug_stats.dart';
 import '../warp/warp_engine.dart';
+import '../warp/face_mesh_gpu_payload.dart';
+import '../warp/warp_field_builder.dart';
 
 /// Orquestrador do Beauty Engine — ponto unico para a UI (sem Widget).
 class BeautyEngineController {
   final FaceMeshDetector faceDetector;
   final PoseDetector poseDetector;
   final PersonMaskDetector? personMaskDetector;
+  final FacePartsDetector? facePartsDetector;
+  final FaceParsingDetector? faceParsingDetector;
   final BodyVisionCoordinator? bodyVisionCoordinator;
   final MeshEngine meshEngine;
   final WarpEngine warpEngine;
@@ -45,6 +73,9 @@ class BeautyEngineController {
   final FaceFilterPipeline faceFilterPipeline;
   final BodyFilterPipeline bodyFilterPipeline;
   final SkinFilterPipeline skinFilterPipeline;
+  final ColorFilterPipeline colorFilterPipeline;
+  final ToolGateEngine toolGateEngine;
+  final AdaptivePresetEngine adaptivePresetEngine;
   final BeautyProfiler profiler;
   final LandmarkThrottle<FaceMeshResult?> faceLandmarkThrottle;
   final LandmarkThrottle<PoseResult?> poseLandmarkThrottle;
@@ -65,8 +96,41 @@ class BeautyEngineController {
       const MediaPipeBodyJointMapper();
   final MattePreprocessor _mattePreprocessor = const MattePreprocessor();
 
+  final RenderStageCache _renderStageCache = RenderStageCache();
+  final MaskFactory maskFactory = MaskFactory();
+
+  /// Quality Score + gating da foto atual (Sprint 3).
+  FaceQualityContext? lastQualityContext;
+  ToolGatePlan? lastToolGatePlan;
+
+  /// Último face parsing 19 classes (Sprint 4).
+  FaceParsingResult? lastFaceParsing;
+
+  /// Último campo warp facial (debug overlay no lab — Sprint 30).
+  WarpField? lastFaceWarpField;
+
+  /// Backend do último warp facial: `v3` (malha+ACE) ou `mls`.
+  String? lastFaceWarpBackend;
+
+  /// Debug V3 — vértices movidos e Δv máximo (lab).
+  FaceWarpDebugStats lastFaceWarpDebugStats = FaceWarpDebugStats.empty;
+
+  /// Último payload GPU piecewise-affine (Sprint 37).
+  FaceMeshGpuPayload? lastFaceMeshGpuPayload;
+
+  /// Matte ROI do último warp facial — inpaint pós-warp e anti-fantasma.
+  InfluenceMap? lastFaceWarpInfluence;
+
+  static const _faceMeshDeformationEngine = FaceMeshDeformationEngine();
+
   /// Campo de pincel manual acumulado (coordenadas normalizadas → grade).
   WarpField? manualBrushField;
+
+  /// Perfil de hardware (tier A/B/C) — definido pela UI após benchmark.
+  DeviceCapabilityProfile? deviceProfile;
+
+  /// Hot path FFI-ready (MethodChannel fallback até nativo expor FFI).
+  HotPathRenderer? hotPathRenderer;
 
   BeautyEngineController({
     required this.faceDetector,
@@ -75,10 +139,15 @@ class BeautyEngineController {
     required this.warpEngine,
     required this.gpuRenderer,
     this.personMaskDetector,
+    this.facePartsDetector,
+    this.faceParsingDetector,
     this.bodyVisionCoordinator,
     this.faceFilterPipeline = const FaceFilterPipeline(),
     this.bodyFilterPipeline = const BodyFilterPipeline(),
     this.skinFilterPipeline = const SkinFilterPipeline(),
+    this.colorFilterPipeline = const ColorFilterPipeline(),
+    this.toolGateEngine = const ToolGateEngine(),
+    AdaptivePresetEngine? adaptivePresetEngine,
     this.occlusionEngine = const OcclusionEngine(),
     this.conservativeOcclusionProvider = const ConservativeOcclusionProvider(),
     this.bodyMultiPassConfig = BodyMultiPassConfig.legacy,
@@ -86,7 +155,9 @@ class BeautyEngineController {
     LandmarkThrottle<FaceMeshResult?>? faceLandmarkThrottle,
     LandmarkThrottle<PoseResult?>? poseLandmarkThrottle,
     TiledExportEngine? tiledExportEngine,
-  })  : profiler = profiler ?? BeautyProfiler(),
+  })  : adaptivePresetEngine =
+            adaptivePresetEngine ?? AdaptivePresetEngine(),
+        profiler = profiler ?? BeautyProfiler(),
         faceLandmarkThrottle =
             faceLandmarkThrottle ?? LandmarkThrottle<FaceMeshResult?>(),
         poseLandmarkThrottle =
@@ -108,6 +179,18 @@ class BeautyEngineController {
     )
         ? await detectPersonMask(source)
         : null;
+    final faceParts = face != null &&
+            skinFilterPipeline.hasActiveSkin(pipeline.effectiveParameters)
+        ? await detectFaceParts(source)
+        : null;
+    final faceParsing = face != null &&
+            skinFilterPipeline.hasActiveSkin(pipeline.effectiveParameters)
+        ? await detectFaceParsing(
+            source,
+            face: face,
+            parts: faceParts,
+          )
+        : null;
 
     final output = await _renderTexture(
       source: source,
@@ -115,6 +198,8 @@ class BeautyEngineController {
       face: face,
       pose: pose,
       personMask: personMask,
+      faceParts: faceParts,
+      faceParsing: faceParsing,
     );
 
     final bytes = await gpuRenderer.readPixels(output);
@@ -131,6 +216,52 @@ class BeautyEngineController {
     );
   }
 
+  /// Preview interativo: pipeline GPU → RGBA, sem encode JPEG.
+  Future<ProcessedFrame> renderPreview({
+    required ImageSource source,
+    required ProcessingPipeline pipeline,
+    FaceMeshResult? face,
+    PoseResult? pose,
+    PersonMask? personMask,
+    FacePartsSegmentation? faceParts,
+    FaceParsingResult? faceParsing,
+  }) async {
+    profiler.beginFrame();
+    profiler.start('render_preview');
+
+    final inputs = await _resolveRenderInputs(
+      source: source,
+      pipeline: pipeline,
+      face: face,
+      pose: pose,
+      personMask: personMask,
+      faceParts: faceParts,
+      faceParsing: faceParsing,
+    );
+    final output = await _renderTexture(
+      source: source,
+      pipeline: pipeline,
+      face: inputs.face,
+      pose: inputs.pose,
+      personMask: inputs.personMask,
+      faceParts: inputs.faceParts,
+      faceParsing: inputs.faceParsing,
+      interactivePreview: true,
+    );
+
+    final rgba = await gpuRenderer.readPixels(output);
+    gpuRenderer.release(output);
+    profiler.end('render_preview');
+
+    return ProcessedFrame(
+      bytes: rgba,
+      width: output.width,
+      height: output.height,
+      face: inputs.face,
+      pose: inputs.pose,
+    );
+  }
+
   /// Exporta JPEG; usa tiles automaticamente acima de 8MP (Sprint 25).
   Future<Uint8List> exportJpeg({
     required ImageSource source,
@@ -140,6 +271,8 @@ class BeautyEngineController {
     FaceMeshResult? face,
     PoseResult? pose,
     PersonMask? personMask,
+    FacePartsSegmentation? faceParts,
+    FaceParsingResult? faceParsing,
     bool interactivePreview = false,
   }) async {
     profiler.beginFrame();
@@ -159,19 +292,23 @@ class BeautyEngineController {
     }
 
     profiler.start('export_total');
-    final resolvedFace = face ?? await detectFace(source);
-    final resolvedPose = pose ?? await detectPose(source);
-    final params = pipeline.effectiveParameters;
-    final resolvedMask = personMask ??
-        (bodyFilterPipeline.hasActiveBodyWarp(params)
-            ? await detectPersonMask(source)
-            : null);
+    final inputs = await _resolveRenderInputs(
+      source: source,
+      pipeline: pipeline,
+      face: face,
+      pose: pose,
+      personMask: personMask,
+      faceParts: faceParts,
+      faceParsing: faceParsing,
+    );
     final output = await _renderTexture(
       source: source,
       pipeline: pipeline,
-      face: resolvedFace,
-      pose: resolvedPose,
-      personMask: resolvedMask,
+      face: inputs.face,
+      pose: inputs.pose,
+      personMask: inputs.personMask,
+      faceParts: inputs.faceParts,
+      faceParsing: inputs.faceParsing,
       interactivePreview: interactivePreview,
     );
 
@@ -181,8 +318,50 @@ class BeautyEngineController {
     return jpeg;
   }
 
+  Future<_RenderInputs> _resolveRenderInputs({
+    required ImageSource source,
+    required ProcessingPipeline pipeline,
+    FaceMeshResult? face,
+    PoseResult? pose,
+    PersonMask? personMask,
+    FacePartsSegmentation? faceParts,
+    FaceParsingResult? faceParsing,
+  }) async {
+    final params = pipeline.effectiveParameters;
+    final resolvedFace = face ?? await detectFace(source);
+    final resolvedPose = pose ?? await detectPose(source);
+    final resolvedMask = personMask ??
+        (bodyFilterPipeline.hasActiveBodyWarp(params)
+            ? await detectPersonMask(source)
+            : null);
+    final resolvedFaceParts = faceParts ??
+        (resolvedFace != null && skinFilterPipeline.hasActiveSkin(params)
+            ? await detectFaceParts(source)
+            : null);
+    final resolvedFaceParsing = faceParsing ??
+        (resolvedFace != null &&
+                skinFilterPipeline.needsSemanticParsing(params)
+            ? await detectFaceParsing(
+                source,
+                face: resolvedFace,
+                parts: resolvedFaceParts,
+              )
+            : null);
+    return _RenderInputs(
+      face: resolvedFace,
+      pose: resolvedPose,
+      personMask: resolvedMask,
+      faceParts: resolvedFaceParts,
+      faceParsing: resolvedFaceParsing,
+    );
+  }
+
   Future<FaceMeshResult?> detectFace(ImageSource source) {
     return faceLandmarkThrottle.resolve(() => faceDetector.detect(source));
+  }
+
+  Future<List<FaceMeshResult>> detectAllFaces(ImageSource source) {
+    return faceDetector.detectAll(source);
   }
 
   Future<PoseResult?> detectPose(ImageSource source) {
@@ -197,6 +376,56 @@ class BeautyEngineController {
     try {
       return await detector.detect(source);
     } catch (_) {
+      return null;
+    }
+  }
+
+  /// Segmentação semântica de partes para a máscara de pele. Falha volta
+  /// `null` e a pele usa o fallback geométrico dos landmarks.
+  Future<FacePartsSegmentation?> detectFaceParts(ImageSource source) async {
+    final detector = facePartsDetector;
+    if (detector == null) {
+      return null;
+    }
+    try {
+      return await detector.detect(source);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Face parsing 19 classes — BiSeNet nativo ou mapper multiclass + landmarks.
+  Future<FaceParsingResult?> detectFaceParsing(
+    ImageSource source, {
+    FaceMeshResult? face,
+    FacePartsSegmentation? parts,
+  }) async {
+    final resolvedFace = face ?? await detectFace(source);
+    if (resolvedFace == null) {
+      lastFaceParsing = null;
+      return null;
+    }
+
+    try {
+      final detector = faceParsingDetector;
+      final FaceParsingResult? result;
+      if (detector != null) {
+        result = await detector.detect(
+          source: source,
+          face: resolvedFace,
+          parts: parts ?? await detectFaceParts(source),
+        );
+      } else {
+        result = await const FaceParsingDetectorStub().detect(
+          source: source,
+          face: resolvedFace,
+          parts: parts,
+        );
+      }
+      lastFaceParsing = result;
+      return result;
+    } catch (_) {
+      lastFaceParsing = null;
       return null;
     }
   }
@@ -555,18 +784,161 @@ class BeautyEngineController {
     required FaceMeshResult? face,
     required Size imageSize,
     required Map<String, double> parameters,
+    WarpFieldQuality quality = WarpFieldQuality.preview,
+    bool refineForPreview = false,
+    bool interactivePreview = false,
+    PersonMask? personMask,
   }) {
     if (face == null || !faceFilterPipeline.hasActiveWarp(parameters)) {
+      lastFaceWarpDebugStats = FaceWarpDebugStats.empty;
+      lastFaceWarpInfluence = null;
       return null;
     }
 
     final mesh = meshEngine.buildFaceMesh(face, imageSize);
-    return faceFilterPipeline.compose(
+    final exporting = quality == WarpFieldQuality.export;
+    final linkEyes = (parameters['link_eyes'] ?? 1.0) >= 0.5;
+
+    if (FaceWarpV3Config.enabled &&
+        FaceWarpV3Config.useMeshWarpV3 &&
+        !FaceWarpV3Config.useLegacyFaceMls) {
+      profiler.start('face_warp_v3');
+      final context = FaceAnatomyContext(
+        face: face,
+        imageSize: imageSize,
+        mesh: mesh,
+        linkEyes: linkEyes,
+      );
+      final vertexField = _faceMeshDeformationEngine.composeVertexField(
+        parameters: parameters,
+        context: context,
+      );
+      lastFaceWarpDebugStats =
+          FaceMeshDeformationEngine.debugStatsFor(vertexField);
+
+      final field = _faceMeshDeformationEngine.composeWarpField(
+        face: face,
+        mesh: mesh,
+        imageSize: imageSize,
+        parameters: parameters,
+        linkEyes: linkEyes,
+        interactivePreview: interactivePreview,
+        exporting: exporting,
+        personMask: personMask,
+      );
+      lastFaceMeshGpuPayload =
+          FaceWarpV3Config.useGpuPiecewiseAffine && !interactivePreview
+              ? _faceMeshDeformationEngine.composeGpuPayload(
+                  face: face,
+                  mesh: mesh,
+                  imageSize: imageSize,
+                  parameters: parameters,
+                  personMask: personMask,
+                )
+              : null;
+      lastFaceWarpInfluence = field != null
+          ? FaceMatteRoi.buildInfluenceMap(
+              face: face,
+              imageSize: imageSize,
+              personMask: personMask,
+            )
+          : null;
+      profiler.end('face_warp_v3');
+      if (lastFaceMeshGpuPayload != null) {
+        lastFaceWarpBackend = 'v3_gpu';
+      } else {
+        lastFaceWarpBackend = FaceWarpV3Config.useDirectMeshRender
+            ? 'v3_direct'
+            : 'v3';
+      }
+      return field;
+    }
+
+    lastFaceMeshGpuPayload = null;
+    lastFaceWarpDebugStats = FaceWarpDebugStats.empty;
+    lastFaceWarpInfluence = null;
+
+    lastFaceWarpBackend = 'mls';
+    final builder = interactivePreview && !exporting
+        ? WarpFieldBuilder.forFaceWarpInteractive(imageSize)
+        : WarpFieldBuilder.forFaceWarp(
+            imageSize,
+            exporting: exporting,
+          );
+    final pipeline = FaceFilterPipeline(fieldBuilder: builder);
+    var field = pipeline.compose(
       mesh: mesh,
       face: face,
       imageSize: imageSize,
       parameters: parameters,
+      unified: interactivePreview && !exporting,
     );
+    if (exporting) {
+      field = field.refinedForRender(exportQuality: true).smoothDisplacement();
+    }
+    return field;
+  }
+
+  /// MLS facial em isolate quando preview/export é pesado (Sprint 6).
+  Future<WarpField?> composeFaceFieldAsync({
+    required FaceMeshResult? face,
+    required Size imageSize,
+    required Map<String, double> parameters,
+    WarpFieldQuality quality = WarpFieldQuality.preview,
+    bool interactivePreview = false,
+    PersonMask? personMask,
+  }) async {
+    if (face == null || !faceFilterPipeline.hasActiveWarp(parameters)) {
+      return null;
+    }
+
+    final exporting = quality == WarpFieldQuality.export;
+    final refineForPreview = interactivePreview && !exporting;
+
+    if (FaceWarpV3Config.enabled &&
+        FaceWarpV3Config.useMeshWarpV3 &&
+        !FaceWarpV3Config.useLegacyFaceMls) {
+      return composeFaceField(
+        face: face,
+        imageSize: imageSize,
+        parameters: parameters,
+        quality: quality,
+        refineForPreview: refineForPreview,
+        interactivePreview: interactivePreview,
+        personMask: personMask,
+      );
+    }
+
+    final useIsolate = !interactivePreview &&
+        FaceWarpIsolateRunner.shouldUseIsolate(
+          imageSize: imageSize,
+          quality: exporting ? WarpFieldQuality.export : WarpFieldQuality.preview,
+          profilePrefersIsolate: deviceProfile?.useFaceWarpIsolate ?? false,
+        );
+
+    if (!useIsolate) {
+      return composeFaceField(
+        face: face,
+        imageSize: imageSize,
+        parameters: parameters,
+        quality: quality,
+        refineForPreview: refineForPreview,
+        interactivePreview: interactivePreview,
+        personMask: personMask,
+      );
+    }
+
+    profiler.start('face_warp_isolate');
+    final input = FaceWarpIsolateInput.fromCompose(
+      face: face,
+      imageSize: imageSize,
+      parameters: parameters,
+      quality: exporting ? WarpFieldQuality.export : WarpFieldQuality.preview,
+      refineForPreview: refineForPreview,
+    );
+    final field = await FaceWarpIsolateRunner.run(input);
+    profiler.end('face_warp_isolate');
+    return field;
   }
 
   Future<Uint8List> renderPostWarpRgba({
@@ -577,6 +949,10 @@ class BeautyEngineController {
     required Map<String, double> params,
     required FaceMeshResult? face,
     required Size imageSize,
+    FacePartsSegmentation? faceParts,
+    FaceParsingResult? faceParsing,
+    WarpField? faceWarp,
+    Offset tileOrigin = Offset.zero,
   }) async {
     final texture = await gpuRenderer.upload(
       TextureUpload(
@@ -591,6 +967,10 @@ class BeautyEngineController {
       params,
       face: face,
       imageSize: imageSize,
+      faceParts: faceParts,
+      faceParsing: faceParsing,
+      faceWarp: faceWarp,
+      tileOrigin: tileOrigin,
     );
 
     if (postStages.isEmpty) {
@@ -612,16 +992,114 @@ class BeautyEngineController {
     return pixels;
   }
 
+  /// Limpa cache de estágio (ex.: ao trocar foto).
+  void invalidateRenderStageCache() {
+    final gpu = gpuRenderer;
+    if (gpu is GpuRendererImpl) {
+      _renderStageCache.clear(gpu);
+    }
+    maskFactory.clearCache();
+    lastQualityContext = null;
+    lastToolGatePlan = null;
+    lastFaceParsing = null;
+    lastFaceWarpField = null;
+    lastFaceWarpDebugStats = FaceWarpDebugStats.empty;
+    lastFaceWarpInfluence = null;
+  }
+
+  /// Face Quality Assessment — 1× por foto (cap. 7).
+  Future<FaceQualityContext> assessImageQuality({
+    required ImageSource source,
+    FaceMeshResult? face,
+    FacePartsSegmentation? faceParts,
+  }) async {
+    profiler.start('quality_assess');
+    final rgba = ImageSourceRgba.ensureRgba(source);
+    final context = FaceQualityAssessment.assess(
+      rgba: rgba.bytes,
+      width: rgba.width,
+      height: rgba.height,
+      face: face,
+      faceParts: faceParts,
+    );
+    lastQualityContext = context;
+    lastToolGatePlan = toolGateEngine.evaluate(context);
+    profiler.end('quality_assess');
+    return context;
+  }
+
+  /// Aplica caps de gating aos parâmetros do slider.
+  Map<String, double> applyToolGating(Map<String, double> raw) {
+    return lastToolGatePlan?.applyToParameters(raw) ?? raw;
+  }
+
   Future<TextureHandle> _renderTexture({
     required ImageSource source,
     required ProcessingPipeline pipeline,
     required FaceMeshResult? face,
     PoseResult? pose,
     PersonMask? personMask,
+    FacePartsSegmentation? faceParts,
+    FaceParsingResult? faceParsing,
     bool interactivePreview = false,
   }) async {
     profiler.start('render_texture');
     final rgbaSource = ImageSourceRgba.ensureRgba(source);
+    final params = pipeline.effectiveParameters;
+    final imageSize = Size(
+      rgbaSource.width.toDouble(),
+      rgbaSource.height.toDouble(),
+    );
+
+    final gpuImpl =
+        gpuRenderer is GpuRendererImpl ? gpuRenderer as GpuRendererImpl : null;
+    final stageCacheKey = RenderStageCache.buildKey(
+      sourceWidth: rgbaSource.width,
+      sourceHeight: rgbaSource.height,
+      sourceSampleHash: RenderStageCache.sampleRgbaHash(rgbaSource.bytes),
+      params: params,
+      lutAssetPath: pipeline.preset?.lutAssetPath,
+      face: face,
+      hasManualBrush:
+          manualBrushField != null && !manualBrushField!.isIdentity,
+      useMeshWarpV3:
+          FaceWarpV3Config.enabled && FaceWarpV3Config.useMeshWarpV3,
+      useDirectMeshRender:
+          FaceWarpV3Config.enabled &&
+          FaceWarpV3Config.useMeshWarpV3 &&
+          FaceWarpV3Config.useDirectMeshRender,
+      useGpuPiecewiseAffine:
+          FaceWarpV3Config.enabled &&
+          FaceWarpV3Config.useMeshWarpV3 &&
+          FaceWarpV3Config.useGpuPiecewiseAffine,
+      useGpuInpaint:
+          FaceWarpV3Config.enabled &&
+          FaceWarpV3Config.usePostWarpInpaint &&
+          FaceWarpV3Config.useGpuInpaint,
+    );
+
+    if (interactivePreview &&
+        gpuImpl != null &&
+        _renderStageCache.isValid(stageCacheKey)) {
+      final colorStages = _buildColorStages(
+        params,
+        face: face,
+        imageSize: imageSize,
+        faceParts: faceParts,
+      );
+      final base = _renderStageCache.preColorTexture!;
+      if (colorStages.isEmpty) {
+        profiler.end('render_texture');
+        return gpuImpl.copyTexture(base);
+      }
+      final output = await gpuRenderer.runPipeline(
+        input: base,
+        stages: colorStages,
+      );
+      profiler.end('render_texture');
+      return output;
+    }
+
     final texture = await gpuRenderer.upload(
       TextureUpload(
         bytes: rgbaSource.bytes,
@@ -631,11 +1109,6 @@ class BeautyEngineController {
     );
 
     var output = texture;
-    final params = pipeline.effectiveParameters;
-    final imageSize = Size(
-      rgbaSource.width.toDouble(),
-      rgbaSource.height.toDouble(),
-    );
 
     final bodyAssets = bodyFilterPipeline.hasActiveBodyWarp(params)
         ? resolveBodyFrameAssets(
@@ -671,11 +1144,15 @@ class BeautyEngineController {
       }
     }
 
-    final faceField = composeFaceField(
+    final faceField = await composeFaceFieldAsync(
       face: face,
       imageSize: imageSize,
       parameters: params,
+      interactivePreview: interactivePreview,
+      personMask: personMask,
     );
+    lastFaceWarpField =
+        faceField != null && !faceField.isIdentity ? faceField : null;
     if (faceField != null && !faceField.isIdentity) {
       final warpInput = output;
       output = await gpuRenderer.runPipeline(
@@ -685,7 +1162,13 @@ class BeautyEngineController {
             shaderName: WarpEngine.warpRemapShader,
             uniforms: {
               'warpField': faceField,
-              if (interactivePreview) 'fastMode': true,
+              if (lastFaceMeshGpuPayload != null)
+                'faceMeshGpuPayload': lastFaceMeshGpuPayload!,
+              'warpParameters': params,
+              if (lastFaceWarpInfluence != null)
+                'influenceMap': lastFaceWarpInfluence!,
+              if (interactivePreview) 'interactivePreview': true,
+              if (FaceWarpV3Config.usePostWarpInpaint) 'postWarpInpaint': true,
             },
           ),
         ],
@@ -696,19 +1179,46 @@ class BeautyEngineController {
       }
     }
 
-    final postStages = _buildPostWarpStages(
+    final preColorStages = _buildPreColorPostWarpStages(
       pipeline,
       params,
       face: face,
       imageSize: imageSize,
+      faceParts: faceParts,
+      faceParsing: faceParsing,
+      faceWarp: faceField != null && !faceField.isIdentity ? faceField : null,
     );
-    if (postStages.isNotEmpty) {
+    if (preColorStages.isNotEmpty) {
       final previous = output;
       output = await gpuRenderer.runPipeline(
         input: output,
-        stages: postStages,
+        stages: preColorStages,
       );
       if (previous.id != texture.id && previous.id != output.id) {
+        gpuRenderer.release(previous);
+      }
+    }
+
+    if (interactivePreview && gpuImpl != null) {
+      _renderStageCache.store(gpuImpl, stageCacheKey, output);
+    }
+
+    final colorStages = _buildColorStages(
+      params,
+      face: face,
+      imageSize: imageSize,
+      faceParts: faceParts,
+    );
+    if (colorStages.isNotEmpty) {
+      final previous = output;
+      final cachedId = _renderStageCache.preColorTexture?.id;
+      output = await gpuRenderer.runPipeline(
+        input: output,
+        stages: colorStages,
+      );
+      if (previous.id != texture.id &&
+          previous.id != output.id &&
+          previous.id != cachedId) {
         gpuRenderer.release(previous);
       }
     }
@@ -717,11 +1227,15 @@ class BeautyEngineController {
     return output;
   }
 
-  List<RenderPipelineStage> _buildPostWarpStages(
+  List<RenderPipelineStage> _buildPreColorPostWarpStages(
     ProcessingPipeline pipeline,
     Map<String, double> params, {
     FaceMeshResult? face,
     required Size imageSize,
+    FacePartsSegmentation? faceParts,
+    FaceParsingResult? faceParsing,
+    WarpField? faceWarp,
+    Offset tileOrigin = Offset.zero,
   }) {
     final stages = <RenderPipelineStage>[];
     final lutPath = pipeline.preset?.lutAssetPath;
@@ -753,20 +1267,7 @@ class BeautyEngineController {
       );
     }
 
-    final cheekbone = params['cheekbone'] ?? 0;
-    if (cheekbone > 0 && face != null) {
-      final contour = FaceWarpUtils.cheekboneContourRegions(face, imageSize);
-      stages.add(
-        RenderPipelineStage(
-          shaderName: RenderShaders.cheekboneContour,
-          uniforms: {
-            'intensity': cheekbone,
-            'highlights': contour.highlights,
-            'shadows': contour.shadows,
-          },
-        ),
-      );
-    }
+    // Cheekbone contour GPU overlay removido (Sprint 8) — warp regional isolado.
 
     if (face != null) {
       stages.addAll(
@@ -774,24 +1275,74 @@ class BeautyEngineController {
           parameters: params,
           face: face,
           imageSize: imageSize,
-        ),
-      );
-    }
-
-    final brightness = params['brightness'] ?? 0;
-    final contrast = 1 + (params['contrast'] ?? 0);
-    if (brightness != 0 || contrast != 1) {
-      stages.add(
-        RenderPipelineStage(
-          shaderName: RenderShaders.colorAdjust,
-          uniforms: {
-            'brightness': brightness,
-            'contrast': contrast,
-          },
+          faceParts: faceParts,
+          faceParsing: faceParsing,
+          faceWarp: faceWarp,
+          tileOrigin: tileOrigin,
         ),
       );
     }
 
     return stages;
   }
+
+  List<RenderPipelineStage> _buildColorStages(
+    Map<String, double> params, {
+    FaceMeshResult? face,
+    required Size imageSize,
+    FacePartsSegmentation? faceParts,
+  }) {
+    return colorFilterPipeline.buildColorStages(
+      parameters: params,
+      face: face,
+      imageSize: imageSize,
+      faceParts: faceParts,
+    );
+  }
+
+  List<RenderPipelineStage> _buildPostWarpStages(
+    ProcessingPipeline pipeline,
+    Map<String, double> params, {
+    FaceMeshResult? face,
+    required Size imageSize,
+    FacePartsSegmentation? faceParts,
+    FaceParsingResult? faceParsing,
+    WarpField? faceWarp,
+    Offset tileOrigin = Offset.zero,
+  }) {
+    return [
+      ..._buildPreColorPostWarpStages(
+        pipeline,
+        params,
+        face: face,
+        imageSize: imageSize,
+        faceParts: faceParts,
+        faceParsing: faceParsing,
+        faceWarp: faceWarp,
+        tileOrigin: tileOrigin,
+      ),
+      ..._buildColorStages(
+        params,
+        face: face,
+        imageSize: imageSize,
+        faceParts: faceParts,
+      ),
+    ];
+  }
+}
+
+class _RenderInputs {
+  const _RenderInputs({
+    required this.face,
+    required this.pose,
+    required this.personMask,
+    required this.faceParts,
+    required this.faceParsing,
+  });
+
+  final FaceMeshResult? face;
+  final PoseResult? pose;
+  final PersonMask? personMask;
+  final FacePartsSegmentation? faceParts;
+  final FaceParsingResult? faceParsing;
 }

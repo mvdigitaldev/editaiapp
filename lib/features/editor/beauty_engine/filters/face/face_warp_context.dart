@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import '../../models/face_mesh_result.dart';
 import '../../models/tri_mesh.dart';
+import 'face_warp_utils.dart';
 
 /// Contexto para construção de control points faciais.
 class FaceWarpContext {
@@ -23,5 +24,10 @@ class FaceWarpContext {
 
   double get effectiveIntensity => (intensity * yawFactor).clamp(0.0, 1.0);
 
-  double get centerX => imageSize.width * 0.5;
+  /// Centro geométrico do rosto (landmarks 1/168/152), não o centro da imagem.
+  Offset get faceCenter =>
+      FaceWarpUtils.faceCenter(face, imageSize) ??
+      Offset(imageSize.width * 0.5, imageSize.height * 0.5);
+
+  double get centerX => faceCenter.dx;
 }

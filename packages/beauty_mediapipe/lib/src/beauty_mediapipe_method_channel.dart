@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/services.dart';
 
 import 'beauty_mediapipe_bindings.dart';
@@ -20,11 +18,13 @@ class BeautyMediapipeMethodChannel implements BeautyMediapipeBindings {
     required String faceModelPath,
     String? poseModelPath,
     String? segmenterModelPath,
+    String? facePartsModelPath,
   }) async {
     await _channel.invokeMethod<void>('initialize', {
       'faceModelPath': faceModelPath,
       if (poseModelPath != null) 'poseModelPath': poseModelPath,
       if (segmenterModelPath != null) 'segmenterModelPath': segmenterModelPath,
+      if (facePartsModelPath != null) 'facePartsModelPath': facePartsModelPath,
     });
     _initialized = true;
   }
@@ -47,6 +47,40 @@ class BeautyMediapipeMethodChannel implements BeautyMediapipeBindings {
     }
 
     return _parseFaceResult(raw as Map<dynamic, dynamic>);
+  }
+
+  @override
+  Future<List<FaceLandmarkerNativeResult>> detectFaces(
+    NativeImageBuffer buffer,
+  ) async {
+    if (!_initialized) {
+      throw StateError('BeautyMediapipeMethodChannel not initialized');
+    }
+
+    try {
+      final dynamic raw = await _channel.invokeMethod<dynamic>('detectFaces', {
+        'bytes': buffer.bytes,
+        'width': buffer.width,
+        'height': buffer.height,
+        'rotation': buffer.rotation,
+      });
+
+      if (raw == null) {
+        return const [];
+      }
+
+      final list = raw as List<dynamic>;
+      return list
+          .map((item) => _parseFaceResult(item as Map<dynamic, dynamic>))
+          .toList(growable: false);
+    } on MissingPluginException {
+      // Binário antigo (pré-Sprint 7) — cai no detectFace single-face.
+      final single = await detectFace(buffer);
+      if (single == null) {
+        return const [];
+      }
+      return [single];
+    }
   }
 
   @override
@@ -87,6 +121,81 @@ class BeautyMediapipeMethodChannel implements BeautyMediapipeBindings {
     }
 
     return _parsePersonMaskResult(raw as Map<dynamic, dynamic>);
+  }
+
+  @override
+  Future<FacePartsNativeResult?> detectFaceParts(
+    NativeImageBuffer buffer,
+  ) async {
+    if (!_initialized) {
+      throw StateError('BeautyMediapipeMethodChannel not initialized');
+    }
+
+    final dynamic raw = await _channel.invokeMethod<dynamic>('detectFaceParts', {
+      'bytes': buffer.bytes,
+      'width': buffer.width,
+      'height': buffer.height,
+      'rotation': buffer.rotation,
+    });
+
+    if (raw == null) {
+      return null;
+    }
+
+    final map = raw as Map<dynamic, dynamic>;
+    final width = map['width'] as int;
+    final height = map['height'] as int;
+    final classes = _asBytes(map['bytes'], 'face_parts');
+    if (classes.length != width * height) {
+      throw StateError(
+        'face_parts_size_mismatch: got ${classes.length}, '
+        'expected ${width * height}',
+      );
+    }
+    return FacePartsNativeResult(
+      classes: classes,
+      width: width,
+      height: height,
+    );
+  }
+
+  @override
+  Future<FaceParsingNativeResult?> detectFaceParsing(
+    NativeImageBuffer buffer,
+  ) async {
+    if (!_initialized) {
+      throw StateError('BeautyMediapipeMethodChannel not initialized');
+    }
+
+    final dynamic raw = await _channel.invokeMethod<dynamic>(
+      'detectFaceParsing',
+      {
+        'bytes': buffer.bytes,
+        'width': buffer.width,
+        'height': buffer.height,
+        'rotation': buffer.rotation,
+      },
+    );
+
+    if (raw == null) {
+      return null;
+    }
+
+    final map = raw as Map<dynamic, dynamic>;
+    final width = map['width'] as int;
+    final height = map['height'] as int;
+    final classes = _asBytes(map['bytes'], 'face_parsing');
+    if (classes.length != width * height) {
+      throw StateError(
+        'face_parsing_size_mismatch: got ${classes.length}, '
+        'expected ${width * height}',
+      );
+    }
+    return FaceParsingNativeResult(
+      classes: classes,
+      width: width,
+      height: height,
+    );
   }
 
   @override
@@ -146,23 +255,25 @@ class BeautyMediapipeMethodChannel implements BeautyMediapipeBindings {
     );
   }
 
+  /// Normaliza o payload de bytes do canal: cada plataforma/versão devolve
+  /// `Uint8List`, `ByteData` ou `List<int>`.
+  Uint8List _asBytes(Object? raw, String context) {
+    if (raw is Uint8List) {
+      return raw;
+    }
+    if (raw is ByteData) {
+      return raw.buffer.asUint8List(raw.offsetInBytes, raw.lengthInBytes);
+    }
+    if (raw is List<int>) {
+      return Uint8List.fromList(raw);
+    }
+    throw StateError('${context}_bytes_invalid: ${raw.runtimeType}');
+  }
+
   PersonMaskNativeResult _parsePersonMaskResult(Map<dynamic, dynamic> raw) {
     final width = raw['width'] as int;
     final height = raw['height'] as int;
-    final dynamic bytesRaw = raw['bytes'];
-    late final Uint8List bytes;
-    if (bytesRaw is Uint8List) {
-      bytes = bytesRaw;
-    } else if (bytesRaw is ByteData) {
-      bytes = bytesRaw.buffer.asUint8List(
-        bytesRaw.offsetInBytes,
-        bytesRaw.lengthInBytes,
-      );
-    } else if (bytesRaw is List<int>) {
-      bytes = Uint8List.fromList(bytesRaw);
-    } else {
-      throw StateError('person_mask_bytes_invalid: ${bytesRaw.runtimeType}');
-    }
+    final bytes = _asBytes(raw['bytes'], 'person_mask');
 
     if (bytes.length != width * height) {
       throw StateError(
@@ -183,10 +294,23 @@ class BeautyMediapipeBindingsStub implements BeautyMediapipeBindings {
   FaceLandmarkerNativeResult? nextFaceResult;
   PoseLandmarkerNativeResult? nextPoseResult;
   PersonMaskNativeResult? nextPersonMaskResult;
+  FacePartsNativeResult? nextFacePartsResult;
+  FaceParsingNativeResult? nextFaceParsingResult;
 
   @override
   Future<FaceLandmarkerNativeResult?> detectFace(NativeImageBuffer buffer) async {
     return nextFaceResult;
+  }
+
+  @override
+  Future<List<FaceLandmarkerNativeResult>> detectFaces(
+    NativeImageBuffer buffer,
+  ) async {
+    final single = nextFaceResult;
+    if (single == null) {
+      return const [];
+    }
+    return [single];
   }
 
   @override
@@ -200,6 +324,20 @@ class BeautyMediapipeBindingsStub implements BeautyMediapipeBindings {
   }
 
   @override
+  Future<FacePartsNativeResult?> detectFaceParts(
+    NativeImageBuffer buffer,
+  ) async {
+    return nextFacePartsResult;
+  }
+
+  @override
+  Future<FaceParsingNativeResult?> detectFaceParsing(
+    NativeImageBuffer buffer,
+  ) async {
+    return nextFaceParsingResult;
+  }
+
+  @override
   void dispose() {}
 
   @override
@@ -207,5 +345,6 @@ class BeautyMediapipeBindingsStub implements BeautyMediapipeBindings {
     required String faceModelPath,
     String? poseModelPath,
     String? segmenterModelPath,
+    String? facePartsModelPath,
   }) async {}
 }

@@ -1,7 +1,9 @@
 import 'dart:async' show Timer, unawaited;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart' as image_picker;
@@ -12,29 +14,45 @@ import '../../manual_editor/di/manual_editor_providers.dart';
 import '../../presentation/utils/edit_submission_helpers.dart';
 import '../body_reshape/brush/brush_warp_field_builder.dart';
 import '../body_reshape/models/warp_plan.dart';
+import '../controllers/beauty_engine_controller.dart';
+import '../di/face_warp_v3_rollout_provider.dart';
 import '../di/beauty_engine_providers.dart';
+import '../diagnostics/beauty_editor_session_reporter.dart';
 import '../diagnostics/beauty_engine_error_reporter.dart';
+import '../config/face_warp_v3_config.dart';
+import '../config/face_warp_v3_rollout.dart';
+import '../filters/face/face_filter_pipeline.dart';
 import '../filters/body/body_filter_pipeline.dart';
 import '../l10n/beauty_engine_labels.dart';
 import '../models/beauty_image_loader.dart';
 import '../models/face_mesh_result.dart';
 import '../models/image_source.dart';
 import '../models/image_source_rgba.dart';
+import '../models/multi_face_detection.dart';
 import '../models/pose_result.dart';
 import '../models/processing_pipeline.dart';
 import '../performance/adaptive_preview_policy.dart';
+import '../performance/device_capability.dart';
 import '../segment/person_mask.dart';
+import '../rendering/preview_image_decoder.dart';
+import 'widgets/anatomy_debug_overlay.dart';
 import 'widgets/beauty_adjustments_panel.dart';
+import 'widgets/beauty_rgba_preview.dart';
+import 'widgets/face_selection_overlay.dart';
 import 'widgets/preview_coordinate_mapper.dart';
+import 'widgets/parity_checklist_panel.dart';
+import 'widgets/warp_debug_overlay.dart';
 
 /// Editor de retoque beauty — ajustes manuais rosto/nariz/corpo/pele.
 class BeautyEditorPage extends ConsumerStatefulWidget {
   const BeautyEditorPage({
     super.key,
     this.bodyOnly = false,
+    this.labMode = false,
   });
 
   final bool bodyOnly;
+  final bool labMode;
 
   @override
   ConsumerState<BeautyEditorPage> createState() => _BeautyEditorPageState();
@@ -42,6 +60,7 @@ class BeautyEditorPage extends ConsumerStatefulWidget {
 
 class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   static final _errorReporter = BeautyEngineErrorReporter();
+  static final _sessionReporter = BeautyEditorSessionReporter();
   static const _coordMapper = PreviewCoordinateMapper();
   // Grade densa: o traço do pincel tem gradiente alto e uma grade grossa
   // faria o guard anti-dobra suavizar o traço até quase desaparecer.
@@ -49,11 +68,14 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       BrushWarpFieldBuilder(gridWidth: 128, gridHeight: 128);
 
   Uint8List? _imageBytes;
-  Uint8List? _previewBytes;
+  ui.Image? _previewImage;
+  int _previewImageGeneration = 0;
   String? _imagePath;
   ImageSource? _source;
   ImageSource? _previewSource;
   FaceMeshResult? _cachedFace;
+  List<FaceMeshResult> _detectedFaces = const [];
+  int _selectedFaceIndex = 0;
   PoseResult? _cachedPose;
   PersonMask? _cachedPersonMask;
   bool _landmarksReady = false;
@@ -62,6 +84,9 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   bool _showOriginal = false;
   bool _linkEyes = true;
   int? _lastApplyMs;
+  bool _showWarpDebug = false;
+  String? _debugActiveToolKey;
+  DeviceCapabilityProfile? _deviceProfile;
   WarpPlan? _lastBodyWarpPlan;
   bool _prewarmed = false;
   Timer? _debounceTimer;
@@ -83,14 +108,65 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _prewarmShaders());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_prewarmShaders());
+      unawaited(_resolveDeviceCapability());
+      unawaited(_logEditorOpen());
+    });
+  }
+
+  Future<void> _logEditorOpen() async {
+    final snapshot = ref.read(faceWarpV3RolloutSnapshotProvider).valueOrNull;
+    await _sessionReporter.logEvent(
+      'editor_open',
+      metadata: {
+        'body_only': widget.bodyOnly,
+        'lab_mode': widget.labMode,
+        ...?snapshot?.toTelemetry(),
+      },
+    );
+  }
+
+  Future<void> _resolveDeviceCapability() async {
+    final profile =
+        await ref.read(deviceCapabilityManagerProvider).resolve();
+    if (!mounted) {
+      return;
+    }
+    ref.read(beautyEngineControllerProvider).deviceProfile = profile;
+    setState(() => _deviceProfile = profile);
+    unawaited(
+      ref.read(hotPathRendererProvider).probeCapabilities(),
+    );
   }
 
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _previewImage?.dispose();
     _viewerTransform.dispose();
     super.dispose();
+  }
+
+  void _disposePreviewImage() {
+    _previewImage?.dispose();
+    _previewImage = null;
+  }
+
+  Future<void> _loadInitialPreviewImage(ImageSource previewSource) async {
+    final rgba = ImageSourceRgba.ensureRgba(previewSource);
+    final generation = ++_previewImageGeneration;
+    final image = await PreviewImageDecoder.fromRgba(
+      rgba.bytes,
+      rgba.width,
+      rgba.height,
+    );
+    if (!mounted || generation != _previewImageGeneration) {
+      image.dispose();
+      return;
+    }
+    _disposePreviewImage();
+    setState(() => _previewImage = image);
   }
 
   Future<void> _prewarmShaders() async {
@@ -120,9 +196,21 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     // isolate — garante que UI, pipeline e detecção vejam os mesmos pixels.
     final source = await BeautyImageLoader.load(bytes);
 
+    final profile = _deviceProfile ??
+        await ref.read(deviceCapabilityManagerProvider).resolve();
+    _deviceProfile ??= profile;
+    ref.read(beautyEngineControllerProvider).deviceProfile = profile;
+
+    final previewMaxEdge = widget.bodyOnly
+        ? AdaptivePreviewPolicy.maxEdgeForBodyWarpPreviewWithProfile(
+            source,
+            profile,
+          )
+        : AdaptivePreviewPolicy.maxEdgeForSourceWithProfile(source, profile);
+
     final previewSource = ImageSourceRgba.downscaleForPreview(
       source,
-      maxEdge: AdaptivePreviewPolicy.maxEdgeForBodyWarpPreview(source),
+      maxEdge: previewMaxEdge,
     );
 
     if (!mounted) {
@@ -130,11 +218,13 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     }
     setState(() {
       _imageBytes = source.bytes;
-      _previewBytes = source.bytes;
+      _disposePreviewImage();
       _imagePath = file.path;
       _source = source;
       _previewSource = previewSource;
       _cachedFace = null;
+      _detectedFaces = const [];
+      _selectedFaceIndex = 0;
       _cachedPose = null;
       _cachedPersonMask = null;
       _landmarksReady = false;
@@ -147,6 +237,8 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       _viewerTransform.value = Matrix4.identity();
     });
     ref.read(beautyEngineControllerProvider).manualBrushField = null;
+    ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
+    unawaited(_loadInitialPreviewImage(previewSource));
     _schedulePreview();
   }
 
@@ -255,7 +347,10 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   }
 
   void _onParamChanged(String key, double value) {
-    setState(() => _params[key] = value);
+    setState(() {
+      _params[key] = value;
+      _debugActiveToolKey = key;
+    });
     _schedulePreview();
   }
 
@@ -269,8 +364,10 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   void _schedulePreview() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(
-        Duration(milliseconds: _hasActiveBodyWarp(_params) ? 120 : 100), () {
+    final profile = _deviceProfile;
+    final debounceMs = profile?.sliderDebounceMs ??
+        (_hasActiveBodyWarp(_params) ? 120 : 100);
+    _debounceTimer = Timer(Duration(milliseconds: debounceMs), () {
       if (_source == null) {
         return;
       }
@@ -289,15 +386,70 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     final controller = ref.read(beautyEngineControllerProvider);
     controller.faceLandmarkThrottle.reset();
     controller.poseLandmarkThrottle.reset();
-    final face =
-        widget.bodyOnly ? null : await controller.detectFace(_previewSource!);
+    final faces = widget.bodyOnly
+        ? <FaceMeshResult>[]
+        : await controller.detectAllFaces(_previewSource!);
     final pose = await controller.detectPose(_previewSource!);
     final personMask = await controller.detectPersonMask(_previewSource!);
-    _cachedFace = face;
+    _detectedFaces = faces;
+    _selectedFaceIndex =
+        faces.isEmpty ? 0 : MultiFaceDetection.indexOfLargest(faces);
+    _cachedFace = faces.isEmpty ? null : faces[_selectedFaceIndex];
     _cachedPose = pose;
     _cachedPersonMask = personMask;
+    if (_previewSource != null && !widget.bodyOnly && _cachedFace != null) {
+      final faceParts = await controller.detectFaceParts(_previewSource!);
+      await controller.assessImageQuality(
+        source: _previewSource!,
+        face: _cachedFace,
+        faceParts: faceParts,
+      );
+    }
     _landmarksReady = true;
   }
+
+  void _selectFace(int index) {
+    if (index < 0 ||
+        index >= _detectedFaces.length ||
+        index == _selectedFaceIndex) {
+      return;
+    }
+    setState(() {
+      _selectedFaceIndex = index;
+      _cachedFace = _detectedFaces[index];
+    });
+    ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
+    unawaited(_reassessQualityForSelectedFace());
+    _schedulePreview();
+  }
+
+  Future<void> _reassessQualityForSelectedFace() async {
+    final source = _previewSource;
+    final face = _cachedFace;
+    if (source == null || face == null || widget.bodyOnly) {
+      return;
+    }
+    final controller = ref.read(beautyEngineControllerProvider);
+    final faceParts = await controller.detectFaceParts(source);
+    await controller.assessImageQuality(
+      source: source,
+      face: face,
+      faceParts: faceParts,
+    );
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Map<String, double> _gatedParams(BeautyEngineController controller) {
+    // Lab e pré-produção: sliders crus enquanto o V3 ainda está sendo calibrado.
+    if (widget.labMode || FaceWarpV3Rollout.preProductionForceFull) {
+      return Map<String, double>.of(_params);
+    }
+    return controller.applyToolGating(_params);
+  }
+
+  bool get _warpDebugAvailable => widget.labMode || kDebugMode;
 
   Future<void> _processPreview() async {
     if (_source == null || _previewSource == null) {
@@ -310,19 +462,28 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
     try {
       final controller = ref.read(beautyEngineControllerProvider);
-      final bodyActive = _hasActiveBodyWarp(_params);
       await _ensureLandmarks();
 
-      final jpeg = await controller.exportJpeg(
+      final gated = _gatedParams(controller);
+      final frame = await controller.renderPreview(
         source: _previewSource!,
         pipeline:
-            ProcessingPipeline(overrides: Map<String, double>.of(_params)),
-        quality: bodyActive ? 82 : 85,
+            ProcessingPipeline(overrides: Map<String, double>.of(gated)),
         face: _cachedFace,
         pose: _cachedPose,
-        personMask: bodyActive ? _cachedPersonMask : null,
-        interactivePreview: bodyActive,
+        personMask: _cachedPersonMask,
       );
+
+      final generation = ++_previewImageGeneration;
+      final image = await PreviewImageDecoder.fromRgba(
+        frame.bytes,
+        frame.width,
+        frame.height,
+      );
+      if (!mounted || generation != _previewImageGeneration) {
+        image.dispose();
+        return;
+      }
 
       stopwatch.stop();
       final profile = controller.profiler.snapshot();
@@ -333,6 +494,19 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       if (benchmark.sampleCount % 20 == 0) {
         benchmark.logSummary();
       }
+
+      unawaited(
+        _sessionReporter.logEvent(
+          'preview_apply',
+          metadata: {
+            'face_count': _detectedFaces.length,
+            'selected_face_index': _selectedFaceIndex,
+            'apply_ms': profile.totalMs > 0
+                ? profile.totalMs
+                : stopwatch.elapsedMilliseconds,
+          },
+        ),
+      );
 
       if (!mounted) {
         return;
@@ -349,7 +523,8 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       }
 
       setState(() {
-        _previewBytes = jpeg;
+        _previewImage?.dispose();
+        _previewImage = image;
         _lastApplyMs = profile.totalMs > 0
             ? profile.totalMs
             : stopwatch.elapsedMilliseconds;
@@ -393,6 +568,15 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     return false;
   }
 
+  String? _firstActiveFaceWarpKey() {
+    for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
+      if ((_params[key] ?? 0) > 0.001) {
+        return key;
+      }
+    }
+    return FaceFilterPipeline.faceWarpParameterKeys.first;
+  }
+
   bool _paramsNeedFaceOrSkin(Map<String, double> params) {
     const faceAndSkinKeys = {
       'face_slim',
@@ -422,11 +606,13 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'remove_acne',
       'remove_wrinkles',
       'remove_dark_circles',
+      'skin_shine',
       'teeth_whitening',
       'blush',
       'contour',
       'eyebrows',
       'eyelashes',
+      'iris_enhance',
     };
     for (final key in faceAndSkinKeys) {
       if ((params[key] ?? 0) > 0) {
@@ -468,7 +654,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       final editedBytes = await controller.exportJpeg(
         source: source,
         pipeline: ProcessingPipeline(
-          overrides: Map<String, double>.of(_params),
+          overrides: Map<String, double>.of(_gatedParams(controller)),
         ),
         quality: 92,
       );
@@ -487,6 +673,13 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         editId: result.editId,
         operationType: 'manual_edit',
         status: 'completed',
+      );
+
+      unawaited(
+        _sessionReporter.logEvent(
+          'export_save',
+          metadata: {'body_only': widget.bodyOnly},
+        ),
       );
 
       if (!mounted) return;
@@ -521,6 +714,8 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(faceWarpV3RolloutAppliedProvider);
+
     if (_saving) {
       return const Scaffold(
         body: Center(
@@ -570,6 +765,133 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
               onPressed: () => setState(() => _showOriginal = !_showOriginal),
               icon: Icon(_showOriginal ? Icons.auto_fix_high : Icons.compare),
             ),
+          if (widget.labMode && _imageBytes != null)
+            IconButton(
+              tooltip: FaceWarpV3Config.useDirectMeshRender
+                  ? 'Malha direct (~2.5px) — toque para grade interativa'
+                  : 'Grade interativa — toque para malha direct',
+              onPressed: () {
+                FaceWarpV3Config.toggleDirectMesh();
+                ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
+                setState(() {});
+                _schedulePreview();
+              },
+              icon: Icon(
+                FaceWarpV3Config.useDirectMeshRender
+                    ? Icons.texture_outlined
+                    : Icons.blur_linear,
+                color: FaceWarpV3Config.useDirectMeshRender
+                    ? AppColors.primary
+                    : null,
+              ),
+            ),
+          if (widget.labMode && _imageBytes != null)
+            IconButton(
+              tooltip: FaceWarpV3Config.useGpuPiecewiseAffine
+                  ? 'GPU piecewise ON — toque para grade CPU'
+                  : 'Grade CPU — toque para GPU piecewise',
+              onPressed: () {
+                FaceWarpV3Config.toggleGpuPiecewise();
+                ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
+                setState(() {});
+                _schedulePreview();
+              },
+              icon: Icon(
+                FaceWarpV3Config.useGpuPiecewiseAffine
+                    ? Icons.memory_outlined
+                    : Icons.memory,
+                color: FaceWarpV3Config.useGpuPiecewiseAffine
+                    ? AppColors.primary
+                    : null,
+              ),
+            ),
+          if (widget.labMode && _imageBytes != null)
+            IconButton(
+              tooltip: FaceWarpV3Config.usePostWarpInpaint
+                  ? 'Inpaint pós-warp ON'
+                  : 'Inpaint pós-warp OFF',
+              onPressed: () {
+                FaceWarpV3Config.togglePostWarpInpaint();
+                ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
+                setState(() {});
+                _schedulePreview();
+              },
+              icon: Icon(
+                FaceWarpV3Config.usePostWarpInpaint
+                    ? Icons.healing_outlined
+                    : Icons.healing,
+                color: FaceWarpV3Config.usePostWarpInpaint
+                    ? AppColors.primary
+                    : null,
+              ),
+            ),
+          if (widget.labMode && _imageBytes != null)
+            IconButton(
+              tooltip: FaceWarpV3Config.useGpuInpaint
+                  ? 'Inpaint GPU ON'
+                  : 'Inpaint CPU — toque para GPU',
+              onPressed: () {
+                FaceWarpV3Config.toggleGpuInpaint();
+                ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
+                setState(() {});
+                _schedulePreview();
+              },
+              icon: Icon(
+                FaceWarpV3Config.useGpuInpaint
+                    ? Icons.speed_outlined
+                    : Icons.speed,
+                color: FaceWarpV3Config.useGpuInpaint
+                    ? AppColors.primary
+                    : null,
+              ),
+            ),
+          if (widget.labMode && _imageBytes != null)
+            IconButton(
+              tooltip: FaceWarpV3Config.useMeshWarpV3
+                  ? 'Warp V3 (malha) — toque para MLS'
+                  : 'Warp MLS — toque para V3',
+              onPressed: () {
+                FaceWarpV3Config.toggle();
+                ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
+                setState(() {});
+                _schedulePreview();
+              },
+              icon: Icon(
+                FaceWarpV3Config.useMeshWarpV3
+                    ? Icons.hub_outlined
+                    : Icons.grid_4x4,
+                color: FaceWarpV3Config.useMeshWarpV3
+                    ? AppColors.primary
+                    : null,
+              ),
+            ),
+          if (widget.labMode && _imageBytes != null)
+            IconButton(
+              tooltip: FaceWarpV3Config.useNativePiecewiseExport
+                  ? 'Export Metal nativo ON'
+                  : 'Export FragmentProgram — toque para Metal',
+              onPressed: () {
+                FaceWarpV3Config.toggleNativePiecewiseExport();
+                setState(() {});
+              },
+              icon: Icon(
+                FaceWarpV3Config.useNativePiecewiseExport
+                    ? Icons.apple_outlined
+                    : Icons.apple,
+                color: FaceWarpV3Config.useNativePiecewiseExport
+                    ? AppColors.primary
+                    : null,
+              ),
+            ),
+          if (_warpDebugAvailable && _imageBytes != null)
+            IconButton(
+              tooltip: _showWarpDebug ? 'Ocultar máscara warp' : 'Máscara warp',
+              onPressed: () => setState(() => _showWarpDebug = !_showWarpDebug),
+              icon: Icon(
+                _showWarpDebug ? Icons.grid_off : Icons.grid_on_outlined,
+                color: _showWarpDebug ? AppColors.primary : null,
+              ),
+            ),
           IconButton(
             tooltip: 'Selecionar foto',
             onPressed: _pickImage,
@@ -589,7 +911,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (_previewBytes == null)
+                if (_previewImage == null && _imageBytes == null)
                   const Center(
                     child: Padding(
                       padding: EdgeInsets.all(24),
@@ -619,17 +941,25 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                           key: _previewImageKey,
                           width: fitted.width,
                           height: fitted.height,
-                          child: Image.memory(
-                            _showOriginal ? _imageBytes! : _previewBytes!,
-                            fit: BoxFit.fill,
-                            gaplessPlayback: true,
-                            key: ValueKey(
-                              _showOriginal
-                                  ? 'original'
-                                  : 'preview_${_params.hashCode}_'
-                                      '${_brushHistory.strokes.length}',
-                            ),
-                          ),
+                          child: _showOriginal
+                              ? Image.memory(
+                                  _imageBytes!,
+                                  fit: BoxFit.fill,
+                                  gaplessPlayback: true,
+                                  key: const ValueKey('original'),
+                                )
+                              : _previewImage == null
+                                  ? const Center(
+                                      child: CircularProgressIndicator(),
+                                    )
+                                  : BeautyRgbaPreview(
+                                      key: ValueKey(
+                                        'preview_${_params.hashCode}_'
+                                        '${_brushHistory.strokes.length}',
+                                      ),
+                                      image: _previewImage!,
+                                      fit: BoxFit.fill,
+                                    ),
                         );
                         return InteractiveViewer(
                           transformationController: _viewerTransform,
@@ -648,10 +978,88 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                                     onPanEnd: (_) => _onBrushEnd(),
                                     child: image,
                                   )
-                                : image,
+                                : Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      image,
+                                      if (!widget.bodyOnly &&
+                                          !_showOriginal &&
+                                          _detectedFaces.length > 1 &&
+                                          preview != null)
+                                        FaceSelectionOverlay(
+                                          faces: _detectedFaces,
+                                          selectedIndex: _selectedFaceIndex,
+                                          imageSize: Size(
+                                            preview.width.toDouble(),
+                                            preview.height.toDouble(),
+                                          ),
+                                          boxSize: fitted,
+                                          onSelected: _selectFace,
+                                        ),
+                                      if (_warpDebugAvailable &&
+                                          _showWarpDebug &&
+                                          !_showOriginal &&
+                                          preview != null)
+                                        WarpDebugOverlay(
+                                          field: ref
+                                              .watch(beautyEngineControllerProvider)
+                                              .lastFaceWarpField,
+                                          vertexStats: ref
+                                              .watch(beautyEngineControllerProvider)
+                                              .lastFaceWarpDebugStats,
+                                          boxSize: fitted,
+                                        ),
+                                      if (_warpDebugAvailable &&
+                                          _showWarpDebug &&
+                                          !_showOriginal &&
+                                          preview != null &&
+                                          _cachedFace != null)
+                                        AnatomyDebugOverlay(
+                                          face: _cachedFace!,
+                                          imageSize: Size(
+                                            preview.width.toDouble(),
+                                            preview.height.toDouble(),
+                                          ),
+                                          boxSize: fitted,
+                                          activeToolKey: _debugActiveToolKey ??
+                                              _firstActiveFaceWarpKey(),
+                                        ),
+                                    ],
+                                  ),
                           ),
                         );
                       },
+                    ),
+                  ),
+                if (_detectedFaces.length > 1 &&
+                    !widget.bodyOnly &&
+                    !_processing &&
+                    _previewImage != null)
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 12,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          BeautyEngineLabels.multiFaceSelectHint(
+                            _detectedFaces.length,
+                          ),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     ),
                   ),
                 if (_processing)
@@ -664,11 +1072,31 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                       color: AppColors.primary,
                     ),
                   ),
+                if (widget.labMode && _imageBytes != null && !_showOriginal)
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 220),
+                      child: ParityChecklistPanel(params: _params),
+                    ),
+                  ),
                 if (_lastApplyMs != null && !_processing)
                   Positioned(
                     top: 12,
                     right: 12,
-                    child: _ApplyTimeBadge(milliseconds: _lastApplyMs!),
+                    child: _ApplyTimeBadge(
+                      milliseconds: _lastApplyMs!,
+                      budgetMs: _deviceProfile?.sliderToFrameBudgetMs ?? 250,
+                      tier: _deviceProfile?.tier,
+                      p50Ms: ref.read(beautyBenchmarkProvider).percentile('total', 50),
+                      showBaseline: _warpDebugAvailable,
+                      warpBackend: _warpDebugAvailable
+                          ? ref
+                              .watch(beautyEngineControllerProvider)
+                              .lastFaceWarpBackend
+                          : null,
+                    ),
                   ),
               ],
             ),
@@ -682,16 +1110,22 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
               onRadiusChanged: (v) => setState(() => _brushRadius = v),
               onStrengthChanged: (v) => setState(() => _brushStrength = v),
             )
-          else
+          else ...[
             BeautyAdjustmentsPanel(
               params: _params,
               enabled: _source != null && !_processing,
               linkEyes: _linkEyes,
               bodyWarpPlan: _lastBodyWarpPlan,
               bodyOnly: widget.bodyOnly,
+              labMode: widget.labMode,
+              gatePlan: widget.labMode ||
+                      FaceWarpV3Rollout.preProductionForceFull
+                  ? null
+                  : ref.watch(beautyEngineControllerProvider).lastToolGatePlan,
               onParamChanged: _onParamChanged,
               onLinkEyesChanged: _onLinkEyesChanged,
             ),
+          ],
         ],
       ),
     );
@@ -785,13 +1219,40 @@ class _BrushToolbar extends StatelessWidget {
 }
 
 class _ApplyTimeBadge extends StatelessWidget {
-  const _ApplyTimeBadge({required this.milliseconds});
+  const _ApplyTimeBadge({
+    required this.milliseconds,
+    required this.budgetMs,
+    this.tier,
+    this.p50Ms = 0,
+    this.showBaseline = false,
+    this.warpBackend,
+  });
 
   final int milliseconds;
+  final int budgetMs;
+  final DeviceTier? tier;
+  final int p50Ms;
+  final bool showBaseline;
+  final String? warpBackend;
+
+  String _tierLabel(DeviceTier tier) {
+    return switch (tier) {
+      DeviceTier.a => 'A',
+      DeviceTier.b => 'B',
+      DeviceTier.c => 'C',
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
-    final fast = milliseconds < 250;
+    final fast = milliseconds <= budgetMs;
+    var label = '${milliseconds}ms';
+    if (showBaseline && tier != null && p50Ms > 0) {
+      label = '$label · p50 ${p50Ms}ms · tier ${_tierLabel(tier!)}';
+    }
+    if (warpBackend != null) {
+      label = '$label · ${warpBackend!.toUpperCase()}';
+    }
     return DecoratedBox(
       decoration: BoxDecoration(
         color: fast
@@ -802,7 +1263,7 @@ class _ApplyTimeBadge extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Text(
-          '${milliseconds}ms',
+          label,
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w600,

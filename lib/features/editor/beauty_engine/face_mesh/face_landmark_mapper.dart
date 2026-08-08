@@ -23,7 +23,8 @@ class FaceLandmarkMapper {
             visibility: landmark.visibility,
           ),
         )
-        .toList(growable: false);
+        .toList()
+      ..sort((a, b) => a.index.compareTo(b.index));
 
     return FaceMeshResult(
       landmarks: landmarks,

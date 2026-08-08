@@ -85,19 +85,55 @@ class PersonMaskNativeResult {
   });
 }
 
+/// Máscara de categorias por pixel do segmenter multiclass — um byte com o
+/// índice da classe (background/hair/body-skin/face-skin/clothes/others).
+class FacePartsNativeResult {
+  final Uint8List classes;
+  final int width;
+  final int height;
+
+  const FacePartsNativeResult({
+    required this.classes,
+    required this.width,
+    required this.height,
+  });
+}
+
+/// Máscara categórica BiSeNet 19 classes na resolução da foto (R8 por pixel).
+class FaceParsingNativeResult {
+  final Uint8List classes;
+  final int width;
+  final int height;
+
+  const FaceParsingNativeResult({
+    required this.classes,
+    required this.width,
+    required this.height,
+  });
+}
+
 /// Bindings MediaPipe — implementação via MethodChannel.
 abstract class BeautyMediapipeBindings {
   Future<void> initialize({
     required String faceModelPath,
     String? poseModelPath,
     String? segmenterModelPath,
+    String? facePartsModelPath,
   });
 
   Future<FaceLandmarkerNativeResult?> detectFace(NativeImageBuffer buffer);
 
+  /// Até 5 rostos — ordenados do maior para o menor bbox no Dart.
+  Future<List<FaceLandmarkerNativeResult>> detectFaces(NativeImageBuffer buffer);
+
   Future<PoseLandmarkerNativeResult?> detectPose(NativeImageBuffer buffer);
 
   Future<PersonMaskNativeResult?> detectPersonMask(NativeImageBuffer buffer);
+
+  Future<FacePartsNativeResult?> detectFaceParts(NativeImageBuffer buffer);
+
+  /// BiSeNet 19 classes — retorna `null` até o modelo estar no asset (Sprint 4).
+  Future<FaceParsingNativeResult?> detectFaceParsing(NativeImageBuffer buffer);
 
   void dispose();
 }

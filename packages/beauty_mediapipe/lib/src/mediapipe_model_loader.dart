@@ -9,6 +9,8 @@ class MediapipeModelLoader {
   static const faceModelAsset = 'assets/mediapipe/face_landmarker.task';
   static const poseModelAsset = 'assets/mediapipe/pose_landmarker_lite.task';
   static const segmenterModelAsset = 'assets/mediapipe/selfie_segmenter.tflite';
+  static const facePartsModelAsset =
+      'assets/mediapipe/selfie_multiclass_256x256.tflite';
 
   static Future<String> ensureFaceModelOnDisk({
     AssetBundle? bundle,
@@ -40,6 +42,17 @@ class MediapipeModelLoader {
       bundle: bundle,
       assetPath: assetPath,
       fileName: 'selfie_segmenter.tflite',
+    );
+  }
+
+  static Future<String> ensureFacePartsModelOnDisk({
+    AssetBundle? bundle,
+    String assetPath = facePartsModelAsset,
+  }) async {
+    return _ensureModelOnDisk(
+      bundle: bundle,
+      assetPath: assetPath,
+      fileName: 'selfie_multiclass_256x256.tflite',
     );
   }
 

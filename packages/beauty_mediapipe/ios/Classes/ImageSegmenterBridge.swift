@@ -4,9 +4,10 @@ import MediaPipeTasksVision
 
 final class ImageSegmenterBridge {
   private var imageSegmenter: ImageSegmenter?
+  private var facePartsSegmenter: ImageSegmenter?
 
   func initialize(modelPath: String) throws {
-    dispose()
+    imageSegmenter = nil
     guard FileManager.default.fileExists(atPath: modelPath) else {
       throw NSError(
         domain: "beauty_mediapipe",
@@ -22,6 +23,65 @@ final class ImageSegmenterBridge {
     options.shouldOutputCategoryMask = false
 
     imageSegmenter = try ImageSegmenter(options: options)
+  }
+
+  /// Segmentação semântica multiclass (selfie_multiclass_256x256): usa
+  /// category mask, um byte de classe por pixel, em vez das confidence masks
+  /// do segmenter binário de pessoa.
+  func initializeFaceParts(modelPath: String) throws {
+    facePartsSegmenter = nil
+    guard FileManager.default.fileExists(atPath: modelPath) else {
+      throw NSError(
+        domain: "beauty_mediapipe",
+        code: 404,
+        userInfo: [NSLocalizedDescriptionKey: "Model file not found: \(modelPath)"]
+      )
+    }
+
+    let options = ImageSegmenterOptions()
+    options.baseOptions.modelAssetPath = modelPath
+    options.runningMode = .image
+    options.shouldOutputConfidenceMasks = false
+    options.shouldOutputCategoryMask = true
+
+    facePartsSegmenter = try ImageSegmenter(options: options)
+  }
+
+  func detectFaceParts(
+    imageBytes: Data,
+    width: Int,
+    height: Int,
+    rotation: Int
+  ) throws -> [String: Any]? {
+    guard let segmenter = facePartsSegmenter else { return nil }
+    guard let image = Self.decodeImage(
+      imageBytes: imageBytes,
+      width: width,
+      height: height
+    ) else { return nil }
+
+    let oriented = rotate(image: image, degrees: rotation)
+    guard let cgImage = oriented.cgImage else { return nil }
+
+    let mpImage = try MPImage(uiImage: UIImage(cgImage: cgImage))
+    let result = try segmenter.segment(image: mpImage)
+
+    guard let mask = result.categoryMask else { return nil }
+    let maskWidth = mask.width
+    let maskHeight = mask.height
+    let count = maskWidth * maskHeight
+    let pointer = mask.uint8Data
+
+    var bytes = [UInt8](repeating: 0, count: count)
+    for i in 0..<count {
+      bytes[i] = pointer[i]
+    }
+
+    return [
+      "bytes": Data(bytes),
+      "width": maskWidth,
+      "height": maskHeight,
+    ]
   }
 
   func detectPersonMask(
@@ -69,6 +129,7 @@ final class ImageSegmenterBridge {
 
   func dispose() {
     imageSegmenter = nil
+    facePartsSegmenter = nil
   }
 
   private static func decodeImage(imageBytes: Data, width: Int, height: Int) -> UIImage? {

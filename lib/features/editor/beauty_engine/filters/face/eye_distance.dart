@@ -27,7 +27,7 @@ class EyeDistanceFilter extends FaceWarpFilter {
     }
 
     final shift = context.imageSize.width * 0.025 * intensity;
-    final points = FaceWarpUtils.anchorPoints(context.mesh);
+    final points = FaceWarpUtils.eyeWarpAnchors(context.mesh);
 
     points.addAll(
       FaceWarpUtils.shiftEyeRegion(

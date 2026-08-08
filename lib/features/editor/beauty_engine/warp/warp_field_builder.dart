@@ -65,16 +65,16 @@ class WarpFieldBuilder {
 
     switch (resolved) {
       case WarpFieldQuality.interactive:
-        cellPx = 16.0;
-        minGrid = 40;
-        maxGrid = 72;
-        mlsIterations = 4;
+        cellPx = 14.0;
+        minGrid = 48;
+        maxGrid = 80;
+        mlsIterations = 5;
         outerRingPx = 10;
       case WarpFieldQuality.preview:
-        cellPx = 12.0;
-        minGrid = 56;
-        maxGrid = 96;
-        mlsIterations = 5;
+        cellPx = 10.0;
+        minGrid = 64;
+        maxGrid = 112;
+        mlsIterations = 6;
         outerRingPx = 12;
       case WarpFieldQuality.export:
         cellPx = 8.0;
@@ -93,6 +93,72 @@ class WarpFieldBuilder {
       maskFeatherPx: feather,
       mlsIterations: mlsIterations,
       outerRingPx: outerRingPx,
+    );
+  }
+
+  /// Preview interativo V3 — grade mais densa (~6 px/célula) para warps locais
+  /// (olhos/boca); MLS continua em [forFaceWarpInteractive].
+  factory WarpFieldBuilder.forFaceMeshV3Interactive(Size imageSize) {
+    final minDim = math.min(imageSize.width, imageSize.height);
+    const cellPx = 6.0;
+    final grid = (minDim / cellPx).round().clamp(80, 112);
+    return WarpFieldBuilder(
+      gridWidth: grid,
+      gridHeight: grid,
+      maskFeatherPx: math.max(28.0, minDim * 0.045),
+      mlsIterations: 5,
+      outerRingPx: 12,
+    );
+  }
+
+  /// Sprint 36 — render direto na malha: grade fina (~2.5 px/célula), até 256.
+  factory WarpFieldBuilder.forFaceMeshV3Direct(
+    Size imageSize, {
+    bool exporting = false,
+  }) {
+    final minDim = math.min(imageSize.width, imageSize.height);
+    final cellPx = exporting ? 2.0 : 2.5;
+    final grid = (minDim / cellPx).round().clamp(120, 256);
+    return WarpFieldBuilder(
+      gridWidth: grid,
+      gridHeight: grid,
+      maskFeatherPx: math.max(24.0, minDim * 0.04),
+      mlsIterations: 5,
+      outerRingPx: 10,
+    );
+  }
+
+  /// Preview interativo — grade pequena (~11 px/célula), latência mínima.
+  factory WarpFieldBuilder.forFaceWarpInteractive(Size imageSize) {
+    final minDim = math.min(imageSize.width, imageSize.height);
+    const cellPx = 11.0;
+    final grid = (minDim / cellPx).round().clamp(48, 72);
+    return WarpFieldBuilder(
+      gridWidth: grid,
+      gridHeight: grid,
+      maskFeatherPx: math.max(28.0, minDim * 0.045),
+      mlsIterations: 5,
+      outerRingPx: 12,
+    );
+  }
+
+  /// Preview: grade moderada. Export: grade densa.
+  factory WarpFieldBuilder.forFaceWarp(
+    Size imageSize, {
+    bool exporting = false,
+  }) {
+    final minDim = math.min(imageSize.width, imageSize.height);
+    final cellPx = exporting ? 4.5 : 6.0;
+    final maxGrid = exporting ? 280 : 128;
+    final minGrid = exporting ? 120 : 72;
+    final grid = (minDim / cellPx).round().clamp(minGrid, maxGrid);
+    final feather = math.max(32.0, minDim * 0.05);
+    return WarpFieldBuilder(
+      gridWidth: grid,
+      gridHeight: grid,
+      maskFeatherPx: feather,
+      mlsIterations: exporting ? 7 : 6,
+      outerRingPx: 14,
     );
   }
 
@@ -147,19 +213,25 @@ class WarpFieldBuilder {
         final nx = px * invW;
         final ny = py * invH;
 
-        var m = _computeMask(point, bounds, featherPx);
-
+        var m = 1.0;
         if (influenceMap != null && !influenceMap.isEmpty) {
-          // Influence Map adaptativo substitui cápsula/retângulo.
-          m *= influenceMap.sampleNormalized(nx, ny);
-        } else if (m > 0.001 && capsule != null) {
-          m *= _capsuleFalloff(point, capsule);
+          m = influenceMap.sampleNormalized(nx, ny);
+        } else {
+          m = _computeMask(point, bounds, featherPx);
+          if (m > 0.001 && capsule != null) {
+            m *= _capsuleFalloff(point, capsule);
+          }
         }
 
-        if (protection != null) {
+        if (m <= 0.001) {
+          mask[idx] = 0;
+          continue;
+        }
+
+        if (influenceMap == null && protection != null) {
           // Domínio controlado pelo matte: fora → peso 0 (sem anel de fundo).
           m *= protection.sampleWarpWeight(nx, ny);
-        } else {
+        } else if (influenceMap == null) {
           // Sem matte: continua utilizável, porém mais conservador.
           m *= missingScale;
         }
@@ -226,10 +298,13 @@ class WarpFieldBuilder {
     }
 
     final minDim = math.min(imageSize.width, imageSize.height);
+    final cpSpread = math.max(maxX - minX, maxY - minY);
+    // Warps locais (olhos/nariz/boca): evita retângulo gigante que puxa a boca
+    // quando só os olhos rotacionam.
     final padding = math.max(
-      64.0,
-      math.max(minDim * 0.08, maxShift * 2.2 + maskFeatherPx + outerRingPx),
-    );
+      cpSpread * 0.42,
+      maxShift * 2.2 + maskFeatherPx + outerRingPx,
+    ).clamp(20.0, minDim * 0.14);
     return Rect.fromLTRB(
       math.max(0, minX - padding),
       math.max(0, minY - padding),

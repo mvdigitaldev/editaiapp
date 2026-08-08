@@ -28,7 +28,7 @@ class EyeHeightFilter extends FaceWarpFilter {
 
     final lift = context.imageSize.height * 0.018 * intensity;
     final delta = Offset(0, -lift);
-    final points = FaceWarpUtils.anchorPoints(context.mesh);
+    final points = FaceWarpUtils.eyeWarpAnchors(context.mesh);
 
     for (final region in [MeshRegion.leftEye, MeshRegion.rightEye]) {
       points.addAll(

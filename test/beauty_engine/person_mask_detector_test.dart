@@ -79,6 +79,12 @@ class _FailingBindings implements BeautyMediapipeBindings {
       null;
 
   @override
+  Future<FacePartsNativeResult?> detectFaceParts(
+    NativeImageBuffer buffer,
+  ) async =>
+      null;
+
+  @override
   void dispose() {}
 
   @override
@@ -86,6 +92,7 @@ class _FailingBindings implements BeautyMediapipeBindings {
     required String faceModelPath,
     String? poseModelPath,
     String? segmenterModelPath,
+    String? facePartsModelPath,
   }) async {
     throw StateError('init failed');
   }

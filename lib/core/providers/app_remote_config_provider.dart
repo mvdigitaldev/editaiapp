@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/profile/data/datasources/app_settings_datasource.dart';
-import '../config/banuba_config.dart';
 
 const moduleManualEditEnabledKey = 'module_manual_edit_enabled';
 const moduleAiEditEnabledKey = 'module_ai_edit_enabled';
@@ -11,7 +10,6 @@ const moduleMultiImageEnabledKey = 'module_multi_image_enabled';
 const moduleRemoveBackgroundEnabledKey =
     'module_remove_background_enabled';
 const moduleFaceLabEnabledKey = 'module_face_lab_enabled';
-const banubaLicenseTokenKey = 'banuba_license_token';
 
 final appSettingsDataSourceProvider = Provider<AppSettingsDataSource>((ref) {
   return AppSettingsDataSourceImpl(Supabase.instance.client);
@@ -33,17 +31,6 @@ final homeModuleConfigProvider = FutureProvider<HomeModuleConfig>((ref) async {
     // Falha de rede não deve deixar uma versão já publicada sem menu.
     return const HomeModuleConfig.allEnabled();
   }
-});
-
-final banubaLicenseTokenProvider = FutureProvider<String>((ref) async {
-  final dataSource = ref.watch(appSettingsDataSourceProvider);
-  try {
-    final remote = (await dataSource.getValue(banubaLicenseTokenKey))?.trim();
-    if (remote != null && remote.isNotEmpty) return remote;
-  } catch (_) {
-    // O token compilado mantém versões existentes funcionais durante falhas.
-  }
-  return BanubaConfig.buildTimeLicenseToken.trim();
 });
 
 class HomeModuleConfig {
@@ -82,8 +69,7 @@ class HomeModuleConfig {
   final bool multiImage;
   final bool removeBackground;
 
-  /// Editor facial próprio (beta) exibido no hub de retoque para
-  /// comparação lado a lado com o Banuba durante a migração.
+  /// Laboratório facial (toggles V3 / debug) no hub de retoque.
   final bool faceLab;
 
   static bool _parseEnabled(String? value) {

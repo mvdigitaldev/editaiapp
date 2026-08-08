@@ -1,0 +1,31 @@
+{
+  "id": "bundled_glam",
+  "name": "Glam",
+  "lutAssetPath": "assets/filters/lut/cinema_teal_orange.png",
+  "lutIntensity": 0.85,
+  "tune": {
+    "brightness": 0.04,
+    "contrast": 0.18,
+    "saturation": 0.12,
+    "exposure": 0.05,
+    "temperature": 0.08,
+    "vibrance": 0.1
+  },
+  "face": {
+    "faceSlim": 0.28,
+    "cheekbone": 0.32,
+    "eyeScale": 0.18,
+    "jaw": 0.12,
+    "lipThickness": 0.15
+  },
+  "body": {},
+  "skin": {
+    "smooth": 0.55,
+    "whitening": 0.22,
+    "removeDarkCircles": 0.25,
+    "blush": 0.18,
+    "contour": 0.2,
+    "eyelashes": 0.12
+  },
+  "version": 2
+}

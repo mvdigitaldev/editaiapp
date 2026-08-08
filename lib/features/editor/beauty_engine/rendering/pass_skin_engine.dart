@@ -1,14 +1,31 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
+
+import '../filters/face/derived_masks.dart';
+import '../filters/face/mask_sampling.dart';
+import '../filters/face/skin/native_skin_backend.dart';
+import '../filters/face/skin/skin_retouch_engine.dart';
+import '../filters/face/skin/skin_weight_map.dart';
+import '../filters/face/makeup_blend_engine.dart';
+import '../filters/face/skin_tone_calibration.dart';
 import '../filters/face/skin_mask_utils.dart';
+import '../models/warp_field.dart';
+import '../segment/face_parts_segmentation.dart';
+import '../segment/face_parsing_result.dart';
 import 'render_pass.dart';
 import 'render_target.dart';
 import 'texture_handle.dart';
 
-/// Pass consolidado: smooth, whitening, retouch, makeup, teeth (Sprint 17).
+/// Pass consolidado de pele e makeup (Grupos A + C).
 class PassSkinEngine implements RenderPass {
-  const PassSkinEngine();
+  const PassSkinEngine({this.nativeSkinBackend});
+
+  final NativeSkinBackend? nativeSkinBackend;
+
+  static const isolateThresholdPixels = 400 * 400;
 
   @override
   String get shaderName => RenderShaders.skinEngine;
@@ -30,159 +47,110 @@ class PassSkinEngine implements RenderPass {
     final acne = _f(context, 'remove_acne');
     final wrinkles = _f(context, 'remove_wrinkles');
     final darkCircles = _f(context, 'remove_dark_circles');
+    final shine = _f(context, 'skin_shine');
     final teeth = _f(context, 'teeth_whitening');
     final blush = _f(context, 'blush');
     final contour = _f(context, 'contour');
     final eyebrows = _f(context, 'eyebrows');
     final eyelashes = _f(context, 'eyelashes');
+    final irisEnhance = _f(context, 'iris_enhance');
 
-    if (smooth == 0 &&
-        whitening == 0 &&
-        acne == 0 &&
-        wrinkles == 0 &&
-        darkCircles == 0 &&
-        teeth == 0 &&
-        blush == 0 &&
-        contour == 0 &&
-        eyebrows == 0 &&
-        eyelashes == 0) {
+    final retouchParams = SkinRetouchParams(
+      smooth: smooth,
+      acne: acne,
+      wrinkles: wrinkles,
+      darkCircles: darkCircles,
+      shine: shine,
+    );
+
+    final hasMakeup = whitening > 0 ||
+        teeth > 0 ||
+        blush > 0 ||
+        contour > 0 ||
+        eyebrows > 0 ||
+        eyelashes > 0 ||
+        irisEnhance > 0;
+
+    if (retouchParams.isNoop && !hasMakeup) {
       return context.pool.acquireCopy(context.input);
     }
 
-    final output = Uint8List.fromList(source.rgba);
     final width = source.width;
     final height = source.height;
-    final original = Uint8List.fromList(source.rgba);
+    final mapping =
+        (context.uniforms['tileMapping'] as SkinTileMapping?) ??
+            const SkinTileMapping();
+    final faceWarp = context.uniforms['faceWarp'] as WarpField?;
+    var output = Uint8List.fromList(source.rgba);
 
-    final x0 = (mask.faceBounds.left * width).round().clamp(0, width - 1);
-    final y0 = (mask.faceBounds.top * height).round().clamp(0, height - 1);
-    final x1 = ((mask.faceBounds.left + mask.faceBounds.width) * width)
-        .round()
-        .clamp(x0 + 1, width);
-    final y1 = ((mask.faceBounds.top + mask.faceBounds.height) * height)
-        .round()
-        .clamp(y0 + 1, height);
-
-    if (smooth > 0 || acne > 0 || wrinkles > 0) {
-      _applySkinBlur(
-        output: output,
-        original: original,
+    DerivedMaskBundle? derived;
+    SkinWeightMap? skinMap;
+    final needsDerived = !retouchParams.isNoop ||
+        teeth > 0 ||
+        irisEnhance > 0 ||
+        contour > 0 ||
+        eyebrows > 0;
+    if (!retouchParams.isNoop || hasMakeup) {
+      skinMap = SkinWeightMap.build(
         width: width,
         height: height,
-        x0: x0,
-        y0: y0,
-        x1: x1,
-        y1: y1,
+        geometric: mask,
+        segmentation: (context.uniforms['faceParsing'] as FaceParsingResult?) ==
+                null
+            ? context.uniforms['faceParts'] as FacePartsSegmentation?
+            : null,
+        parsing: context.uniforms['faceParsing'] as FaceParsingResult?,
+        mapping: mapping,
+      );
+      if (needsDerived) {
+        derived = DerivedMaskBuilder.build(
+          rgba: output,
+          width: width,
+          height: height,
+          geometric: mask,
+          skinWeights: skinMap.weights,
+          parsing: context.uniforms['faceParsing'] as FaceParsingResult?,
+          mapping: mapping,
+          sampling: MaskSamplingContext(
+            tileMapping: mapping,
+            faceWarp: faceWarp,
+          ),
+        );
+      }
+    }
+
+    if (!retouchParams.isNoop && derived != null && skinMap != null) {
+      output = await _runRetouch(
+        rgba: output,
+        width: width,
+        height: height,
         mask: mask,
-        strength: (smooth * 0.45 + acne * 0.25 + wrinkles * 0.2).clamp(0, 0.55),
+        params: retouchParams,
+        mapping: mapping,
+        skinWeights: skinMap.weights,
+        derived: derived,
+        nativeSkinBackend: nativeSkinBackend,
       );
     }
 
-    for (var y = y0; y < y1; y++) {
-      final ny = y / height;
-      for (var x = x0; x < x1; x++) {
-        final nx = x / width;
-        if (!mask.faceBounds.contains(Offset(nx, ny))) {
-          continue;
-        }
-
-        final i = (y * width + x) * 4;
-        var r = output[i];
-        var g = output[i + 1];
-        var b = output[i + 2];
-
-        if (whitening > 0 && !SkinMaskUtils.isProtected(nx, ny, mask)) {
-          final w = whitening * 0.12;
-          r = (r + (255 - r) * w).round();
-          g = (g + (255 - g) * w).round();
-          b = (b + (255 - b) * w).round();
-        }
-
-        if (darkCircles > 0) {
-          final weight = SkinMaskUtils.underEyeWeight(nx, ny, mask);
-          if (weight > 0) {
-            final lift = darkCircles * 0.15 * weight;
-            r = (r + (255 - r) * lift).round();
-            g = (g + (255 - g) * lift).round();
-            b = (b + (255 - b) * lift).round();
-          }
-        }
-
-        if (teeth > 0) {
-          final weight = SkinMaskUtils.teethWhiteningWeight(
-            nx,
-            ny,
-            mask,
-            r,
-            g,
-            b,
-          );
-          if (weight > 0) {
-            final t = teeth * 0.28 * weight;
-            r = (r + (255 - r) * t).round();
-            g = (g + (255 - g) * t).round();
-            b = (b + (255 - b) * t).round();
-          }
-        }
-
-        if (blush > 0) {
-          final weight = SkinMaskUtils.softRegionsWeight(nx, ny, mask.cheekRegions);
-          if (weight > 0) {
-            r = (r + 28 * blush * weight).round().clamp(0, 255);
-            g = (g + 8 * blush * weight).round().clamp(0, 255);
-            b = (b + 4 * blush * weight).round().clamp(0, 255);
-          }
-        }
-
-        if (contour > 0) {
-          final weight = SkinMaskUtils.softRegionsWeight(
-            nx,
-            ny,
-            mask.contourRegions,
-            edgeFeather: 0.03,
-          );
-          if (weight > 0) {
-            final c = contour * 0.12 * weight;
-            r = (r * (1 - c)).round();
-            g = (g * (1 - c)).round();
-            b = (b * (1 - c)).round();
-          }
-        }
-
-        if (eyebrows > 0) {
-          final weight = SkinMaskUtils.softRegionsWeight(
-            nx,
-            ny,
-            mask.eyebrowRegions,
-            edgeFeather: 0.02,
-          );
-          if (weight > 0) {
-            final e = eyebrows * 0.18 * weight;
-            r = (r * (1 - e)).round();
-            g = (g * (1 - e)).round();
-            b = (b * (1 - e)).round();
-          }
-        }
-
-        if (eyelashes > 0) {
-          final weight = SkinMaskUtils.softRegionsWeight(
-            nx,
-            ny,
-            mask.eyelashRegions,
-            edgeFeather: 0.02,
-          );
-          if (weight > 0) {
-            final e = eyelashes * 0.15 * weight;
-            r = (r * (1 - e)).round();
-            g = (g * (1 - e)).round();
-            b = (b * (1 - e)).round();
-          }
-        }
-
-        output[i] = r.clamp(0, 255);
-        output[i + 1] = g.clamp(0, 255);
-        output[i + 2] = b.clamp(0, 255);
-      }
+    if (hasMakeup) {
+      _applyMakeup(
+        output: output,
+        width: width,
+        height: height,
+        mask: mask,
+        mapping: mapping,
+        derived: derived,
+        skinWeights: skinMap?.weights,
+        faceWarp: faceWarp,
+        whitening: whitening,
+        teeth: teeth,
+        blush: blush,
+        contour: contour,
+        eyebrows: eyebrows,
+        eyelashes: eyelashes,
+        irisEnhance: irisEnhance,
+      );
     }
 
     final entry = context.store.create(
@@ -193,57 +161,255 @@ class PassSkinEngine implements RenderPass {
     return context.store.toHandle(entry);
   }
 
+  static Future<Uint8List> _runRetouch({
+    required Uint8List rgba,
+    required int width,
+    required int height,
+    required SkinProcessingMask mask,
+    required SkinRetouchParams params,
+    required SkinTileMapping mapping,
+    required Uint8List skinWeights,
+    required DerivedMaskBundle derived,
+    NativeSkinBackend? nativeSkinBackend,
+  }) async {
+    if (skinWeights.isEmpty && derived.underEye.every((v) => v == 0)) {
+      return rgba;
+    }
+
+    final resolved = mapping.resolve(width, height);
+    final underEye = params.darkCircles > 0 ? derived.underEye : Uint8List(0);
+    final shineMask = params.shine > 0 ? derived.shine : null;
+
+    final request = SkinRetouchRequest(
+      rgba: rgba,
+      width: width,
+      height: height,
+      skinWeights: skinWeights,
+      underEyeWeights: underEye,
+      params: params,
+      shineWeights: shineMask,
+      shineKnee: derived.tone.isValid ? derived.tone.shineKnee : null,
+      faceEdgePx: math.max(
+        mask.faceBounds.width * resolved.fullWidth,
+        mask.faceBounds.height * resolved.fullHeight,
+      ),
+    );
+
+    if (nativeSkinBackend != null) {
+      final native = await nativeSkinBackend.skinRetouch(request);
+      if (native != null && native.length == rgba.length) {
+        return native;
+      }
+    }
+
+    if (width * height >= isolateThresholdPixels) {
+      return compute(SkinRetouchEngine.run, request);
+    }
+    return SkinRetouchEngine.run(request);
+  }
+
   static double _f(RenderPassContext context, String key) {
     return ((context.uniforms[key] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0);
   }
 
-  static void _applySkinBlur({
+  static void _applyMakeup({
     required Uint8List output,
-    required Uint8List original,
     required int width,
     required int height,
-    required int x0,
-    required int y0,
-    required int x1,
-    required int y1,
     required SkinProcessingMask mask,
-    required double strength,
+    required SkinTileMapping mapping,
+    required DerivedMaskBundle? derived,
+    required Uint8List? skinWeights,
+    required WarpField? faceWarp,
+    required double whitening,
+    required double teeth,
+    required double blush,
+    required double contour,
+    required double eyebrows,
+    required double eyelashes,
+    required double irisEnhance,
   }) {
-    if (strength <= 0) {
-      return;
-    }
+    final resolved = mapping.resolve(width, height);
+    final bounds = mask.faceBounds;
+    final sampling = MaskSamplingContext(
+      tileMapping: mapping,
+      faceWarp: faceWarp,
+    );
+    final weights = skinWeights ?? Uint8List(0);
+    final tone = SkinToneCalibration.sample(
+      rgba: output,
+      skinWeights: weights,
+      geometric: mask,
+      width: width,
+      height: height,
+      mapping: mapping,
+    );
+    final targetL = tone.isValid ? tone.oklabL + 0.08 : 0.72;
+    final rgbOut = Float64List(3);
+    final x0 = (bounds.left * resolved.fullWidth - resolved.originX)
+        .floor()
+        .clamp(0, width);
+    final y0 = (bounds.top * resolved.fullHeight - resolved.originY)
+        .floor()
+        .clamp(0, height);
+    final x1 = (bounds.right * resolved.fullWidth - resolved.originX)
+        .ceil()
+        .clamp(0, width);
+    final y1 = (bounds.bottom * resolved.fullHeight - resolved.originY)
+        .ceil()
+        .clamp(0, height);
 
-    final temp = Uint8List.fromList(output);
     for (var y = y0; y < y1; y++) {
-      final ny = y / height;
       for (var x = x0; x < x1; x++) {
-        final nx = x / width;
-        if (SkinMaskUtils.isProtected(nx, ny, mask, feather: 0.03)) {
+        final sample = sampling.maskNormalized(
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+        );
+        if (!bounds.contains(sample)) {
           continue;
         }
 
-        var r = 0;
-        var g = 0;
-        var b = 0;
-        var count = 0;
-        for (var dy = -1; dy <= 1; dy++) {
-          for (var dx = -1; dx <= 1; dx++) {
-            final sx = (x + dx).clamp(0, width - 1);
-            final sy = (y + dy).clamp(0, height - 1);
-            final si = (sy * width + sx) * 4;
-            r += original[si];
-            g += original[si + 1];
-            b += original[si + 2];
-            count++;
-          }
+        final nx = sample.dx;
+        final ny = sample.dy;
+        final p = y * width + x;
+        final skinW = weights.isEmpty
+            ? 1.0
+            : sampling.weightAt(
+                weights: weights,
+                x: x,
+                y: y,
+                width: width,
+                height: height,
+              );
+
+        final i = p * 4;
+        var r = output[i];
+        var g = output[i + 1];
+        var b = output[i + 2];
+
+        if (whitening > 0 &&
+            skinW > 0 &&
+            !SkinMaskUtils.isProtected(nx, ny, mask) &&
+            SkinMaskUtils.foreheadWeight(nx, ny, mask) < 0.35) {
+          MakeupBlendEngine.applyWhitening(
+            r: r,
+            g: g,
+            b: b,
+            amount: whitening,
+            targetLightness: targetL,
+            out: rgbOut,
+          );
+          r = rgbOut[0].round();
+          g = rgbOut[1].round();
+          b = rgbOut[2].round();
         }
 
-        final i = (y * width + x) * 4;
-        output[i] = (temp[i] * (1 - strength) + (r / count) * strength).round();
-        output[i + 1] =
-            (temp[i + 1] * (1 - strength) + (g / count) * strength).round();
-        output[i + 2] =
-            (temp[i + 2] * (1 - strength) + (b / count) * strength).round();
+      if (teeth > 0 && derived != null) {
+        final weight = derived.teeth[p] / 255.0;
+        if (weight > 0) {
+          final t = teeth * 0.28 * weight;
+          r = (r + (255 - r) * t).round();
+          g = (g + (255 - g) * t).round();
+          b = (b + (255 - b) * t).round();
+        }
+      }
+
+      if (irisEnhance > 0 && derived != null) {
+        final weight = derived.iris[p] / 255.0;
+        if (weight > 0) {
+          final t = irisEnhance * 0.22 * weight;
+          r = (r + (255 - r) * t * 0.35).round().clamp(0, 255);
+          g = (g + (255 - g) * t * 0.55).round().clamp(0, 255);
+          b = (b + (255 - b) * t).round().clamp(0, 255);
+        }
+      }
+
+      if (blush > 0) {
+        final weight = SkinMaskUtils.blushWeight(
+          nx,
+          ny,
+          mask,
+          skinWeight: skinW,
+        );
+        if (weight > 0) {
+          MakeupBlendEngine.applyBlush(
+            r: r,
+            g: g,
+            b: b,
+            amount: blush,
+            weight: weight,
+            out: rgbOut,
+          );
+          r = rgbOut[0].round();
+          g = rgbOut[1].round();
+          b = rgbOut[2].round();
+        }
+      }
+
+      if (contour > 0) {
+        final jaw =
+            derived != null ? derived.jawBand[p] / 255.0 : 0.0;
+        final weight = jaw > 0
+            ? jaw
+            : SkinMaskUtils.softRegionsWeight(
+                nx,
+                ny,
+                mask.contourRegions,
+                edgeFeather: 0.03,
+              );
+        if (weight > 0) {
+          final c = contour * 0.12 * weight;
+          r = (r * (1 - c)).round();
+          g = (g * (1 - c)).round();
+          b = (b * (1 - c)).round();
+        }
+      }
+
+      if (eyebrows > 0) {
+        var weight = derived != null ? derived.eyebrows[p] / 255.0 : 0.0;
+        if (weight <= 0) {
+          weight = SkinMaskUtils.softRegionsWeight(
+            nx,
+            ny,
+            mask.eyebrowRegions,
+            edgeFeather: 0.025,
+          );
+        }
+        if (weight > 0) {
+          MakeupBlendEngine.applyEyebrowDarken(
+            r: r,
+            g: g,
+            b: b,
+            amount: eyebrows,
+            weight: weight,
+            out: rgbOut,
+          );
+          r = rgbOut[0].round();
+          g = rgbOut[1].round();
+          b = rgbOut[2].round();
+        }
+      }
+
+      if (eyelashes > 0) {
+        final weight = SkinMaskUtils.softRegionsWeight(
+          nx,
+          ny,
+          mask.eyelashRegions,
+          edgeFeather: 0.02,
+        );
+        if (weight > 0) {
+          final e = eyelashes * 0.15 * weight;
+          r = (r * (1 - e)).round();
+          g = (g * (1 - e)).round();
+          b = (b * (1 - e)).round();
+        }
+      }
+
+        output[i] = r.clamp(0, 255);
+        output[i + 1] = g.clamp(0, 255);
+        output[i + 2] = b.clamp(0, 255);
       }
     }
   }

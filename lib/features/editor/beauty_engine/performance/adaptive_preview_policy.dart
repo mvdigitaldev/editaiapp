@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../models/image_source.dart';
+import 'device_capability.dart';
 
 /// Limites de resolução de preview conforme `09-performance.md` (Sprint 25).
 abstract final class AdaptivePreviewPolicy {
@@ -28,6 +29,27 @@ abstract final class AdaptivePreviewPolicy {
       return selfieMaxEdge;
     }
     return photoMaxEdge;
+  }
+
+  /// Preview com teto do tier de hardware (Sprint 6).
+  static int maxEdgeForSourceWithProfile(
+    ImageSource source,
+    DeviceCapabilityProfile profile,
+  ) {
+    final base = maxEdgeForSource(source);
+    return math.min(base, profile.previewMaxEdge);
+  }
+
+  static int maxEdgeForBodyWarpPreviewWithProfile(
+    ImageSource source,
+    DeviceCapabilityProfile profile,
+  ) {
+    final base = maxEdgeForBodyWarpPreview(source);
+    return math.min(base, profile.previewMaxEdge);
+  }
+
+  static int tileSizeForProfile(DeviceCapabilityProfile profile) {
+    return profile.exportTileSizePx;
   }
 
   static int maxEdgeForBodyWarpPreview(ImageSource source) {

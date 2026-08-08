@@ -8,6 +8,7 @@ import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
+import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 import java.io.File
 
 class FaceLandmarkerBridge(private val context: Context) {
@@ -27,7 +28,7 @@ class FaceLandmarkerBridge(private val context: Context) {
         val options = FaceLandmarker.FaceLandmarkerOptions.builder()
             .setBaseOptions(baseOptions)
             .setRunningMode(RunningMode.IMAGE)
-            .setNumFaces(1)
+            .setNumFaces(MAX_FACES)
             .setMinFaceDetectionConfidence(0.5f)
             .setMinFacePresenceConfidence(0.5f)
             .setMinTrackingConfidence(0.5f)
@@ -37,17 +38,25 @@ class FaceLandmarkerBridge(private val context: Context) {
     }
 
     fun detectFace(imageBytes: ByteArray, width: Int, height: Int, rotation: Int): Map<String, Any?>? {
-        val landmarker = faceLandmarker ?: return null
+        val faces = detectFaces(imageBytes, width, height, rotation)
+        if (faces.isEmpty()) {
+            return null
+        }
+        return faces.maxByOrNull { faceArea(it) }
+    }
 
-        val bitmap = ImageBitmapDecoder.decode(imageBytes, width, height, rotation) ?: return null
+    fun detectFaces(imageBytes: ByteArray, width: Int, height: Int, rotation: Int): List<Map<String, Any?>> {
+        val landmarker = faceLandmarker ?: return emptyList()
+
+        val bitmap = ImageBitmapDecoder.decode(imageBytes, width, height, rotation) ?: return emptyList()
         val mpImage = BitmapImageBuilder(bitmap).build()
 
         return try {
             val result: FaceLandmarkerResult = landmarker.detect(mpImage)
-            mapResult(result)
+            mapAllResults(result)
         } catch (e: Exception) {
-            Log.e(TAG, "detectFace failed", e)
-            null
+            Log.e(TAG, "detectFaces failed", e)
+            emptyList()
         } finally {
             if (!bitmap.isRecycled) {
                 bitmap.recycle()
@@ -60,12 +69,16 @@ class FaceLandmarkerBridge(private val context: Context) {
         faceLandmarker = null
     }
 
-    private fun mapResult(result: FaceLandmarkerResult): Map<String, Any?>? {
+    private fun mapAllResults(result: FaceLandmarkerResult): List<Map<String, Any?>> {
         if (result.faceLandmarks().isEmpty()) {
-            return null
+            return emptyList()
         }
+        return result.faceLandmarks()
+            .mapNotNull { landmarks -> mapLandmarks(landmarks) }
+            .sortedByDescending { faceArea(it) }
+    }
 
-        val landmarks = result.faceLandmarks()[0]
+    private fun mapLandmarks(landmarks: List<NormalizedLandmark>): Map<String, Any?>? {
         if (landmarks.isEmpty()) {
             return null
         }
@@ -94,10 +107,8 @@ class FaceLandmarkerBridge(private val context: Context) {
             )
         }
 
-        val confidence = 0.9
-
         return mapOf(
-            "confidence" to confidence,
+            "confidence" to 0.9,
             "landmarks" to mappedLandmarks,
             "boundingBox" to mapOf(
                 "left" to minX,
@@ -108,7 +119,18 @@ class FaceLandmarkerBridge(private val context: Context) {
         )
     }
 
+    private fun faceArea(face: Map<String, Any?>): Double {
+        @Suppress("UNCHECKED_CAST")
+        val box = face["boundingBox"] as Map<String, Any?>
+        val left = box["left"] as Double
+        val top = box["top"] as Double
+        val right = box["right"] as Double
+        val bottom = box["bottom"] as Double
+        return (right - left) * (bottom - top)
+    }
+
     companion object {
         private const val TAG = "FaceLandmarkerBridge"
+        const val MAX_FACES = 5
     }
 }

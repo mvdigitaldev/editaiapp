@@ -16,8 +16,11 @@ class FaceMeshBuilder {
     final vertices = Float32List(vertexCount * 2);
     final uvs = Float32List(vertexCount * 2);
 
-    for (var i = 0; i < vertexCount; i++) {
-      final landmark = face.landmarks[i];
+    for (final landmark in face.landmarks) {
+      final i = landmark.index;
+      if (i < 0 || i >= vertexCount) {
+        continue;
+      }
       final px = landmark.normalized.dx * imageSize.width;
       final py = landmark.normalized.dy * imageSize.height;
       vertices[i * 2] = px;

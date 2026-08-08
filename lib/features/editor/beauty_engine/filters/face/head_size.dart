@@ -26,8 +26,8 @@ class HeadSizeFilter extends FaceWarpFilter {
       return const [];
     }
 
-    final center = FaceWarpUtils.landmarkPoint(context.face, 1, context.imageSize) ??
-        FaceWarpUtils.landmarkPoint(context.face, 168, context.imageSize);
+    final center = FaceWarpUtils.faceOvalCenter(context.face, context.imageSize) ??
+        FaceWarpUtils.faceCenter(context.face, context.imageSize);
     if (center == null) {
       return const [];
     }

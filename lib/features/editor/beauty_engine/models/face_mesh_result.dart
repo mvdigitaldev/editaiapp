@@ -29,10 +29,12 @@ class FaceMeshResult {
 
   factory FaceMeshResult.fromJson(Map<String, dynamic> json) {
     final box = json['boundingBox'] as Map<String, dynamic>;
+    final landmarks = (json['landmarks'] as List<dynamic>)
+        .map((e) => FaceLandmark.fromJson(e as Map<String, dynamic>))
+        .toList()
+      ..sort((a, b) => a.index.compareTo(b.index));
     return FaceMeshResult(
-      landmarks: (json['landmarks'] as List<dynamic>)
-          .map((e) => FaceLandmark.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      landmarks: landmarks,
       boundingBox: Rect.fromLTRB(
         (box['left'] as num).toDouble(),
         (box['top'] as num).toDouble(),
