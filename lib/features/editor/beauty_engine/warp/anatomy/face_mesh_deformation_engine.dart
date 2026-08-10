@@ -77,17 +77,16 @@ class FaceMeshDeformationEngine {
       return null;
     }
 
-    // Spread + vacancy fill são obrigatórios na grade CPU (remap bilinear).
-    // "Direct" sem spread só vale para export estático; preview sempre espalha.
+    // Malha direta (AAM) — preview e export; evita spread/heurística de grade.
     final gpuPiecewise = FaceWarpV3Config.useGpuPiecewiseAffine;
-    final directMeshSpread = FaceWarpV3Config.useDirectMeshRender &&
-        !gpuPiecewise &&
-        !interactivePreview &&
-        exporting;
+    final directMesh = FaceWarpV3Config.useDirectMeshRender || gpuPiecewise;
 
+    final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(parameters);
     final builder = interactivePreview && !exporting
-        ? WarpFieldBuilder.forFaceMeshV3Interactive(imageSize)
-        : directMeshSpread
+        ? (faceSlimOnly
+            ? WarpFieldBuilder.forFaceSlimInteractive(imageSize)
+            : WarpFieldBuilder.forFaceMeshV3Interactive(imageSize))
+        : directMesh
             ? WarpFieldBuilder.forFaceMeshV3Direct(imageSize, exporting: exporting)
             : WarpFieldBuilder.forFaceWarp(imageSize, exporting: exporting);
 
@@ -95,6 +94,7 @@ class FaceMeshDeformationEngine {
       face: face,
       imageSize: imageSize,
       personMask: personMask,
+      lateralRadiusExpand: faceSlimOnly ? 0.07 : 0.0,
     );
 
     final intensity = _peakIntensity(parameters);
@@ -110,10 +110,11 @@ class FaceMeshDeformationEngine {
       intensity: intensity,
       parameters: parameters,
       fse: _faceShortEdgePx(face, imageSize),
-      directMesh: directMeshSpread,
-      // Preview: inpaint pós-warp corrige faixas fantasma; vacancy na grade
-      // empilha deslocamento e piora o efeito “duas imagens”.
-      applyVacancyFill: !interactivePreview || exporting,
+      directMesh: directMesh,
+      // face_slim: malha backward (V3_MESH) — sem vacancy na grade.
+      applyVacancyFill: !faceSlimOnly &&
+          (!interactivePreview || exporting) &&
+          FaceWarpVacancyFill.hasActiveLateralTool(parameters),
     );
 
     if (FaceWarpV3Config.useGpuPiecewiseAffine) {
@@ -152,10 +153,12 @@ class FaceMeshDeformationEngine {
       return null;
     }
 
+    final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(parameters);
     final matte = FaceMatteRoi.buildInfluenceMap(
       face: face,
       imageSize: imageSize,
       personMask: personMask,
+      lateralRadiusExpand: faceSlimOnly ? 0.07 : 0.0,
     );
 
     return FaceMeshGpuPayload.build(

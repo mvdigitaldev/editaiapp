@@ -170,13 +170,16 @@ abstract final class PilotWarpDisplacement {
     required double magnitude,
     required double fse,
   }) {
-    if (!_inZones(index, spec.primaryZones)) {
+    if (!_inZones(index, spec.primaryZones) &&
+        !_inZones(index, spec.freeZones)) {
       return Offset.zero;
     }
 
     final centerX = FaceWarpUtils.faceCenterX(face, imageSize);
     final towardCenter = centerX - base.dx;
-    final maxPx = (spec.maxDisplacementFse ?? 0.08) * fse * magnitude;
+    // Curva suave: slider alto não estoura displacement (73%+ deformava demais).
+    final effectiveMag = math.pow(magnitude.clamp(0.0, 1.0), 1.35).toDouble();
+    final maxPx = (spec.maxDisplacementFse ?? 0.08) * fse * effectiveMag;
     if (maxPx <= 0) {
       return Offset.zero;
     }
@@ -186,10 +189,23 @@ abstract final class PilotWarpDisplacement {
     if (halfFace <= 1e-6) {
       return Offset.zero;
     }
-    // Contorno ~100%, meio da bochecha ~42%.
-    final edgeWeight = math.pow((lateral / halfFace).clamp(0.0, 1.0), 0.75)
+
+    final ny = base.dy / imageSize.height;
+    // Orelha/têmpora alta: menos pull (evita deformar orelha).
+    var zoneWeight = 1.0;
+    if (ny < 0.40) {
+      zoneWeight = (0.42 + 0.58 * (ny / 0.40)).clamp(0.42, 1.0);
+    }
+    // Mandíbula/barba baixa: atenua esmagamento horizontal da barba.
+    if (ny > 0.66) {
+      zoneWeight *= (1.0 - (ny - 0.66) / 0.24).clamp(0.0, 1.0);
+      zoneWeight = zoneWeight.clamp(0.30, 1.0);
+    }
+
+    // Contorno ~100%, meio da bochecha ~50% — expoente maior = menos extremo.
+    final edgeWeight = math.pow((lateral / halfFace).clamp(0.0, 1.0), 0.72)
         .toDouble();
-    final shiftX = towardCenter.sign * maxPx * edgeWeight;
+    final shiftX = towardCenter.sign * maxPx * edgeWeight * zoneWeight;
     return Offset(shiftX, 0);
   }
 

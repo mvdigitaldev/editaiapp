@@ -3,8 +3,10 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import '../body_reshape/maps/influence_map.dart';
+import '../config/face_warp_v3_config.dart';
 import '../mesh/tri_mesh_spatial_index.dart';
 import '../models/mesh_region.dart';
+import '../filters/face/face_warp_utils.dart';
 import '../models/tri_mesh.dart';
 import '../models/warp_field.dart';
 import 'anatomy/constrained_vertex_field.dart';
@@ -84,14 +86,33 @@ abstract final class FaceMeshWarpRasterizer {
     }
 
     final lateral = FaceWarpVacancyFill.hasActiveLateralTool(parameters);
+    final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(parameters);
+    final skipGridHeuristics =
+        directMesh || (faceSlimOnly && FaceWarpV3Config.useForwardMeshWarpFaceSlim);
 
-    if (!directMesh) {
+    if (!skipGridHeuristics) {
+      if (faceSlimOnly) {
+        _seedFaceSlimVertices(
+          vertexField: vertexField,
+          mesh: sourceMesh,
+          imageSize: imageSize,
+          displacement: displacement,
+          mask: mask,
+          gridWidth: gridWidth,
+          gridHeight: gridHeight,
+        );
+      }
+
       _spreadDisplacement(
         displacement: displacement,
         mask: mask,
         gridWidth: gridWidth,
         gridHeight: gridHeight,
-        iterations: lateral ? 6 : ((parameters['lip_thickness'] ?? 0) > 1e-6 ? 2 : 4),
+        iterations: faceSlimOnly
+            ? 5
+            : (lateral ? 6 : ((parameters['lip_thickness'] ?? 0) > 1e-6 ? 2 : 4)),
+        horizontalOnly: faceSlimOnly,
+        preservePeaks: faceSlimOnly,
       );
 
       if (applyVacancyFill && lateral && fse > 0) {
@@ -104,7 +125,32 @@ abstract final class FaceMeshWarpRasterizer {
           mask: mask,
           gridWidth: gridWidth,
           gridHeight: gridHeight,
-          fse: fse * (0.85 + 0.15 * FaceWarpVacancyFill.radiusScaleFor(parameters)),
+          fse: fse *
+              (0.85 + 0.15 * FaceWarpVacancyFill.radiusScaleFor(parameters)) *
+              (faceSlimOnly ? 1.15 : 1.0),
+          maxOverlapRatio: faceSlimOnly ? 0.62 : 0.45,
+        );
+      }
+
+      if (faceSlimOnly) {
+        _protectFaceSlimCenter(
+          displacement: displacement,
+          mask: mask,
+          gridWidth: gridWidth,
+          gridHeight: gridHeight,
+        );
+        _boostFaceSlimLateral(
+          displacement: displacement,
+          mask: mask,
+          gridWidth: gridWidth,
+          gridHeight: gridHeight,
+        );
+        _smoothDisplacementField(
+          displacement: displacement,
+          mask: mask,
+          gridWidth: gridWidth,
+          gridHeight: gridHeight,
+          iterations: 2,
         );
       }
 
@@ -152,6 +198,8 @@ abstract final class FaceMeshWarpRasterizer {
     required int gridWidth,
     required int gridHeight,
     required int iterations,
+    bool horizontalOnly = false,
+    bool preservePeaks = false,
   }) {
     if (iterations <= 0) {
       return;
@@ -209,12 +257,14 @@ abstract final class FaceMeshWarpRasterizer {
           }
 
           if (curMag > 0.05) {
-            // Suaviza sem matar o pico local.
-            tmpDisp[idx * 2] = curDx * 0.82 + (sumDx / count) * 0.18;
-            tmpDisp[idx * 2 + 1] = curDy * 0.82 + (sumDy / count) * 0.18;
+            final peakKeep = preservePeaks ? 0.92 : 0.82;
+            final avgMix = 1.0 - peakKeep;
+            tmpDisp[idx * 2] = curDx * peakKeep + (sumDx / count) * avgMix;
+            tmpDisp[idx * 2 + 1] = horizontalOnly
+                ? curDy * 0.65
+                : curDy * peakKeep + (sumDy / count) * avgMix;
           } else {
-            // Propaga vizinho mais forte (olhos estreitos na grade).
-            final fill = maxNeighbor * 0.88;
+            final fill = maxNeighbor * (preservePeaks ? 0.96 : 0.88);
             final avgDx = sumDx / count;
             final avgDy = sumDy / count;
             final avgMag = math.sqrt(avgDx * avgDx + avgDy * avgDy);
@@ -223,11 +273,129 @@ abstract final class FaceMeshWarpRasterizer {
             }
             final s = fill / avgMag;
             tmpDisp[idx * 2] = avgDx * s;
-            tmpDisp[idx * 2 + 1] = avgDy * s;
+            tmpDisp[idx * 2 + 1] = horizontalOnly ? curDy * 0.15 : avgDy * s;
           }
         }
       }
       displacement.setAll(0, tmpDisp);
+    }
+  }
+
+  /// Injeta Δv dos landmarks na grade — recupera pico perdido na interp. baricêntrica.
+  static void _seedFaceSlimVertices({
+    required ConstrainedVertexField vertexField,
+    required TriMesh mesh,
+    required Size imageSize,
+    required Float32List displacement,
+    required Float32List mask,
+    required int gridWidth,
+    required int gridHeight,
+  }) {
+    const minMovePx = 1.0;
+    const stampRadius = 2;
+
+    for (var i = 0; i < vertexField.landmarkCount; i++) {
+      final fwd = vertexField.displacementAt(i);
+      if (fwd.dx.abs() < minMovePx) {
+        continue;
+      }
+
+      final base = FaceWarpUtils.vertexAt(mesh, i);
+      if (base == null) {
+        continue;
+      }
+
+      final bdx = -fwd.dx;
+      final bdy = -fwd.dy;
+      final gxc = ((base.dx / imageSize.width) * (gridWidth - 1))
+          .round()
+          .clamp(0, gridWidth - 1);
+      final gyc = ((base.dy / imageSize.height) * (gridHeight - 1))
+          .round()
+          .clamp(0, gridHeight - 1);
+
+      for (var dy = -stampRadius; dy <= stampRadius; dy++) {
+        for (var dx = -stampRadius; dx <= stampRadius; dx++) {
+          final gx = gxc + dx;
+          final gy = gyc + dy;
+          if (gx < 0 || gy < 0 || gx >= gridWidth || gy >= gridHeight) {
+            continue;
+          }
+          final idx = gy * gridWidth + gx;
+          if (mask[idx] <= 0.001) {
+            continue;
+          }
+          final dist = math.sqrt(dx * dx + dy * dy);
+          final w = (1 - dist / (stampRadius + 0.5)).clamp(0.35, 1.0);
+          final targetDx = bdx * w;
+          if (targetDx.abs() > displacement[idx * 2].abs()) {
+            displacement[idx * 2] = targetDx;
+            displacement[idx * 2 + 1] = bdy * w * 0.08;
+          }
+        }
+      }
+    }
+  }
+
+  /// Reforça contorno lateral após proteção central.
+  static void _boostFaceSlimLateral({
+    required Float32List displacement,
+    required Float32List mask,
+    required int gridWidth,
+    required int gridHeight,
+    double boost = 1.08,
+  }) {
+    final centerGx = (gridWidth - 1) * 0.5;
+    final halfW = math.max(gridWidth * 0.5, 1.0);
+    final ghM1 = math.max(gridHeight - 1, 1);
+    for (var gy = 0; gy < gridHeight; gy++) {
+      final ny = gy / ghM1;
+      if (ny > 0.70) {
+        continue;
+      }
+      for (var gx = 0; gx < gridWidth; gx++) {
+        final idx = gy * gridWidth + gx;
+        if (mask[idx] <= 0.001) {
+          continue;
+        }
+        final lateral = (gx - centerGx).abs() / halfW;
+        if (lateral < 0.34) {
+          continue;
+        }
+        final t = ((lateral - 0.34) / 0.66).clamp(0.0, 1.0);
+        var earFade = 1.0;
+        if (ny < 0.24) {
+          earFade = (0.45 + 0.55 * (ny / 0.24)).clamp(0.45, 1.0);
+        }
+        final mul = 1.0 + (boost - 1.0) * t * earFade;
+        displacement[idx * 2] *= mul;
+      }
+    }
+  }
+
+  /// Zera Δv no centro (nariz/olhos) — spread lateral não deve vazar para rigid.
+  static void _protectFaceSlimCenter({
+    required Float32List displacement,
+    required Float32List mask,
+    required int gridWidth,
+    required int gridHeight,
+  }) {
+    final centerGx = (gridWidth - 1) * 0.5;
+    final halfW = math.max(gridWidth * 0.5, 1.0);
+    for (var gy = 0; gy < gridHeight; gy++) {
+      for (var gx = 0; gx < gridWidth; gx++) {
+        final idx = gy * gridWidth + gx;
+        if (mask[idx] <= 0.001) {
+          continue;
+        }
+        final lateral = (gx - centerGx).abs() / halfW;
+        if (lateral >= 0.28) {
+          continue;
+        }
+        final fade = math.pow(lateral / 0.28, 2.0).toDouble();
+        displacement[idx * 2] *= fade;
+        displacement[idx * 2 + 1] *= fade;
+      }
     }
   }
 

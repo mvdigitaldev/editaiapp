@@ -4,11 +4,16 @@ import 'package:flutter/foundation.dart';
 
 import '../body_reshape/maps/influence_map.dart';
 import '../body_reshape/protection/rigidity_map.dart';
+import '../debug/agent_debug_log.dart';
 import '../body_reshape/rendering/fragment_program_warp_backend.dart';
 import '../body_reshape/rendering/render_plan.dart';
 import '../config/face_warp_v3_config.dart';
 import '../models/warp_field.dart';
 import '../warp/face_mesh_gpu_payload.dart';
+import '../warp/face_mesh_forward_warp.dart';
+import '../warp/face_slim_warp.dart';
+import '../segment/person_mask.dart';
+import '../warp/anatomy/face_warp_vacancy_fill.dart';
 import '../warp/face_warp_ghost_mask.dart';
 import '../warp/face_warp_post_inpaint.dart';
 import '../warp/fragment_program_face_inpaint_backend.dart';
@@ -80,8 +85,12 @@ class PassWarp implements RenderPass {
         const {};
     final interactivePreview =
         context.uniforms['interactivePreview'] == true;
-    final postInpaint = context.uniforms['postWarpInpaint'] == true ||
-        FaceWarpV3Config.usePostWarpInpaint;
+    final postInpaintFlag = context.uniforms['postWarpInpaint'];
+    final postInpaint = switch (postInpaintFlag) {
+      true => true,
+      false => false,
+      _ => !interactivePreview && FaceWarpV3Config.usePostWarpInpaint,
+    };
 
     final source = context.store.get(context.input.id);
     if (source == null) {
@@ -95,6 +104,7 @@ class PassWarp implements RenderPass {
 
     final influence = context.uniforms['influenceMap'] as InfluenceMap? ??
         gpuPayload?.influenceMap;
+    final personMask = context.uniforms['personMask'] as PersonMask?;
     final protection = context.uniforms['protectionMap'] as RigidityMap? ??
         field?.rigidityMap;
     final forceCpu = context.uniforms['forceCpu'] == true || !_preferGpu;
@@ -102,11 +112,41 @@ class PassWarp implements RenderPass {
     final antiGhosting = context.uniforms['antiGhosting'] != false;
 
     Uint8List? warpedRgba;
+    final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(warpParameters);
+    final forwardPayload =
+        context.uniforms['faceMeshForward'] as FaceMeshForwardPayload?;
 
-    if (!forceCpu &&
-        !interactivePreview &&
+    if (faceSlimOnly &&
+        FaceWarpV3Config.useForwardMeshWarpFaceSlim &&
+        forwardPayload != null &&
+        !forwardPayload.isIdentity) {
+      warpedRgba = FaceMeshForwardWarp.apply(
+        rgba: source.rgba,
+        width: source.width,
+        height: source.height,
+        payload: forwardPayload,
+        runId: 'mesh-backward-preview',
+      );
+      // #region agent log
+      AgentDebugLog.write(
+        location: 'pass_warp.dart:mesh_backward',
+        message: 'face_slim_mesh_backward_path',
+        hypothesisId: 'B0',
+        runId: 'mesh-backward-preview',
+        data: {
+          'peakDisp': forwardPayload.vertexField.maxDisplacementMagnitude(),
+        },
+      );
+      // #endregion
+    }
+
+    final allowGpuFaceSlimPreview = false;
+
+    if (warpedRgba == null &&
+        !forceCpu &&
         gpuPayload != null &&
-        !gpuPayload.isIdentity) {
+        !gpuPayload.isIdentity &&
+        (!interactivePreview || allowGpuFaceSlimPreview)) {
       final meshBackend =
           _faceMeshBackend ?? FragmentProgramFaceMeshBackend.shared;
       final gpuOut = await meshBackend.apply(
@@ -119,12 +159,35 @@ class PassWarp implements RenderPass {
       if (gpuOut != null &&
           warpChangedPixels(source.rgba, gpuOut, minAccumDiff: 4000)) {
         warpedRgba = gpuOut;
+        if (faceSlimOnly && field != null && influence != null) {
+          warpedRgba = FaceSlimWarp.postProcess(
+            original: source.rgba,
+            warped: warpedRgba,
+            width: source.width,
+            height: source.height,
+            field: field,
+            influence: influence,
+            parameters: warpParameters,
+            personMask: personMask,
+            backend: 'gpu',
+            runId: 'face-slim-gpu',
+          );
+        }
+        // #region agent log
+        AgentDebugLog.write(
+          location: 'pass_warp.dart:gpu_face_slim',
+          message: 'face_slim_gpu_path',
+          hypothesisId: 'G1',
+          runId: 'face-slim-gpu',
+          data: {'peakDisp': field?.maxDisplacementMagnitude ?? 0},
+        );
+        // #endregion
       }
     }
 
-    if (warpedRgba == null &&
-        !forceCpu &&
+    if (!forceCpu &&
         !interactivePreview &&
+        warpedRgba == null &&
         field != null &&
         !field.isIdentity) {
       final backend = _warpBackend ?? FragmentProgramWarpBackend.shared;
@@ -151,18 +214,44 @@ class PassWarp implements RenderPass {
     }
 
     if (warpedRgba == null && field != null && !field.isIdentity) {
-      final remapper =
-          (_remapper ?? WarpCpuRemap(fastMode: fastMode)).copyWith(
-        antiGhosting: antiGhosting,
-        rigidityMap: protection,
-        fastMode: fastMode,
-      );
-      warpedRgba = remapper.apply(
-        rgba: source.rgba,
-        width: source.width,
-        height: source.height,
-        field: field,
-      );
+      if (faceSlimOnly && influence != null && !influence.isEmpty) {
+        warpedRgba = FaceSlimWarp.apply(
+          rgba: source.rgba,
+          width: source.width,
+          height: source.height,
+          field: field,
+          influence: influence,
+          parameters: warpParameters,
+          personMask: personMask,
+          runId: 'face-slim-cpu',
+        );
+        // #region agent log
+        AgentDebugLog.write(
+          location: 'pass_warp.dart:face_slim_cpu',
+          message: 'face_slim_cpu_path',
+          hypothesisId: 'G2',
+          runId: 'face-slim-cpu',
+          data: {
+            'peakDisp': field.maxDisplacementMagnitude,
+            'gridW': field.gridWidth,
+            'gridH': field.gridHeight,
+          },
+        );
+        // #endregion
+      } else {
+        final remapper =
+            (_remapper ?? WarpCpuRemap(fastMode: fastMode)).copyWith(
+          antiGhosting: antiGhosting,
+          rigidityMap: protection,
+          fastMode: fastMode,
+        );
+        warpedRgba = remapper.apply(
+          rgba: source.rgba,
+          width: source.width,
+          height: source.height,
+          field: field,
+        );
+      }
     }
 
     if (warpedRgba == null) {
@@ -170,15 +259,21 @@ class PassWarp implements RenderPass {
     }
 
     if (postInpaint && field != null && !field.isIdentity) {
-      warpedRgba = await _applyPostInpaint(
-        warpedRgba: warpedRgba,
-        width: source.width,
-        height: source.height,
-        field: field,
-        influence: influence,
-        warpParameters: warpParameters,
-        forceCpu: forceCpu,
-      );
+      final faceSlimPipeline = faceSlimOnly &&
+          (FaceWarpV3Config.useForwardMeshWarpFaceSlim &&
+                  forwardPayload != null ||
+              (influence != null && !influence.isEmpty));
+      if (!faceSlimPipeline) {
+        warpedRgba = await _applyPostInpaint(
+          warpedRgba: warpedRgba,
+          width: source.width,
+          height: source.height,
+          field: field,
+          influence: influence,
+          warpParameters: warpParameters,
+          forceCpu: forceCpu,
+        );
+      }
     }
 
     final entry = context.store.create(
@@ -198,6 +293,18 @@ class PassWarp implements RenderPass {
     required Map<String, double> warpParameters,
     required bool forceCpu,
   }) async {
+    if (FaceWarpVacancyFill.isFaceSlimOnly(warpParameters)) {
+      return FaceWarpPostInpaint.apply(
+        rgba: warpedRgba,
+        width: width,
+        height: height,
+        field: field,
+        influenceMap: influence,
+        parameters: warpParameters,
+        iterations: 2,
+      );
+    }
+
     final useGpu = FaceWarpV3Config.useGpuInpaint && !forceCpu;
     if (useGpu) {
       final inpaint = _inpaintBackend ?? FragmentProgramFaceInpaintBackend.shared;

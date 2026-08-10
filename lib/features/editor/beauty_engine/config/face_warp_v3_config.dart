@@ -28,6 +28,10 @@ abstract final class FaceWarpV3Config {
   /// Sprint 39 — export piecewise via Metal/GLES nativo (fallback FragmentProgram).
   static bool useNativePiecewiseExport = _defaultOn;
 
+  /// Piecewise-affine backward na malha (face_slim preview).
+  /// Malha ACE + amostragem por triângulo destino; evita splat/z-fighting.
+  static bool useForwardMeshWarpFaceSlim = true;
+
   /// MLS facial legado (rollback lab/prod).
   static bool useLegacyFaceMls = false;
 

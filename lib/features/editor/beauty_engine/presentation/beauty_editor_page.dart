@@ -21,6 +21,7 @@ import '../diagnostics/beauty_editor_session_reporter.dart';
 import '../diagnostics/beauty_engine_error_reporter.dart';
 import '../config/face_warp_v3_config.dart';
 import '../config/face_warp_v3_rollout.dart';
+import '../warp/anatomy/face_warp_vacancy_fill.dart';
 import '../filters/face/face_filter_pipeline.dart';
 import '../filters/body/body_filter_pipeline.dart';
 import '../l10n/beauty_engine_labels.dart';
@@ -90,7 +91,11 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   WarpPlan? _lastBodyWarpPlan;
   bool _prewarmed = false;
   Timer? _debounceTimer;
+  Timer? _inpaintSettleTimer;
   bool _previewQueued = false;
+  bool _pendingInpaintPass = false;
+  static const _inpaintSettleMs = 150;
+  static const _lateralFastPreviewMs = 50;
 
   // Pincel manual (Facetune-style).
   bool _brushMode = false;
@@ -143,6 +148,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _inpaintSettleTimer?.cancel();
     _previewImage?.dispose();
     _viewerTransform.dispose();
     super.dispose();
@@ -364,19 +370,44 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   void _schedulePreview() {
     _debounceTimer?.cancel();
+    _inpaintSettleTimer?.cancel();
+    if (_source == null) {
+      return;
+    }
+
+    final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(_params);
+    final lateralInpaint =
+        FaceWarpV3Config.usePostWarpInpaint &&
+            FaceWarpVacancyFill.hasActiveLateralTool(_params) &&
+            !faceSlimOnly;
     final profile = _deviceProfile;
-    final debounceMs = profile?.sliderDebounceMs ??
-        (_hasActiveBodyWarp(_params) ? 120 : 100);
+    final debounceMs = faceSlimOnly
+        ? (profile?.sliderDebounceMs ?? 100)
+        : lateralInpaint
+            ? _lateralFastPreviewMs
+            : (profile?.sliderDebounceMs ??
+                (_hasActiveBodyWarp(_params) ? 120 : 100));
+
     _debounceTimer = Timer(Duration(milliseconds: debounceMs), () {
-      if (_source == null) {
-        return;
-      }
       if (_processing) {
         _previewQueued = true;
         return;
       }
-      unawaited(_processPreview());
+      unawaited(_processPreview(postWarpInpaint: faceSlimOnly));
     });
+
+    if (lateralInpaint) {
+      _inpaintSettleTimer = Timer(
+        const Duration(milliseconds: _inpaintSettleMs),
+        () {
+          if (_processing) {
+            _pendingInpaintPass = true;
+            return;
+          }
+          unawaited(_processPreview(postWarpInpaint: true));
+        },
+      );
+    }
   }
 
   Future<void> _ensureLandmarks() async {
@@ -451,7 +482,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   bool get _warpDebugAvailable => widget.labMode || kDebugMode;
 
-  Future<void> _processPreview() async {
+  Future<void> _processPreview({bool postWarpInpaint = false}) async {
     if (_source == null || _previewSource == null) {
       return;
     }
@@ -472,6 +503,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         face: _cachedFace,
         pose: _cachedPose,
         personMask: _cachedPersonMask,
+        postWarpInpaint: postWarpInpaint,
       );
 
       final generation = ++_previewImageGeneration;
@@ -545,13 +577,17 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     } finally {
       if (mounted) {
         setState(() => _processing = false);
-        if (_previewQueued) {
+        if (_pendingInpaintPass) {
+          _pendingInpaintPass = false;
+          unawaited(_processPreview(postWarpInpaint: true));
+        } else if (_previewQueued) {
           _previewQueued = false;
           _schedulePreview();
         }
       } else {
         _processing = false;
         _previewQueued = false;
+        _pendingInpaintPass = false;
       }
     }
   }

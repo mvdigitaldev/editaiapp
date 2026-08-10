@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../body_reshape/maps/influence_map.dart';
 import '../models/warp_field.dart';
 import 'anatomy/face_warp_vacancy_fill.dart';
+import 'face_warp_hole_fill.dart';
 
 /// Inpainting leve pós-warp para warps laterais (Sprint 37).
 ///
@@ -26,7 +27,11 @@ abstract final class FaceWarpPostInpaint {
         field.imageSize.width.round() * field.imageSize.height.round(),
       );
     }
-    return _buildGhostMask(field: field, influenceMap: influenceMap);
+    return _buildGhostMask(
+      field: field,
+      influenceMap: influenceMap,
+      parameters: parameters,
+    );
   }
 
   @visibleForTesting
@@ -53,6 +58,7 @@ abstract final class FaceWarpPostInpaint {
     required WarpField field,
     InfluenceMap? influenceMap,
     required Map<String, double> parameters,
+    int? iterations,
   }) {
     if (!FaceWarpVacancyFill.hasActiveLateralTool(parameters)) {
       return rgba;
@@ -61,17 +67,29 @@ abstract final class FaceWarpPostInpaint {
       return rgba;
     }
 
-    final ghost = _buildGhostMask(field: field, influenceMap: influenceMap);
+    final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(parameters);
+    final ghost = faceSlimOnly
+        ? FaceWarpHoleFill.buildGhostMask(
+            field: field,
+            influenceMap: influenceMap,
+            parameters: parameters,
+          )
+        : _buildGhostMask(
+            field: field,
+            influenceMap: influenceMap,
+            parameters: parameters,
+          );
     if (!ghost.any((v) => v == 1)) {
       return rgba;
     }
 
+    final iterCount = iterations ?? (faceSlimOnly ? 2 : _iterations);
     final out = Uint8List.fromList(rgba);
     var ghostWork = Uint8List.fromList(ghost);
     final imgW = width;
 
-    for (var iter = 0; iter < _iterations; iter++) {
-      final radius = 4 + iter * 8;
+    for (var iter = 0; iter < iterCount; iter++) {
+      final radius = faceSlimOnly ? 6 + iter * 6 : 4 + iter * 8;
       for (var y = 0; y < height; y++) {
         for (var x = 0; x < width; x++) {
           final p = y * imgW + x;
@@ -111,7 +129,8 @@ abstract final class FaceWarpPostInpaint {
           }
 
           final o = p * 4;
-          final blend = iter == _iterations - 1 ? 0.92 : 0.78;
+          final blend =
+              iter == iterCount - 1 ? (faceSlimOnly ? 0.88 : 0.92) : 0.78;
           out[o] = (out[o] * (1 - blend) + (sumR / count) * blend).round().clamp(
                 0,
                 255,
@@ -137,6 +156,7 @@ abstract final class FaceWarpPostInpaint {
   static Uint8List _buildGhostMask({
     required WarpField field,
     InfluenceMap? influenceMap,
+    Map<String, double> parameters = const {},
   }) {
     final imgW = field.imageSize.width.round();
     final imgH = field.imageSize.height.round();
@@ -146,6 +166,12 @@ abstract final class FaceWarpPostInpaint {
     final gh = field.gridHeight;
     final w = field.imageSize.width;
     final h = field.imageSize.height;
+    final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(parameters);
+    final ghostRatio =
+        faceSlimOnly ? 1.55 : _ghostNeighborRatio;
+    final minNeighbor =
+        faceSlimOnly ? 1.8 : _minNeighborDispPx;
+    final influenceFloor = faceSlimOnly ? 0.02 : 0.05;
 
     for (var y = 0; y < imgH; y++) {
       for (var x = 0; x < imgW; x++) {
@@ -155,7 +181,7 @@ abstract final class FaceWarpPostInpaint {
         final ny = h > 0 ? py / h : 0.0;
 
         if (influenceMap != null && !influenceMap.isEmpty) {
-          if (influenceMap.sampleNormalized(nx, ny) <= 0.05) {
+          if (influenceMap.sampleNormalized(nx, ny) <= influenceFloor) {
             continue;
           }
         }
@@ -192,8 +218,13 @@ abstract final class FaceWarpPostInpaint {
           }
         }
 
-        if (maxNeighbor >= _minNeighborDispPx &&
-            curMag * _ghostNeighborRatio < maxNeighbor) {
+        final ratioGhost =
+            maxNeighbor >= minNeighbor && curMag * ghostRatio < maxNeighbor;
+        final gapGhost = !faceSlimOnly &&
+            maxNeighbor >= minNeighbor &&
+            maxNeighbor - curMag >= 2.5;
+
+        if (ratioGhost || gapGhost) {
           mask[y * imgW + x] = 1;
         }
       }

@@ -55,8 +55,10 @@ import '../warp/anatomy/anatomical_intent.dart';
 import '../warp/anatomy/face_matte_roi.dart';
 import '../warp/anatomy/face_mesh_deformation_engine.dart';
 import '../warp/anatomy/face_warp_debug_stats.dart';
+import '../warp/anatomy/face_warp_vacancy_fill.dart';
 import '../warp/warp_engine.dart';
 import '../warp/face_mesh_gpu_payload.dart';
+import '../warp/face_mesh_forward_warp.dart';
 import '../warp/warp_field_builder.dart';
 
 /// Orquestrador do Beauty Engine — ponto unico para a UI (sem Widget).
@@ -120,6 +122,9 @@ class BeautyEngineController {
 
   /// Matte ROI do último warp facial — inpaint pós-warp e anti-fantasma.
   InfluenceMap? lastFaceWarpInfluence;
+
+  /// Mesh + ACE para forward warp face_slim (Opção B).
+  FaceMeshForwardPayload? lastFaceMeshForwardPayload;
 
   static const _faceMeshDeformationEngine = FaceMeshDeformationEngine();
 
@@ -217,6 +222,9 @@ class BeautyEngineController {
   }
 
   /// Preview interativo: pipeline GPU → RGBA, sem encode JPEG.
+  ///
+  /// [postWarpInpaint] — quando false (padrão), preview rápido sem inpaint CPU;
+  /// true após debounce do slider para limpar faixas fantasma em warps laterais.
   Future<ProcessedFrame> renderPreview({
     required ImageSource source,
     required ProcessingPipeline pipeline,
@@ -225,6 +233,7 @@ class BeautyEngineController {
     PersonMask? personMask,
     FacePartsSegmentation? faceParts,
     FaceParsingResult? faceParsing,
+    bool postWarpInpaint = false,
   }) async {
     profiler.beginFrame();
     profiler.start('render_preview');
@@ -247,6 +256,7 @@ class BeautyEngineController {
       faceParts: inputs.faceParts,
       faceParsing: inputs.faceParsing,
       interactivePreview: true,
+      postWarpInpaint: postWarpInpaint,
     );
 
     final rgba = await gpuRenderer.readPixels(output);
@@ -792,6 +802,7 @@ class BeautyEngineController {
     if (face == null || !faceFilterPipeline.hasActiveWarp(parameters)) {
       lastFaceWarpDebugStats = FaceWarpDebugStats.empty;
       lastFaceWarpInfluence = null;
+      lastFaceMeshForwardPayload = null;
       return null;
     }
 
@@ -826,8 +837,14 @@ class BeautyEngineController {
         exporting: exporting,
         personMask: personMask,
       );
+      final faceSlimForward = FaceWarpVacancyFill.isFaceSlimOnly(parameters) &&
+          FaceWarpV3Config.useForwardMeshWarpFaceSlim;
+
       lastFaceMeshGpuPayload =
-          FaceWarpV3Config.useGpuPiecewiseAffine && !interactivePreview
+          FaceWarpV3Config.useGpuPiecewiseAffine &&
+                  !faceSlimForward &&
+                  (!interactivePreview ||
+                      FaceWarpVacancyFill.isFaceSlimOnly(parameters))
               ? _faceMeshDeformationEngine.composeGpuPayload(
                   face: face,
                   mesh: mesh,
@@ -836,15 +853,36 @@ class BeautyEngineController {
                   personMask: personMask,
                 )
               : null;
+      final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(parameters);
       lastFaceWarpInfluence = field != null
           ? FaceMatteRoi.buildInfluenceMap(
               face: face,
               imageSize: imageSize,
               personMask: personMask,
+              // Expande oval lateral p/ remapear contorno/orelha fantasma.
+              lateralRadiusExpand: faceSlimOnly ? 0.07 : 0.0,
+            )
+          : null;
+      lastFaceMeshForwardPayload = field != null &&
+              faceSlimForward &&
+              vertexField.maxDisplacementMagnitude() > 0.05 &&
+              lastFaceWarpInfluence != null
+          ? FaceMeshForwardPayload(
+              mesh: mesh,
+              vertexField: vertexField,
+              influenceMap: lastFaceWarpInfluence!,
+              personMask: personMask,
             )
           : null;
       profiler.end('face_warp_v3');
-      if (lastFaceMeshGpuPayload != null) {
+      if (lastFaceMeshForwardPayload != null) {
+        lastFaceWarpBackend = 'v3_mesh';
+      } else if (lastFaceMeshGpuPayload != null &&
+          !FaceWarpVacancyFill.isFaceSlimOnly(parameters)) {
+        lastFaceWarpBackend = 'v3_gpu';
+      } else if (FaceWarpVacancyFill.isFaceSlimOnly(parameters)) {
+        lastFaceWarpBackend = 'v3_cpu';
+      } else if (lastFaceMeshGpuPayload != null) {
         lastFaceWarpBackend = 'v3_gpu';
       } else {
         lastFaceWarpBackend = FaceWarpV3Config.useDirectMeshRender
@@ -857,6 +895,7 @@ class BeautyEngineController {
     lastFaceMeshGpuPayload = null;
     lastFaceWarpDebugStats = FaceWarpDebugStats.empty;
     lastFaceWarpInfluence = null;
+    lastFaceMeshForwardPayload = null;
 
     lastFaceWarpBackend = 'mls';
     final builder = interactivePreview && !exporting
@@ -1005,6 +1044,7 @@ class BeautyEngineController {
     lastFaceWarpField = null;
     lastFaceWarpDebugStats = FaceWarpDebugStats.empty;
     lastFaceWarpInfluence = null;
+    lastFaceMeshForwardPayload = null;
   }
 
   /// Face Quality Assessment — 1× por foto (cap. 7).
@@ -1042,6 +1082,7 @@ class BeautyEngineController {
     FacePartsSegmentation? faceParts,
     FaceParsingResult? faceParsing,
     bool interactivePreview = false,
+    bool postWarpInpaint = false,
   }) async {
     profiler.start('render_texture');
     final rgbaSource = ImageSourceRgba.ensureRgba(source);
@@ -1076,6 +1117,8 @@ class BeautyEngineController {
           FaceWarpV3Config.enabled &&
           FaceWarpV3Config.usePostWarpInpaint &&
           FaceWarpV3Config.useGpuInpaint,
+      postWarpInpaintApplied:
+          interactivePreview ? postWarpInpaint : FaceWarpV3Config.usePostWarpInpaint,
     );
 
     if (interactivePreview &&
@@ -1167,8 +1210,13 @@ class BeautyEngineController {
               'warpParameters': params,
               if (lastFaceWarpInfluence != null)
                 'influenceMap': lastFaceWarpInfluence!,
+              if (lastFaceMeshForwardPayload != null)
+                'faceMeshForward': lastFaceMeshForwardPayload!,
+              if (personMask != null) 'personMask': personMask,
               if (interactivePreview) 'interactivePreview': true,
-              if (FaceWarpV3Config.usePostWarpInpaint) 'postWarpInpaint': true,
+              'postWarpInpaint': interactivePreview
+                  ? postWarpInpaint
+                  : FaceWarpV3Config.usePostWarpInpaint,
             },
           ),
         ],

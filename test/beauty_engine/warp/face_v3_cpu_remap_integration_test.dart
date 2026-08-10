@@ -63,10 +63,10 @@ void main() {
     expect(field, isNotNull);
     expect(field!.isIdentity, isFalse);
     expect(field.passId, 'face_mesh_v3');
-    // Contorno externo move mais que bochecha interna (curva B1).
-    expect(field.maxDisplacementMagnitude, greaterThan(1.0));
+    // Contorno lateral tem Δv horizontal; centro protegido (nariz/olhos).
+    expect(field.maxDisplacementMagnitude, greaterThan(4.0));
     expect(
-      field.sampleDisplacement(cheekSample).dx.abs(),
+      field.sampleDisplacement(const Offset(0.68, 0.50)).dx.abs(),
       greaterThan(0.25),
     );
 

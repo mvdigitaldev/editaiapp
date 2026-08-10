@@ -74,4 +74,63 @@ void main() {
     expect(activeCells(fieldWith), greaterThan(activeCells(fieldWithout)));
     expect(FaceWarpVacancyFill.hasActiveLateralTool(parameters), isTrue);
   });
+
+  test('face_slim skips grid vacancy fill (mesh path handles disocclusion)', () {
+    const imageSize = Size(512, 512);
+    final face = syntheticFace();
+    final mesh = const FaceMeshBuilder().build(face, imageSize);
+    const parameters = {'face_slim': 0.9};
+
+    final context = FaceAnatomyContext(
+      face: face,
+      imageSize: imageSize,
+      mesh: mesh,
+    );
+    final intents = AnatomicalIntentFactory.build(
+      parameters: parameters,
+      context: context,
+    );
+    final vertexField = const AnatomicalConstraintEngine().compose(
+      intents: intents,
+      context: context,
+    );
+
+    const grid = 80;
+    final fieldNoVacancy = FaceMeshWarpRasterizer.rasterizeFromVertexField(
+      sourceMesh: mesh,
+      vertexField: vertexField,
+      imageSize: imageSize,
+      region: MeshRegion.faceOval,
+      gridWidth: grid,
+      gridHeight: grid,
+      intensity: 0.9,
+      parameters: parameters,
+      fse: 140,
+      applyVacancyFill: false,
+      directMesh: true,
+    );
+
+    final fieldWithVacancy = FaceMeshWarpRasterizer.rasterizeFromVertexField(
+      sourceMesh: mesh,
+      vertexField: vertexField,
+      imageSize: imageSize,
+      region: MeshRegion.faceOval,
+      gridWidth: grid,
+      gridHeight: grid,
+      intensity: 0.9,
+      parameters: parameters,
+      fse: 140,
+      applyVacancyFill: true,
+      directMesh: true,
+    );
+
+    expect(
+      FaceWarpVacancyFill.vacancySourceIndices(parameters),
+      isEmpty,
+    );
+    expect(
+      fieldWithVacancy.maxDisplacementMagnitude,
+      equals(fieldNoVacancy.maxDisplacementMagnitude),
+    );
+  });
 }

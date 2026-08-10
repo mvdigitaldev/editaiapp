@@ -30,6 +30,7 @@ class RenderStageCache {
     bool useDirectMeshRender = false,
     bool useGpuPiecewiseAffine = false,
     bool useGpuInpaint = false,
+    bool postWarpInpaintApplied = false,
   }) {
     final preColorEntries = <MapEntry<String, double>>[];
     for (final entry in params.entries) {
@@ -65,6 +66,7 @@ class RenderStageCache {
       useDirectMeshRender,
       useGpuPiecewiseAffine,
       useGpuInpaint,
+      postWarpInpaintApplied,
       faceHash,
       Object.hashAll(
         sortedPreColor.map((e) => Object.hash(e.key, e.value)),

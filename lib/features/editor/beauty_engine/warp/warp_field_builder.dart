@@ -96,6 +96,20 @@ class WarpFieldBuilder {
     );
   }
 
+  /// face_slim preview — grade densa (~4 px/célula) p/ fallback backward.
+  factory WarpFieldBuilder.forFaceSlimInteractive(Size imageSize) {
+    final minDim = math.min(imageSize.width, imageSize.height);
+    const cellPx = 4.0;
+    final grid = (minDim / cellPx).round().clamp(160, 192);
+    return WarpFieldBuilder(
+      gridWidth: grid,
+      gridHeight: grid,
+      maskFeatherPx: math.max(24.0, minDim * 0.04),
+      mlsIterations: 5,
+      outerRingPx: 10,
+    );
+  }
+
   /// Preview interativo V3 — grade mais densa (~6 px/célula) para warps locais
   /// (olhos/boca); MLS continua em [forFaceWarpInteractive].
   factory WarpFieldBuilder.forFaceMeshV3Interactive(Size imageSize) {

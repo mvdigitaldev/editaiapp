@@ -6,15 +6,28 @@ import '../../filters/face/face_filter_pipeline.dart';
 import '../../filters/face/face_warp_utils.dart';
 import '../../models/tri_mesh.dart';
 import 'constrained_vertex_field.dart';
+import 'vertex_role_map.dart';
 
 /// Preenche regiões “vazias” após warps laterais (olhos/boca afastam).
 ///
 /// Liquify backward deixa pixels na posição original sem Δv → fantasma.
 /// Propaga o Δv inverso ao redor da posição **original** de cada vértice movido.
+///
+/// **face_slim / contorno:** sem vacancy na grade (malha/GPU piecewise).
+/// **eye_distance / mouth_width:** só vértices de olhos e lábios.
 abstract final class FaceWarpVacancyFill {
   static const lateralToolKeys = {
     'eye_distance',
     'mouth_width',
+    'face_slim',
+    'narrow_face',
+    'v_face',
+    'jaw',
+    'temple',
+  };
+
+  /// Warps de contorno lateral — vacancy na grade causa blocos na bochecha.
+  static const _contourOnlyTools = {
     'face_slim',
     'narrow_face',
     'v_face',
@@ -31,6 +44,49 @@ abstract final class FaceWarpVacancyFill {
     return false;
   }
 
+  /// Só [face_slim] ativo — calibragem de vacancy/inpaint separada dos demais.
+  static bool isFaceSlimOnly(Map<String, double> parameters) {
+    if ((parameters['face_slim'] ?? 0) <= 1e-6) {
+      return false;
+    }
+    for (final key in lateralToolKeys) {
+      if (key == 'face_slim') {
+        continue;
+      }
+      if ((parameters[key] ?? 0) > 1e-6) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Índices de vértice elegíveis para vacancy fill na grade.
+  static Set<int> vacancySourceIndices(Map<String, double> parameters) {
+    if (isFaceSlimOnly(parameters)) {
+      return const {};
+    }
+    for (final key in _contourOnlyTools) {
+      if (key == 'face_slim') {
+        continue;
+      }
+      if ((parameters[key] ?? 0) > 1e-6) {
+        return const {};
+      }
+    }
+
+    final allowed = <int>{};
+    if ((parameters['eye_distance'] ?? 0) > 1e-6) {
+      allowed.addAll(VertexRoleMap.eyeLeft);
+      allowed.addAll(VertexRoleMap.eyeRight);
+    }
+    if ((parameters['mouth_width'] ?? 0) > 1e-6) {
+      allowed.addAll(VertexRoleMap.upperLip);
+      allowed.addAll(VertexRoleMap.lowerLip);
+      allowed.addAll(VertexRoleMap.mouthCorner);
+    }
+    return allowed;
+  }
+
   static void applyToGrid({
     required Map<String, double> parameters,
     required ConstrainedVertexField vertexField,
@@ -41,16 +97,29 @@ abstract final class FaceWarpVacancyFill {
     required int gridWidth,
     required int gridHeight,
     required double fse,
+    double maxOverlapRatio = 0.45,
   }) {
     if (!hasActiveLateralTool(parameters)) {
       return;
     }
 
-    final radiusPx = (fse * 0.075).clamp(6.0, 48.0);
+    final sourceIndices = vacancySourceIndices(parameters);
+    if (sourceIndices.isEmpty) {
+      return;
+    }
+
+    final faceSlimOnly = isFaceSlimOnly(parameters);
+    final radiusPx = faceSlimOnly
+        ? (fse * 0.11).clamp(10.0, 72.0)
+        : (fse * 0.075).clamp(6.0, 48.0);
     final radiusSq = radiusPx * radiusPx;
     const minVertexMovePx = 1.25;
 
     for (var i = 0; i < vertexField.landmarkCount; i++) {
+      if (!sourceIndices.contains(i)) {
+        continue;
+      }
+
       final delta = vertexField.displacementAt(i);
       final moveMag = delta.distance;
       if (moveMag < minVertexMovePx) {
@@ -88,7 +157,7 @@ abstract final class FaceWarpVacancyFill {
           final curDx = displacement[idx * 2];
           final curDy = displacement[idx * 2 + 1];
           final curMag = math.sqrt(curDx * curDx + curDy * curDy);
-          if (curMag > fillMag * 0.45) {
+          if (curMag > fillMag * maxOverlapRatio) {
             continue;
           }
 

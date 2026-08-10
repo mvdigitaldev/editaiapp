@@ -84,6 +84,7 @@ abstract final class FaceModelSpecification {
     'face_slim': FaceToolSpecification(
       parameterKey: 'face_slim',
       primaryZones: {
+        AnatomicalZone.skullContour,
         AnatomicalZone.cheekLeft,
         AnatomicalZone.cheekRight,
         AnatomicalZone.jawLeft,
@@ -92,6 +93,7 @@ abstract final class FaceModelSpecification {
         AnatomicalZone.templeRight,
       },
       freeZones: {
+        AnatomicalZone.skullContour,
         AnatomicalZone.cheekLeft,
         AnatomicalZone.cheekRight,
         AnatomicalZone.jawLeft,
@@ -110,14 +112,16 @@ abstract final class FaceModelSpecification {
         AnatomicalZone.lowerLip,
         AnatomicalZone.mouthCorner,
         AnatomicalZone.oralCavity,
-      },
-      semiRigidZones: {
-        AnatomicalZone.philtrum,
         AnatomicalZone.browLeft,
         AnatomicalZone.browRight,
+        AnatomicalZone.forehead,
+        AnatomicalZone.philtrum,
+        AnatomicalZone.chin,
+      },
+      semiRigidZones: {
         AnatomicalZone.skullContour,
       },
-      maxDisplacementFse: 0.093,
+      maxDisplacementFse: 0.08,
       invariantId: 'B1',
     ),
     'narrow_face': FaceToolSpecification(

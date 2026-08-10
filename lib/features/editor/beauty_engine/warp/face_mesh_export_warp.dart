@@ -5,6 +5,7 @@ import '../body_reshape/protection/rigidity_map.dart';
 import '../config/face_warp_v3_config.dart';
 import '../models/warp_field.dart';
 import 'face_mesh_gpu_payload.dart';
+import 'anatomy/face_warp_vacancy_fill.dart';
 import 'face_warp_ghost_mask.dart';
 import 'face_warp_post_inpaint.dart';
 import 'fragment_program_face_inpaint_backend.dart';
@@ -125,6 +126,18 @@ class FaceMeshExportWarp {
           }
         }
       }
+    }
+
+    if (FaceWarpVacancyFill.isFaceSlimOnly(request.parameters)) {
+      return FaceWarpPostInpaint.apply(
+        rgba: rgba,
+        width: request.width,
+        height: request.height,
+        field: field,
+        influenceMap: request.payload.influenceMap,
+        parameters: request.parameters,
+        iterations: 2,
+      );
     }
 
     return FaceWarpPostInpaint.apply(

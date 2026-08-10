@@ -44,7 +44,7 @@ class FaceSlimFilter extends FaceWarpFilter {
         final halfFace = fseProxy * 0.48;
         final edgeWeight = halfFace <= 1e-6
             ? 1.0
-            : math.pow((lateral / halfFace).clamp(0.0, 1.0), 0.75).toDouble();
+            : math.pow((lateral / halfFace).clamp(0.0, 1.0), 0.58).toDouble();
         final shift = towardCenter.sign * maxShift * edgeWeight;
         points.add(
           ControlPoint(

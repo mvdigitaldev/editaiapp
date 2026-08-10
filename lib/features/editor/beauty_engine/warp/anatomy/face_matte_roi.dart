@@ -17,6 +17,7 @@ abstract final class FaceMatteRoi {
     required FaceMeshResult face,
     required Size imageSize,
     PersonMask? personMask,
+    double lateralRadiusExpand = 0.0,
   }) {
     final minDim = math.min(imageSize.width, imageSize.height);
     final edge = (minDim / 6).round().clamp(128, 384);
@@ -25,7 +26,7 @@ abstract final class FaceMatteRoi {
     final values = Float32List(width * height);
     var maxValue = 0.0;
 
-    final oval = _faceOvalEllipse(face);
+    final oval = _faceOvalEllipse(face, lateralRadiusExpand: lateralRadiusExpand);
     for (var y = 0; y < height; y++) {
       final ny = height == 1 ? 0.5 : y / (height - 1);
       for (var x = 0; x < width; x++) {
@@ -56,7 +57,10 @@ abstract final class FaceMatteRoi {
     );
   }
 
-  static NormalizedEllipse? _faceOvalEllipse(FaceMeshResult face) {
+  static NormalizedEllipse? _faceOvalEllipse(
+    FaceMeshResult face, {
+    double lateralRadiusExpand = 0.0,
+  }) {
     final indices = MeshTopology.faceRegionLandmarks[MeshRegion.faceOval];
     if (indices == null) {
       return null;
@@ -84,8 +88,10 @@ abstract final class FaceMatteRoi {
 
     return NormalizedEllipse(
       center: Offset((minX + maxX) / 2, (minY + maxY) / 2),
-      radiusX: ((maxX - minX) / 2 + 0.012).clamp(0.05, 0.42),
-      radiusY: ((maxY - minY) / 2 + 0.012).clamp(0.05, 0.48),
+      radiusX: ((maxX - minX) / 2 + 0.012 + lateralRadiusExpand)
+          .clamp(0.05, 0.50),
+      radiusY: ((maxY - minY) / 2 + 0.012 + lateralRadiusExpand * 0.35)
+          .clamp(0.05, 0.50),
     );
   }
 

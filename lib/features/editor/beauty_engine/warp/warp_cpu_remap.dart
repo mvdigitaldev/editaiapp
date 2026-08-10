@@ -2,8 +2,10 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
+import '../body_reshape/maps/influence_map.dart';
 import '../body_reshape/protection/rigidity_map.dart';
 import '../models/warp_field.dart';
+import '../segment/person_mask.dart';
 
 /// Aplica [WarpField] em CPU (preview/testes / fallback GPU).
 ///
@@ -48,6 +50,10 @@ class WarpCpuRemap {
     required int width,
     required int height,
     required WarpField field,
+    InfluenceMap? influenceMap,
+    bool influenceGated = false,
+    PersonMask? personMask,
+    double? neckFadeBelow,
   }) {
     if (field.isIdentity || rgba.isEmpty) {
       return rgba;
@@ -87,6 +93,10 @@ class WarpCpuRemap {
           sampleWidth: width,
           sampleHeight: height,
           rigidity: rigidity,
+          influenceMap: influenceMap,
+          influenceGated: influenceGated,
+          personMask: personMask,
+          neckFadeBelow: neckFadeBelow,
         );
       }
     }
@@ -200,6 +210,10 @@ class WarpCpuRemap {
     int? globalY,
     int? fullWidth,
     int? fullHeight,
+    InfluenceMap? influenceMap,
+    bool influenceGated = false,
+    PersonMask? personMask,
+    double? neckFadeBelow,
   }) {
     final gx = globalX ?? x;
     final gy = globalY ?? y;
@@ -207,15 +221,47 @@ class WarpCpuRemap {
     final fh = fullHeight ?? height;
 
     final normalized = Offset(gx / fw, gy / fh);
-    final rawMask = field.sampleMask(normalized);
-    if (rawMask <= 0.001) {
-      return;
+
+    if (personMask != null && personMask.bytes.isNotEmpty) {
+      if (personMask.sampleNormalized(normalized.dx, normalized.dy) < 0.38) {
+        return;
+      }
     }
 
-    var mask = rawMask.clamp(0.0, 1.0);
+    var influence = 1.0;
+    if (influenceMap != null && !influenceMap.isEmpty) {
+      influence = influenceMap.sampleNormalized(normalized.dx, normalized.dy);
+      if (influenceGated && influence <= 0.004) {
+        return;
+      }
+    }
+
+    var mask = field.sampleMask(normalized);
+    if (mask <= 0.001) {
+      return;
+    }
+    mask = mask.clamp(0.0, 1.0);
     var disp = field.sampleDisplacement(normalized);
 
-    // Fundo rígido: não curva linhas estruturais.
+    if (influenceGated && normalized.dy > 0.68) {
+      final neckFade =
+          (1.0 - (normalized.dy - 0.68) / 0.20).clamp(0.0, 1.0);
+      disp = Offset(disp.dx * neckFade, disp.dy * neckFade);
+      mask *= neckFade;
+      if (mask <= 0.001) {
+        return;
+      }
+    } else if (neckFadeBelow != null && normalized.dy > neckFadeBelow) {
+      final span = (1.0 - neckFadeBelow).clamp(0.12, 0.40);
+      final neckFade =
+          (1.0 - (normalized.dy - neckFadeBelow) / span).clamp(0.0, 1.0);
+      disp = Offset(disp.dx * neckFade, disp.dy * neckFade);
+      mask *= neckFade;
+      if (mask <= 0.001) {
+        return;
+      }
+    }
+
     if (rigidity != null && !rigidity.isEmpty) {
       final r = rigidity.sampleNormalized(normalized.dx, normalized.dy);
       final soft = (1.0 - r) * (1.0 - r);
@@ -225,7 +271,6 @@ class WarpCpuRemap {
       }
     }
 
-    // Anti-ghosting: na transição de máscara, reduz o pull e evita double-exposure.
     if (antiGhosting) {
       final soft = edgeSoftness.clamp(0.02, 0.4);
       if (mask < 1.0 - soft) {
@@ -239,12 +284,9 @@ class WarpCpuRemap {
       return;
     }
 
-    // Liquify-style: atenuar o deslocamento pela máscara.
-    // NÃO misturar cores original↔warped — isso cria fantasma (double exposure).
     var srcX = gx + disp.dx * mask;
     var srcY = gy + disp.dy * mask;
 
-    // Clamp anti-ghosting: não amostrar muito longe da silhueta ativa.
     if (antiGhosting) {
       final maxPull = math.max(fw, fh) * 0.08;
       final pull = Offset(srcX - gx, srcY - gy);
