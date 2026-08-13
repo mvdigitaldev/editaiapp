@@ -823,6 +823,7 @@ class BeautyEngineController {
       final vertexField = _faceMeshDeformationEngine.composeVertexField(
         parameters: parameters,
         context: context,
+        mesh: mesh,
       );
       lastFaceWarpDebugStats =
           FaceMeshDeformationEngine.debugStatsFor(vertexField);
@@ -837,14 +838,14 @@ class BeautyEngineController {
         exporting: exporting,
         personMask: personMask,
       );
-      final faceSlimForward = FaceWarpVacancyFill.isFaceSlimOnly(parameters) &&
+      final mvpMeshPath = FaceWarpVacancyFill.usesMvpMeshPath(parameters);
+      final faceSlimForward = mvpMeshPath &&
           FaceWarpV3Config.useForwardMeshWarpFaceSlim;
 
       lastFaceMeshGpuPayload =
           FaceWarpV3Config.useGpuPiecewiseAffine &&
                   !faceSlimForward &&
-                  (!interactivePreview ||
-                      FaceWarpVacancyFill.isFaceSlimOnly(parameters))
+                  (!interactivePreview || mvpMeshPath)
               ? _faceMeshDeformationEngine.composeGpuPayload(
                   face: face,
                   mesh: mesh,
@@ -853,14 +854,13 @@ class BeautyEngineController {
                   personMask: personMask,
                 )
               : null;
-      final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(parameters);
       lastFaceWarpInfluence = field != null
           ? FaceMatteRoi.buildInfluenceMap(
               face: face,
               imageSize: imageSize,
               personMask: personMask,
               // Expande oval lateral p/ remapear contorno/orelha fantasma.
-              lateralRadiusExpand: faceSlimOnly ? 0.07 : 0.0,
+              lateralRadiusExpand: mvpMeshPath ? 0.07 : 0.0,
             )
           : null;
       lastFaceMeshForwardPayload = field != null &&
@@ -877,10 +877,9 @@ class BeautyEngineController {
       profiler.end('face_warp_v3');
       if (lastFaceMeshForwardPayload != null) {
         lastFaceWarpBackend = 'v3_mesh';
-      } else if (lastFaceMeshGpuPayload != null &&
-          !FaceWarpVacancyFill.isFaceSlimOnly(parameters)) {
+      } else if (lastFaceMeshGpuPayload != null && !mvpMeshPath) {
         lastFaceWarpBackend = 'v3_gpu';
-      } else if (FaceWarpVacancyFill.isFaceSlimOnly(parameters)) {
+      } else if (mvpMeshPath) {
         lastFaceWarpBackend = 'v3_cpu';
       } else if (lastFaceMeshGpuPayload != null) {
         lastFaceWarpBackend = 'v3_gpu';
@@ -1210,8 +1209,10 @@ class BeautyEngineController {
               'warpParameters': params,
               if (lastFaceWarpInfluence != null)
                 'influenceMap': lastFaceWarpInfluence!,
-              if (lastFaceMeshForwardPayload != null)
+              if (lastFaceMeshForwardPayload != null) ...{
                 'faceMeshForward': lastFaceMeshForwardPayload!,
+                'blockLegacyFaceSlimFallback': true,
+              },
               if (personMask != null) 'personMask': personMask,
               if (interactivePreview) 'interactivePreview': true,
               'postWarpInpaint': interactivePreview

@@ -146,7 +146,7 @@ abstract final class FaceModelSpecification {
         AnatomicalZone.templeLeft,
         AnatomicalZone.templeRight,
       },
-      maxDisplacementFse: 0.06,
+      maxDisplacementFse: 0.08,
     ),
     'v_face': FaceToolSpecification(
       parameterKey: 'v_face',
@@ -173,7 +173,7 @@ abstract final class FaceModelSpecification {
         AnatomicalZone.oralCavity,
       },
       semiRigidZones: {AnatomicalZone.cheekLeft, AnatomicalZone.cheekRight},
-      maxDisplacementFse: 0.05,
+      maxDisplacementFse: 0.075,
     ),
     'jaw': FaceToolSpecification(
       parameterKey: 'jaw',
@@ -199,7 +199,7 @@ abstract final class FaceModelSpecification {
       freeZones: {AnatomicalZone.chin},
       rigidZones: {AnatomicalZone.lowerLip, AnatomicalZone.oralCavity},
       semiRigidZones: {AnatomicalZone.jawLeft, AnatomicalZone.jawRight},
-      maxDisplacementFse: 0.06,
+      maxDisplacementFse: 0.075,
       invariantId: 'B4',
     ),
     'cheekbone': FaceToolSpecification(
@@ -215,7 +215,7 @@ abstract final class FaceModelSpecification {
         AnatomicalZone.noseAlae,
       },
       semiRigidZones: {AnatomicalZone.templeLeft, AnatomicalZone.templeRight},
-      maxDisplacementFse: 0.05,
+      maxDisplacementFse: 0.07,
     ),
     'forehead': FaceToolSpecification(
       parameterKey: 'forehead',
@@ -405,8 +405,31 @@ abstract final class FaceModelSpecification {
     ),
   };
 
-  static FaceToolSpecification? forKey(String parameterKey) =>
-      toolSpecifications[parameterKey];
+  /// Overrides experimentais (Etapa 6). Apenas testes/diagnóstico — null em produção.
+  static Map<String, double>? maxDisplacementFseOverrides;
+
+  static FaceToolSpecification? forKey(String parameterKey) {
+    final base = toolSpecifications[parameterKey];
+    if (base == null) {
+      return null;
+    }
+    final override = maxDisplacementFseOverrides?[parameterKey];
+    if (override == null) {
+      return base;
+    }
+    return FaceToolSpecification(
+      parameterKey: base.parameterKey,
+      primaryZones: base.primaryZones,
+      freeZones: base.freeZones,
+      rigidZones: base.rigidZones,
+      semiRigidZones: base.semiRigidZones,
+      maxDisplacementFse: override,
+      maxScale: base.maxScale,
+      minScale: base.minScale,
+      maxRotationDegrees: base.maxRotationDegrees,
+      invariantId: base.invariantId,
+    );
+  }
 
   static bool coversAllWarpTools() {
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {

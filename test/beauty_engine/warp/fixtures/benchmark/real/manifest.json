@@ -1,0 +1,39 @@
+{
+  "photos": [
+    {
+      "id": "real-p01",
+      "label": "man-5021469",
+      "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p01-man-5021469.json",
+      "width": 695,
+      "height": 1024
+    },
+    {
+      "id": "real-p05",
+      "label": "young-woman",
+      "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p05-young-woman.json",
+      "width": 740,
+      "height": 740
+    },
+    {
+      "id": "real-p06",
+      "label": "senior-woman",
+      "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p06-senior-woman.json",
+      "width": 740,
+      "height": 493
+    },
+    {
+      "id": "real-p12",
+      "label": "oval-man",
+      "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p12-pexels-774909.json",
+      "width": 960,
+      "height": 1440
+    },
+    {
+      "id": "real-p21",
+      "label": "square-jaw",
+      "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p21-pexels-220453.json",
+      "width": 960,
+      "height": 1440
+    }
+  ]
+}

@@ -18,6 +18,7 @@ import 'constrained_vertex_field.dart';
 import 'face_warp_debug_stats.dart';
 import 'face_warp_vacancy_fill.dart';
 import 'face_matte_roi.dart';
+import '../face_warp_structural_pipeline.dart';
 import '../face_mesh_gpu_payload.dart';
 import '../face_mesh_warp_rasterizer.dart';
 
@@ -34,6 +35,8 @@ class FaceMeshDeformationEngine {
   ConstrainedVertexField composeVertexField({
     required Map<String, double> parameters,
     required FaceAnatomyContext context,
+    TriMesh? mesh,
+    bool applyStructuralPipeline = true,
   }) {
     final intents = AnatomicalIntentFactory.build(
       parameters: parameters,
@@ -42,7 +45,19 @@ class FaceMeshDeformationEngine {
     if (intents.isEmpty) {
       return ConstrainedVertexField.zero();
     }
-    return ace.compose(intents: intents, context: context);
+    final rawField = ace.compose(intents: intents, context: context);
+
+    if (mesh == null ||
+        !applyStructuralPipeline ||
+        !FaceWarpV3Config.enabled ||
+        !FaceWarpV3Config.useMeshWarpV3) {
+      return rawField;
+    }
+
+    return FaceWarpStructuralPipeline.apply(
+      mesh: mesh,
+      inputField: rawField,
+    ).vertexField;
   }
 
   WarpField? composeWarpField({
@@ -71,6 +86,7 @@ class FaceMeshDeformationEngine {
     final vertexField = composeVertexField(
       parameters: parameters,
       context: context,
+      mesh: mesh,
     );
 
     if (vertexField.maxDisplacementMagnitude() <= _minVertexDisplacementPx) {
@@ -81,9 +97,9 @@ class FaceMeshDeformationEngine {
     final gpuPiecewise = FaceWarpV3Config.useGpuPiecewiseAffine;
     final directMesh = FaceWarpV3Config.useDirectMeshRender || gpuPiecewise;
 
-    final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(parameters);
+    final mvpMeshPath = FaceWarpVacancyFill.usesMvpMeshPath(parameters);
     final builder = interactivePreview && !exporting
-        ? (faceSlimOnly
+        ? (mvpMeshPath
             ? WarpFieldBuilder.forFaceSlimInteractive(imageSize)
             : WarpFieldBuilder.forFaceMeshV3Interactive(imageSize))
         : directMesh
@@ -94,7 +110,7 @@ class FaceMeshDeformationEngine {
       face: face,
       imageSize: imageSize,
       personMask: personMask,
-      lateralRadiusExpand: faceSlimOnly ? 0.07 : 0.0,
+      lateralRadiusExpand: mvpMeshPath ? 0.07 : 0.0,
     );
 
     final intensity = _peakIntensity(parameters);
@@ -112,7 +128,7 @@ class FaceMeshDeformationEngine {
       fse: _faceShortEdgePx(face, imageSize),
       directMesh: directMesh,
       // face_slim: malha backward (V3_MESH) — sem vacancy na grade.
-      applyVacancyFill: !faceSlimOnly &&
+      applyVacancyFill: !mvpMeshPath &&
           (!interactivePreview || exporting) &&
           FaceWarpVacancyFill.hasActiveLateralTool(parameters),
     );
@@ -147,18 +163,19 @@ class FaceMeshDeformationEngine {
     final vertexField = composeVertexField(
       parameters: parameters,
       context: context,
+      mesh: mesh,
     );
 
     if (vertexField.maxDisplacementMagnitude() <= _minVertexDisplacementPx) {
       return null;
     }
 
-    final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(parameters);
+    final mvpMeshPath = FaceWarpVacancyFill.usesMvpMeshPath(parameters);
     final matte = FaceMatteRoi.buildInfluenceMap(
       face: face,
       imageSize: imageSize,
       personMask: personMask,
-      lateralRadiusExpand: faceSlimOnly ? 0.07 : 0.0,
+      lateralRadiusExpand: mvpMeshPath ? 0.07 : 0.0,
     );
 
     return FaceMeshGpuPayload.build(

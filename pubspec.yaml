@@ -105,3 +105,6 @@ flutter:
     - assets/branding/
     - assets/home/
     - assets/illustrations/
+    - test/beauty_engine/warp/fixtures/
+    - test/beauty_engine/warp/fixtures/phase12/
+    - test/beauty_engine/warp/fixtures/phase12/manifest.json

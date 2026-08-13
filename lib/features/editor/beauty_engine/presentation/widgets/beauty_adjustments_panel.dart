@@ -77,8 +77,6 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
         'chin',
         'cheekbone',
         'forehead',
-        'temple',
-        'head_size',
       ],
     ),
     BeautyAdjustmentCategoryDef(

@@ -12,6 +12,7 @@ import 'anatomical_zone.dart';
 import 'constrained_vertex_field.dart';
 import 'face_model_specification.dart';
 import 'pilot_warp_displacement.dart';
+import '../face_warp_mvp_operations.dart';
 import 'vertex_role_map.dart';
 
 /// Anatomical Constraint Engine — resolve intents em deslocamentos permitidos.
@@ -171,6 +172,15 @@ class AnatomicalConstraintEngine {
 
       final pdx = delta.dx * weight;
       final pdy = delta.dy * weight;
+
+      if (FaceWarpMvpOperations.usesAdditiveComposition(intent.toolKey)) {
+        dx[index] += pdx;
+        dy[index] += pdy;
+        if (priority[index] < intent.priority) {
+          priority[index] = intent.priority;
+        }
+        continue;
+      }
 
       if (priority[index] < intent.priority) {
         dx[index] = pdx;

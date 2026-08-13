@@ -1,0 +1,16 @@
+{
+  "synthetic": [
+    {"id": "syn-oval", "shape": "oval", "width": 640, "height": 960},
+    {"id": "syn-round", "shape": "round", "width": 640, "height": 960},
+    {"id": "syn-square", "shape": "square", "width": 640, "height": 960},
+    {"id": "syn-long", "shape": "long", "width": 640, "height": 960},
+    {"id": "syn-wide", "shape": "wide", "width": 720, "height": 960}
+  ],
+  "real": [
+    {"id": "real-p01", "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p01-man-5021469.json", "width": 695, "height": 1024, "label": "man-5021469"},
+    {"id": "real-p05", "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p05-young-woman.json", "width": 640, "height": 960, "label": "young-woman"},
+    {"id": "real-p06", "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p06-senior-woman.json", "width": 640, "height": 960, "label": "senior-woman"},
+    {"id": "real-p12", "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p12-pexels-774909.json", "width": 640, "height": 960, "label": "oval-man"},
+    {"id": "real-p21", "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p21-pexels-220453.json", "width": 640, "height": 960, "label": "square-jaw"}
+  ]
+}

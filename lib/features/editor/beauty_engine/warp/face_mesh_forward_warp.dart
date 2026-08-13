@@ -3,12 +3,11 @@ import 'dart:typed_data';
 
 import '../body_reshape/maps/influence_map.dart';
 import '../debug/agent_debug_log.dart';
-import '../filters/face/face_warp_utils.dart';
-import '../mesh/tri_mesh_spatial_index.dart';
 import '../models/tri_mesh.dart';
 import '../segment/person_mask.dart';
 import 'anatomy/constrained_vertex_field.dart';
 import 'face_warp_hole_fill.dart';
+import 'face_warp_renderer.dart';
 
 /// Payload mesh + ACE para warp piecewise-affine na malha.
 class FaceMeshForwardPayload {
@@ -53,85 +52,22 @@ abstract final class FaceMeshForwardWarp {
     final vf = payload.vertexField;
     final personMask = payload.personMask;
 
+    final renderResult = FaceWarpRenderer.renderFromPayload(
+      rgba: rgba,
+      width: width,
+      height: height,
+      payload: payload,
+      runId: runId,
+    );
+
+    final output = Uint8List.fromList(renderResult.rgba);
+    final coverage =
+        renderResult.coverage ?? Float32List(width * height);
+    final meshHitPx = coverage.where((v) => v > 0.5).length;
     final vertexCount = math.min(
       vf.landmarkCount,
       mesh.vertices.length ~/ 2,
     );
-
-    final deformedVerts = Float32List.fromList(mesh.vertices);
-    for (var i = 0; i < vertexCount; i++) {
-      final d = vf.displacementAt(i);
-      deformedVerts[i * 2] += d.dx;
-      deformedVerts[i * 2 + 1] += d.dy;
-    }
-
-    final deformedMesh = TriMesh(
-      vertices: deformedVerts,
-      uvs: mesh.uvs,
-      indices: mesh.indices,
-      regionBuffers: mesh.regionBuffers,
-      isPartial: mesh.isPartial,
-    );
-
-    final spatialIndex = TriMeshSpatialIndex(
-      deformedMesh,
-      imageWidth: width.toDouble(),
-      imageHeight: height.toDouble(),
-    );
-
-    var minX = width;
-    var minY = height;
-    var maxX = 0;
-    var maxY = 0;
-    for (var i = 0; i < deformedVerts.length; i += 2) {
-      final x = deformedVerts[i];
-      final y = deformedVerts[i + 1];
-      minX = math.min(minX, x.floor());
-      minY = math.min(minY, y.floor());
-      maxX = math.max(maxX, x.ceil());
-      maxY = math.max(maxY, y.ceil());
-    }
-    const margin = 3;
-    final x0 = (minX - margin).clamp(0, width - 1);
-    final y0 = (minY - margin).clamp(0, height - 1);
-    final x1 = (maxX + margin).clamp(0, width - 1);
-    final y1 = (maxY + margin).clamp(0, height - 1);
-
-    final output = Uint8List.fromList(rgba);
-    final coverage = Float32List(width * height);
-    var meshHitPx = 0;
-
-    for (var y = y0; y <= y1; y++) {
-      final py = y + 0.5;
-      for (var x = x0; x <= x1; x++) {
-        final px = x + 0.5;
-        final hit = spatialIndex.locate(px, py);
-        if (hit == null) {
-          continue;
-        }
-
-        final s0 = FaceWarpUtils.vertexAt(mesh, hit.i0);
-        final s1 = FaceWarpUtils.vertexAt(mesh, hit.i1);
-        final s2 = FaceWarpUtils.vertexAt(mesh, hit.i2);
-        if (s0 == null || s1 == null || s2 == null) {
-          continue;
-        }
-
-        final srcX =
-            hit.w0 * s0.dx + hit.w1 * s1.dx + hit.w2 * s2.dx;
-        final srcY =
-            hit.w0 * s0.dy + hit.w1 * s1.dy + hit.w2 * s2.dy;
-        final rgb = _sampleBilinear(rgba, width, height, srcX, srcY);
-
-        final p = y * width + x;
-        final o = p * 4;
-        output[o] = rgb[0];
-        output[o + 1] = rgb[1];
-        output[o + 2] = rgb[2];
-        coverage[p] = 1.0;
-        meshHitPx++;
-      }
-    }
 
     var seamImputePx = 0;
     var bgFillPx = 0;
@@ -193,15 +129,15 @@ abstract final class FaceMeshForwardWarp {
       message: 'mesh_backward_warp',
       hypothesisId: 'B2',
       runId: runId,
+      phase: '2',
       data: {
+        ...renderResult.metrics.toJson(),
         'meshHitPx': meshHitPx,
         'holeFillPx': seamImputePx + bgFillPx,
         'seamImputePx': seamImputePx,
         'bgFillPx': bgFillPx,
         'lateralGhostPx': lateralGhostPx,
         'peakDisp': vf.maxDisplacementMagnitude(),
-        'bboxW': x1 - x0 + 1,
-        'bboxH': y1 - y0 + 1,
         'vertexCount': vertexCount,
         'landmarkCount': vf.landmarkCount,
         'meshVertexCount': mesh.vertices.length ~/ 2,
@@ -398,45 +334,4 @@ abstract final class FaceMeshForwardWarp {
       (sumB / count).round(),
     ];
   }
-
-  static List<int> _sampleBilinear(
-    Uint8List rgba,
-    int width,
-    int height,
-    double x,
-    double y,
-  ) {
-    if (x < 0 || y < 0 || x >= width - 1 || y >= height - 1) {
-      final cx = x.clamp(0, width - 1).round();
-      final cy = y.clamp(0, height - 1).round();
-      final idx = (cy * width + cx) * 4;
-      return [rgba[idx], rgba[idx + 1], rgba[idx + 2], rgba[idx + 3]];
-    }
-
-    final x0 = x.floor();
-    final y0 = y.floor();
-    final tx = x - x0;
-    final ty = y - y0;
-
-    final c00 = _pixel(rgba, width, x0, y0);
-    final c10 = _pixel(rgba, width, x0 + 1, y0);
-    final c01 = _pixel(rgba, width, x0, y0 + 1);
-    final c11 = _pixel(rgba, width, x0 + 1, y0 + 1);
-
-    return List.generate(4, (c) {
-      final v = _lerp(
-        _lerp(c00[c].toDouble(), c10[c].toDouble(), tx),
-        _lerp(c01[c].toDouble(), c11[c].toDouble(), tx),
-        ty,
-      );
-      return v.round().clamp(0, 255);
-    });
-  }
-
-  static List<int> _pixel(Uint8List rgba, int width, int x, int y) {
-    final idx = (y * width + x) * 4;
-    return [rgba[idx], rgba[idx + 1], rgba[idx + 2], rgba[idx + 3]];
-  }
-
-  static double _lerp(double a, double b, double t) => a + (b - a) * t;
 }

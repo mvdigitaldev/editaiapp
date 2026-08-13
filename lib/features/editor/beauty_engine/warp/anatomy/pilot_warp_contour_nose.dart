@@ -30,13 +30,61 @@ abstract final class PilotWarpContourNose {
     'nose_bridge',
   };
 
-  static const _chinIndices = {152, 175, 199, 200, 18, 313, 421, 428};
   static const _foreheadLower = {297, 332, 109, 67, 103, 54, 21};
+  static const _foreheadExpanded = {
+    ..._foreheadLower,
+    127,
+    162,
+    356,
+    389,
+  };
+  static const _cheekboneRingLeft = {207, 206, 203, 142, 126, 217};
+  static const _cheekboneRingRight = {427, 436, 426, 423, 266, 371};
   static const _templeLeft = {234, 127, 162, 93, 21};
   static const _templeRight = {251, 284, 356, 389, 297};
   static const _noseLengthIndices = {1, 2, 4, 5, 19, 94, 98, 97, 326, 327, 294, 278};
   static const _noseTipIndices = {1, 2, 98, 97, 326, 327, 4, 5, 19};
   static const _noseBridgeIndices = {168, 6, 197, 195, 5, 4, 45, 275};
+
+  static double _effectiveMag(double magnitude) =>
+      math.pow(magnitude.clamp(0.0, 1.0), 1.35).toDouble();
+
+  static double _maxPxFromSpec({
+    required FaceToolSpecification spec,
+    required double fse,
+    required double magnitude,
+    double capFactor = 0.95,
+  }) {
+    return (spec.maxDisplacementFse ?? 0.08) *
+        fse *
+        _effectiveMag(magnitude) *
+        capFactor;
+  }
+
+  static double _edgeWeight({
+    required Offset base,
+    required double centerX,
+    required double fse,
+  }) {
+    final halfFace = fse * 0.48;
+    if (halfFace <= 1e-6) {
+      return 0;
+    }
+    final lateral = (base.dx - centerX).abs();
+    return math.pow((lateral / halfFace).clamp(0.0, 1.0), 0.72).toDouble();
+  }
+
+  static double _zoneWeightNy(double ny) {
+    var zoneWeight = 1.0;
+    if (ny < 0.40) {
+      zoneWeight = (0.42 + 0.58 * (ny / 0.40)).clamp(0.42, 1.0);
+    }
+    if (ny > 0.66) {
+      zoneWeight *= (1.0 - (ny - 0.66) / 0.24).clamp(0.0, 1.0);
+      zoneWeight = zoneWeight.clamp(0.30, 1.0);
+    }
+    return zoneWeight;
+  }
 
   static Offset deltaFor({
     required String toolKey,
@@ -65,14 +113,18 @@ abstract final class PilotWarpContourNose {
           base: base,
           face: face,
           imageSize: imageSize,
-          rawIntensity: rawIntensity,
+          spec: spec,
+          magnitude: magnitude,
+          fse: fse,
         ),
       'jaw' => _jaw(
           index: landmarkIndex,
           base: base,
           face: face,
           imageSize: imageSize,
+          spec: spec,
           rawIntensity: rawIntensity,
+          fse: fse,
         ),
       'chin' => _chin(
           index: landmarkIndex,
@@ -85,12 +137,18 @@ abstract final class PilotWarpContourNose {
       'cheekbone' => _cheekbone(
           index: landmarkIndex,
           imageSize: imageSize,
-          rawIntensity: rawIntensity,
+          spec: spec,
+          magnitude: magnitude,
+          fse: fse,
         ),
       'forehead' => _forehead(
           index: landmarkIndex,
+          base: base,
+          face: face,
           imageSize: imageSize,
-          rawIntensity: rawIntensity,
+          spec: spec,
+          magnitude: magnitude,
+          fse: fse,
         ),
       'temple' => _temple(
           index: landmarkIndex,
@@ -144,16 +202,21 @@ abstract final class PilotWarpContourNose {
     if (!_inCheek(index)) {
       return Offset.zero;
     }
-    final maxPx = math.min(
-      imageSize.width * 0.08 * magnitude,
-      (spec.maxDisplacementFse ?? 0.06) * fse * magnitude,
+    final maxPx = _maxPxFromSpec(
+      spec: spec,
+      fse: fse,
+      magnitude: magnitude,
+      capFactor: 0.95,
     );
     if (maxPx <= 0) {
       return Offset.zero;
     }
     final centerX = FaceWarpUtils.faceCenterX(face, imageSize);
     final towardCenter = centerX - base.dx;
-    return Offset(towardCenter.sign * maxPx * 0.85, 0);
+    final ny = base.dy / imageSize.height;
+    final edge = _edgeWeight(base: base, centerX: centerX, fse: fse);
+    final zone = _zoneWeightNy(ny);
+    return Offset(towardCenter.sign * maxPx * edge * zone, 0);
   }
 
   static Offset _vFace({
@@ -161,22 +224,25 @@ abstract final class PilotWarpContourNose {
     required Offset base,
     required FaceMeshResult face,
     required Size imageSize,
-    required double rawIntensity,
+    required FaceToolSpecification spec,
+    required double magnitude,
+    required double fse,
   }) {
-    final t = rawIntensity.clamp(0.0, 1.0);
+    final t = magnitude.clamp(0.0, 1.0);
     final jawShift = imageSize.width * 0.14 * t;
     final chinLift = imageSize.height * 0.025 * t;
     final centerX = FaceWarpUtils.faceCenterX(face, imageSize);
 
     if (_inJawRegion(index)) {
       final towardCenter = centerX - base.dx;
-      final ratio = towardCenter.abs() / (imageSize.width * 0.5);
+      final ratio =
+          (towardCenter.abs() / (imageSize.width * 0.5)).clamp(0.0, 1.0);
       return Offset(
         towardCenter.sign * jawShift * ratio,
-        -chinLift * 0.3,
+        -chinLift * 0.3 * ratio,
       );
     }
-    if (_chinIndices.contains(index)) {
+    if (VertexRoleMap.chin.contains(index)) {
       return Offset(0, -chinLift);
     }
     return Offset.zero;
@@ -187,18 +253,23 @@ abstract final class PilotWarpContourNose {
     required Offset base,
     required FaceMeshResult face,
     required Size imageSize,
+    required FaceToolSpecification spec,
     required double rawIntensity,
+    required double fse,
   }) {
     if (!VertexRoleMap.jawLeft.contains(index) &&
         !VertexRoleMap.jawRight.contains(index)) {
       return Offset.zero;
     }
     final t = rawIntensity.clamp(0.0, 1.0);
-    final maxShift = imageSize.width * 0.09 * t;
+    final maxShift = math.min(
+      imageSize.width * 0.09 * t,
+      (spec.maxDisplacementFse ?? 0.07) * fse * t,
+    );
     final centerX = FaceWarpUtils.faceCenterX(face, imageSize);
     final towardCenter = centerX - base.dx;
     final ratio =
-        towardCenter.abs() / (imageSize.width * 0.5).clamp(1.0, double.infinity);
+        (towardCenter.abs() / (imageSize.width * 0.5)).clamp(1.0, double.infinity);
     return Offset(towardCenter.sign * maxShift * ratio, 0);
   }
 
@@ -225,7 +296,7 @@ abstract final class PilotWarpContourNose {
     final towardCenter = centerX - base.dx;
     final distFromPivot = (base.dy - chinPivot.dy).abs();
     final narrowFactor =
-        (distFromPivot / (imageSize.height * 0.08)).clamp(0.35, 1.0);
+        (distFromPivot / (imageSize.height * 0.08)).clamp(0.55, 1.0);
     final ratio =
         (towardCenter.abs() / (imageSize.width * 0.5)).clamp(0.2, 1.0);
     return Offset(
@@ -237,32 +308,69 @@ abstract final class PilotWarpContourNose {
   static Offset _cheekbone({
     required int index,
     required Size imageSize,
-    required double rawIntensity,
+    required FaceToolSpecification spec,
+    required double magnitude,
+    required double fse,
   }) {
-    final t = rawIntensity.clamp(0.0, 1.0);
-    final lift = imageSize.height * 0.012 * t;
-    final outward = imageSize.width * 0.018 * t;
+    final maxMag = _maxPxFromSpec(
+      spec: spec,
+      fse: fse,
+      magnitude: magnitude,
+      capFactor: 0.95,
+    );
+    if (maxMag <= 0) {
+      return Offset.zero;
+    }
+
+    double tierWeight = 0;
+    double outwardSign = 0;
     if (FaceWarpUtils.cheekboneLeft.contains(index)) {
-      return Offset(-outward, -lift);
+      tierWeight = 1.0;
+      outwardSign = -1.0;
+    } else if (_cheekboneRingLeft.contains(index)) {
+      tierWeight = 0.65;
+      outwardSign = -1.0;
+    } else if (FaceWarpUtils.cheekboneRight.contains(index)) {
+      tierWeight = 1.0;
+      outwardSign = 1.0;
+    } else if (_cheekboneRingRight.contains(index)) {
+      tierWeight = 0.65;
+      outwardSign = 1.0;
+    } else {
+      return Offset.zero;
     }
-    if (FaceWarpUtils.cheekboneRight.contains(index)) {
-      return Offset(outward, -lift);
-    }
-    return Offset.zero;
+
+    const outwardRatio = 0.81;
+    const liftRatio = 0.59;
+    final amp = maxMag * tierWeight;
+    return Offset(outwardSign * amp * outwardRatio, -amp * liftRatio);
   }
 
   static Offset _forehead({
     required int index,
+    required Offset base,
+    required FaceMeshResult face,
     required Size imageSize,
-    required double rawIntensity,
+    required FaceToolSpecification spec,
+    required double magnitude,
+    required double fse,
   }) {
     if (ForeheadFilter.hairlineLandmarkIndices.contains(index)) {
       return Offset.zero;
     }
-    if (!_foreheadLower.contains(index)) {
+    if (!_foreheadExpanded.contains(index)) {
       return Offset.zero;
     }
-    final lift = imageSize.height * 0.022 * rawIntensity.clamp(0.0, 1.0);
+
+    final ny = base.dy / imageSize.height;
+    var vertWeight = 1.0;
+    if ({127, 162, 356, 389}.contains(index)) {
+      vertWeight = 0.65;
+    } else if (ny < 0.24) {
+      vertWeight = (ny / 0.24).clamp(0.70, 1.0);
+    }
+
+    final lift = imageSize.height * 0.022 * magnitude.clamp(0.0, 1.0) * vertWeight;
     return Offset(0, -lift);
   }
 

@@ -5,6 +5,7 @@ import 'dart:ui';
 import '../../filters/face/face_filter_pipeline.dart';
 import '../../filters/face/face_warp_utils.dart';
 import '../../models/tri_mesh.dart';
+import '../face_warp_mvp_operations.dart';
 import 'constrained_vertex_field.dart';
 import 'vertex_role_map.dart';
 
@@ -44,8 +45,35 @@ abstract final class FaceWarpVacancyFill {
     return false;
   }
 
-  /// Só [face_slim] ativo — calibragem de vacancy/inpaint separada dos demais.
+  /// Malha backward V3 para ferramentas MVP de contorno (Fase 15).
+  ///
+  /// Substitui [isFaceSlimOnly] quando múltiplas ferramentas MVP estão ativas.
+  static bool usesMvpMeshPath(Map<String, double> parameters) =>
+      FaceWarpMvpOperations.usesMvpMeshPath(parameters);
+
+  /// Só [face_slim] ativo — alias legado; preferir [usesMvpMeshPath].
   static bool isFaceSlimOnly(Map<String, double> parameters) {
+    if (usesMvpMeshPath(parameters) &&
+        (parameters['face_slim'] ?? 0) > 1e-6 &&
+        _onlyFaceSlimAmongMvp(parameters)) {
+      return true;
+    }
+    return _legacyIsFaceSlimOnly(parameters);
+  }
+
+  static bool _onlyFaceSlimAmongMvp(Map<String, double> parameters) {
+    for (final key in FaceWarpMvpOperations.parameterKeys) {
+      if (key == 'face_slim') {
+        continue;
+      }
+      if ((parameters[key] ?? 0) > 1e-6) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _legacyIsFaceSlimOnly(Map<String, double> parameters) {
     if ((parameters['face_slim'] ?? 0) <= 1e-6) {
       return false;
     }
