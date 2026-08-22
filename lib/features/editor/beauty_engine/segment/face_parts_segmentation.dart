@@ -60,4 +60,17 @@ class FacePartsSegmentation {
     }
     return hits / classes.length;
   }
+
+  /// Contagem absoluta por classe MediaPipe. O modelo de 6 classes não tem ear.
+  Map<String, int> pixelCounts() {
+    final counts = {for (final c in FacePartClass.values) c.name: 0};
+    if (isEmpty) {
+      return counts;
+    }
+    for (final value in classes) {
+      final name = FacePartClass.fromIndex(value).name;
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+    return counts;
+  }
 }

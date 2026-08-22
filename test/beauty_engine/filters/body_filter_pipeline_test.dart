@@ -4,7 +4,6 @@ import 'package:editaiapp/features/editor/beauty_engine/filters/body/body_filter
 import 'package:editaiapp/features/editor/beauty_engine/filters/body/body_warp_context.dart';
 import 'package:editaiapp/features/editor/beauty_engine/filters/body/body_warp_utils.dart';
 import 'package:editaiapp/features/editor/beauty_engine/filters/body/leg_length.dart';
-import 'package:editaiapp/features/editor/beauty_engine/filters/face/head_size.dart';
 import 'package:editaiapp/features/editor/beauty_engine/mesh/body_mesh_builder.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/pose_landmark.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/pose_result.dart';
@@ -164,8 +163,7 @@ void main() {
       );
     });
 
-    test('HeadSizeFilter is a face warp filter only', () {
-      expect(HeadSizeFilter().parameterKey, 'head_size');
+    test('head_size is not a body warp key', () {
       expect(BodyWarpUtils.anchorIndices, isNot(contains(1)));
     });
   });

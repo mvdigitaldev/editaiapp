@@ -9,10 +9,10 @@ void main() {
   group('BundledPresetLoader', () {
     tearDown(BundledBeautyPresets.debugResetCache);
 
-    test('loads 8 shipped presets from assets', () async {
+    test('loads 9 shipped presets from assets', () async {
       final presets = await const BundledPresetLoader().load();
 
-      expect(presets, hasLength(8));
+      expect(presets, hasLength(9));
       expect(
         presets.map((preset) => preset.name),
         containsAll([
@@ -24,6 +24,7 @@ void main() {
           'Estúdio',
           'Suave',
           'Cinema',
+          'Glam',
         ]),
       );
     });

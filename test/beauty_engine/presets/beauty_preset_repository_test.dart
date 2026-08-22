@@ -21,8 +21,8 @@ void main() {
 
     tearDown(BundledBeautyPresets.debugResetCache);
 
-    test('includes 8 shipped presets', () {
-      expect(BundledBeautyPresets.all, hasLength(8));
+    test('includes 9 shipped presets', () {
+      expect(BundledBeautyPresets.all, hasLength(9));
       expect(
         BundledBeautyPresets.all.map((preset) => preset.name),
         containsAll([
@@ -34,6 +34,7 @@ void main() {
           'Estúdio',
           'Suave',
           'Cinema',
+          'Glam',
         ]),
       );
     });

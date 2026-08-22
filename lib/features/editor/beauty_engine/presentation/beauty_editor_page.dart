@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart' as image_picker;
 import 'package:uuid/uuid.dart';
@@ -19,9 +20,7 @@ import '../di/face_warp_v3_rollout_provider.dart';
 import '../di/beauty_engine_providers.dart';
 import '../diagnostics/beauty_editor_session_reporter.dart';
 import '../diagnostics/beauty_engine_error_reporter.dart';
-import '../config/face_warp_v3_config.dart';
 import '../config/face_warp_v3_rollout.dart';
-import '../warp/anatomy/face_warp_vacancy_fill.dart';
 import '../filters/face/face_filter_pipeline.dart';
 import '../filters/body/body_filter_pipeline.dart';
 import '../l10n/beauty_engine_labels.dart';
@@ -36,7 +35,6 @@ import '../performance/adaptive_preview_policy.dart';
 import '../performance/device_capability.dart';
 import '../segment/person_mask.dart';
 import '../rendering/preview_image_decoder.dart';
-import 'widgets/anatomy_debug_overlay.dart';
 import 'widgets/beauty_adjustments_panel.dart';
 import 'widgets/beauty_rgba_preview.dart';
 import 'widgets/face_selection_overlay.dart';
@@ -91,11 +89,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   WarpPlan? _lastBodyWarpPlan;
   bool _prewarmed = false;
   Timer? _debounceTimer;
-  Timer? _inpaintSettleTimer;
   bool _previewQueued = false;
-  bool _pendingInpaintPass = false;
-  static const _inpaintSettleMs = 150;
-  static const _lateralFastPreviewMs = 50;
 
   // Pincel manual (Facetune-style).
   bool _brushMode = false;
@@ -148,7 +142,6 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
-    _inpaintSettleTimer?.cancel();
     _previewImage?.dispose();
     _viewerTransform.dispose();
     super.dispose();
@@ -189,6 +182,12 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     }
   }
 
+  static const _v2LabAssets = {
+    'p01': 'test/beauty_engine/warp/fixtures/phase12/p01-man-5021469.png',
+    'p05': 'test/beauty_engine/warp/fixtures/phase12/p05-young-woman.png',
+    'p12': 'test/beauty_engine/warp/fixtures/phase12/p12.jpg',
+  };
+
   Future<void> _pickImage() async {
     final picker = image_picker.ImagePicker();
     final file =
@@ -196,8 +195,19 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     if (file == null) {
       return;
     }
+    await _applyLoadedBytes(await file.readAsBytes(), path: file.path);
+  }
 
-    final bytes = await file.readAsBytes();
+  Future<void> _loadV2LabPhoto(String id) async {
+    final asset = _v2LabAssets[id];
+    if (asset == null) {
+      return;
+    }
+    final data = await rootBundle.load(asset);
+    await _applyLoadedBytes(data.buffer.asUint8List(), path: asset);
+  }
+
+  Future<void> _applyLoadedBytes(Uint8List bytes, {required String path}) async {
     // Normaliza EXIF/orientação e aplica o teto de resolução de entrada em
     // isolate — garante que UI, pipeline e detecção vejam os mesmos pixels.
     final source = await BeautyImageLoader.load(bytes);
@@ -225,7 +235,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     setState(() {
       _imageBytes = source.bytes;
       _disposePreviewImage();
-      _imagePath = file.path;
+      _imagePath = path;
       _source = source;
       _previewSource = previewSource;
       _cachedFace = null;
@@ -370,44 +380,21 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   void _schedulePreview() {
     _debounceTimer?.cancel();
-    _inpaintSettleTimer?.cancel();
     if (_source == null) {
       return;
     }
 
-    final faceSlimOnly = FaceWarpVacancyFill.isFaceSlimOnly(_params);
-    final lateralInpaint =
-        FaceWarpV3Config.usePostWarpInpaint &&
-            FaceWarpVacancyFill.hasActiveLateralTool(_params) &&
-            !faceSlimOnly;
     final profile = _deviceProfile;
-    final debounceMs = faceSlimOnly
-        ? (profile?.sliderDebounceMs ?? 100)
-        : lateralInpaint
-            ? _lateralFastPreviewMs
-            : (profile?.sliderDebounceMs ??
-                (_hasActiveBodyWarp(_params) ? 120 : 100));
+    final debounceMs = profile?.sliderDebounceMs ??
+        (_hasActiveBodyWarp(_params) ? 120 : 100);
 
     _debounceTimer = Timer(Duration(milliseconds: debounceMs), () {
       if (_processing) {
         _previewQueued = true;
         return;
       }
-      unawaited(_processPreview(postWarpInpaint: faceSlimOnly));
+      unawaited(_processPreview());
     });
-
-    if (lateralInpaint) {
-      _inpaintSettleTimer = Timer(
-        const Duration(milliseconds: _inpaintSettleMs),
-        () {
-          if (_processing) {
-            _pendingInpaintPass = true;
-            return;
-          }
-          unawaited(_processPreview(postWarpInpaint: true));
-        },
-      );
-    }
   }
 
   Future<void> _ensureLandmarks() async {
@@ -417,6 +404,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     final controller = ref.read(beautyEngineControllerProvider);
     controller.faceLandmarkThrottle.reset();
     controller.poseLandmarkThrottle.reset();
+    controller.personMaskThrottle.reset();
     final faces = widget.bodyOnly
         ? <FaceMeshResult>[]
         : await controller.detectAllFaces(_previewSource!);
@@ -482,7 +470,30 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   bool get _warpDebugAvailable => widget.labMode || kDebugMode;
 
-  Future<void> _processPreview({bool postWarpInpaint = false}) async {
+  Widget _labPhotoPanel() {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.62),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+        child: Wrap(
+          spacing: 4,
+          children: [
+            for (final id in _v2LabAssets.keys)
+              TextButton(
+                onPressed: () => unawaited(_loadV2LabPhoto(id)),
+                child: Text(
+                  'Lab $id',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _processPreview() async {
     if (_source == null || _previewSource == null) {
       return;
     }
@@ -503,7 +514,6 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         face: _cachedFace,
         pose: _cachedPose,
         personMask: _cachedPersonMask,
-        postWarpInpaint: postWarpInpaint,
       );
 
       final generation = ++_previewImageGeneration;
@@ -577,17 +587,13 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     } finally {
       if (mounted) {
         setState(() => _processing = false);
-        if (_pendingInpaintPass) {
-          _pendingInpaintPass = false;
-          unawaited(_processPreview(postWarpInpaint: true));
-        } else if (_previewQueued) {
+        if (_previewQueued) {
           _previewQueued = false;
           _schedulePreview();
         }
       } else {
         _processing = false;
         _previewQueued = false;
-        _pendingInpaintPass = false;
       }
     }
   }
@@ -615,28 +621,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   bool _paramsNeedFaceOrSkin(Map<String, double> params) {
     const faceAndSkinKeys = {
-      'face_slim',
-      'narrow_face',
-      'v_face',
-      'nose_slim',
-      'nose_length',
-      'nose_height',
-      'nose_tip',
-      'nose_bridge',
-      'eye_scale',
-      'eye_distance',
-      'eye_height',
-      'eye_rotation',
-      'double_eyelid',
       'jaw',
-      'chin',
-      'cheekbone',
-      'forehead',
-      'temple',
-      'mouth_width',
-      'lip_thickness',
-      'smile',
-      'head_size',
       'skin_smooth',
       'skin_whitening',
       'remove_acne',
@@ -801,124 +786,6 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
               onPressed: () => setState(() => _showOriginal = !_showOriginal),
               icon: Icon(_showOriginal ? Icons.auto_fix_high : Icons.compare),
             ),
-          if (widget.labMode && _imageBytes != null)
-            IconButton(
-              tooltip: FaceWarpV3Config.useDirectMeshRender
-                  ? 'Malha direct (~2.5px) — toque para grade interativa'
-                  : 'Grade interativa — toque para malha direct',
-              onPressed: () {
-                FaceWarpV3Config.toggleDirectMesh();
-                ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
-                setState(() {});
-                _schedulePreview();
-              },
-              icon: Icon(
-                FaceWarpV3Config.useDirectMeshRender
-                    ? Icons.texture_outlined
-                    : Icons.blur_linear,
-                color: FaceWarpV3Config.useDirectMeshRender
-                    ? AppColors.primary
-                    : null,
-              ),
-            ),
-          if (widget.labMode && _imageBytes != null)
-            IconButton(
-              tooltip: FaceWarpV3Config.useGpuPiecewiseAffine
-                  ? 'GPU piecewise ON — toque para grade CPU'
-                  : 'Grade CPU — toque para GPU piecewise',
-              onPressed: () {
-                FaceWarpV3Config.toggleGpuPiecewise();
-                ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
-                setState(() {});
-                _schedulePreview();
-              },
-              icon: Icon(
-                FaceWarpV3Config.useGpuPiecewiseAffine
-                    ? Icons.memory_outlined
-                    : Icons.memory,
-                color: FaceWarpV3Config.useGpuPiecewiseAffine
-                    ? AppColors.primary
-                    : null,
-              ),
-            ),
-          if (widget.labMode && _imageBytes != null)
-            IconButton(
-              tooltip: FaceWarpV3Config.usePostWarpInpaint
-                  ? 'Inpaint pós-warp ON'
-                  : 'Inpaint pós-warp OFF',
-              onPressed: () {
-                FaceWarpV3Config.togglePostWarpInpaint();
-                ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
-                setState(() {});
-                _schedulePreview();
-              },
-              icon: Icon(
-                FaceWarpV3Config.usePostWarpInpaint
-                    ? Icons.healing_outlined
-                    : Icons.healing,
-                color: FaceWarpV3Config.usePostWarpInpaint
-                    ? AppColors.primary
-                    : null,
-              ),
-            ),
-          if (widget.labMode && _imageBytes != null)
-            IconButton(
-              tooltip: FaceWarpV3Config.useGpuInpaint
-                  ? 'Inpaint GPU ON'
-                  : 'Inpaint CPU — toque para GPU',
-              onPressed: () {
-                FaceWarpV3Config.toggleGpuInpaint();
-                ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
-                setState(() {});
-                _schedulePreview();
-              },
-              icon: Icon(
-                FaceWarpV3Config.useGpuInpaint
-                    ? Icons.speed_outlined
-                    : Icons.speed,
-                color: FaceWarpV3Config.useGpuInpaint
-                    ? AppColors.primary
-                    : null,
-              ),
-            ),
-          if (widget.labMode && _imageBytes != null)
-            IconButton(
-              tooltip: FaceWarpV3Config.useMeshWarpV3
-                  ? 'Warp V3 (malha) — toque para MLS'
-                  : 'Warp MLS — toque para V3',
-              onPressed: () {
-                FaceWarpV3Config.toggle();
-                ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
-                setState(() {});
-                _schedulePreview();
-              },
-              icon: Icon(
-                FaceWarpV3Config.useMeshWarpV3
-                    ? Icons.hub_outlined
-                    : Icons.grid_4x4,
-                color: FaceWarpV3Config.useMeshWarpV3
-                    ? AppColors.primary
-                    : null,
-              ),
-            ),
-          if (widget.labMode && _imageBytes != null)
-            IconButton(
-              tooltip: FaceWarpV3Config.useNativePiecewiseExport
-                  ? 'Export Metal nativo ON'
-                  : 'Export FragmentProgram — toque para Metal',
-              onPressed: () {
-                FaceWarpV3Config.toggleNativePiecewiseExport();
-                setState(() {});
-              },
-              icon: Icon(
-                FaceWarpV3Config.useNativePiecewiseExport
-                    ? Icons.apple_outlined
-                    : Icons.apple,
-                color: FaceWarpV3Config.useNativePiecewiseExport
-                    ? AppColors.primary
-                    : null,
-              ),
-            ),
           if (_warpDebugAvailable && _imageBytes != null)
             IconButton(
               tooltip: _showWarpDebug ? 'Ocultar máscara warp' : 'Máscara warp',
@@ -948,12 +815,38 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
               fit: StackFit.expand,
               children: [
                 if (_previewImage == null && _imageBytes == null)
-                  const Center(
+                  Center(
                     child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        BeautyEngineLabels.beautyEditorEmptyHint,
-                        textAlign: TextAlign.center,
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            BeautyEngineLabels.beautyEditorEmptyHint,
+                            textAlign: TextAlign.center,
+                          ),
+                          if (kDebugMode) ...[
+                            const SizedBox(height: 20),
+                            const Text(
+                              'Device Lab V2 — fotos de teste',
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              alignment: WrapAlignment.center,
+                              children: [
+                                for (final id in _v2LabAssets.keys)
+                                  FilledButton(
+                                    onPressed: () =>
+                                        unawaited(_loadV2LabPhoto(id)),
+                                    child: Text('Lab $id'),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   )
@@ -1045,21 +938,13 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                                               .lastFaceWarpDebugStats,
                                           boxSize: fitted,
                                         ),
-                                      if (_warpDebugAvailable &&
-                                          _showWarpDebug &&
-                                          !_showOriginal &&
-                                          preview != null &&
-                                          _cachedFace != null)
-                                        AnatomyDebugOverlay(
-                                          face: _cachedFace!,
-                                          imageSize: Size(
-                                            preview.width.toDouble(),
-                                            preview.height.toDouble(),
-                                          ),
-                                          boxSize: fitted,
-                                          activeToolKey: _debugActiveToolKey ??
-                                              _firstActiveFaceWarpKey(),
-                                        ),
+                                      // Overlay debug desligado (diagnóstico).
+                                      // if (kDebugMode &&
+                                      //     FaceWarpV3Config
+                                      //         .extendedRoiDebugOverlay &&
+                                      //     !_showOriginal &&
+                                      //     preview != null)
+                                      //   _extendedRoiOverlay(fitted),
                                     ],
                                   ),
                           ),
@@ -1116,6 +1001,16 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                       constraints: const BoxConstraints(maxWidth: 220),
                       child: ParityChecklistPanel(params: _params),
                     ),
+                  ),
+                if (kDebugMode)
+                  Positioned(
+                    top: widget.labMode &&
+                            _imageBytes != null &&
+                            !_showOriginal
+                        ? 168
+                        : 12,
+                    left: 12,
+                    child: _labPhotoPanel(),
                   ),
                 if (_lastApplyMs != null && !_processing)
                   Positioned(

@@ -8,11 +8,8 @@ import 'package:editaiapp/features/editor/beauty_engine/filters/face/face_filter
 import 'package:editaiapp/features/editor/beauty_engine/filters/face/skin_filter_pipeline.dart';
 import 'package:editaiapp/features/editor/beauty_engine/face_mesh/face_mesh_detector_stub.dart';
 import 'package:editaiapp/features/editor/beauty_engine/mesh/body_mesh_builder.dart';
-import 'package:editaiapp/features/editor/beauty_engine/mesh/face_mesh_builder.dart';
 import 'package:editaiapp/features/editor/beauty_engine/mesh/mesh_engine_stub.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/beauty_preset.dart';
-import 'package:editaiapp/features/editor/beauty_engine/models/face_landmark.dart';
-import 'package:editaiapp/features/editor/beauty_engine/models/face_mesh_result.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/image_source.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/pose_landmark.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/pose_result.dart';
@@ -36,39 +33,13 @@ void main() {
   const sync = PresetSyncService();
 
   group('Regression — face filters', () {
-    late FaceFilterPipeline pipeline;
-    late FaceMeshResult face;
+    const pipeline = FaceFilterPipeline();
 
-    setUp(() {
-      pipeline = const FaceFilterPipeline();
-      face = _fakeFaceMesh();
-    });
-
-    for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
-      test('$key at 0.5 composes without error', () {
-        final mesh = const FaceMeshBuilder().build(face, imageSize);
-        final field = pipeline.compose(
-          mesh: mesh,
-          face: face,
-          imageSize: imageSize,
-          parameters: {key: 0.5},
-        );
-        expect(field.controlPoints, isNotEmpty);
-      });
-    }
-
-    test('all face keys combined at 0.3', () {
-      final mesh = const FaceMeshBuilder().build(face, imageSize);
-      final params = {
-        for (final key in FaceFilterPipeline.faceWarpParameterKeys) key: 0.3,
-      };
-      final field = pipeline.compose(
-        mesh: mesh,
-        face: face,
-        imageSize: imageSize,
-        parameters: params,
-      );
-      expect(field.isIdentity, isFalse);
+    test('jaw is the only facial warp key and activates the pipeline', () {
+      expect(FaceFilterPipeline.faceWarpParameterKeys, ['jaw']);
+      expect(pipeline.hasActiveWarp({'jaw': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'jaw': 0}), isFalse);
+      expect(pipeline.hasActiveWarp({'chin': 0.8}), isFalse);
     });
   });
 
@@ -126,9 +97,9 @@ void main() {
   group('Regression — bundled presets', () {
     tearDown(BundledBeautyPresets.debugResetCache);
 
-    test('loads 8 shipped presets from assets', () async {
+    test('loads 9 shipped presets from assets', () async {
       final presets = await const BundledPresetLoader().load();
-      expect(presets, hasLength(8));
+      expect(presets, hasLength(9));
     });
 
     test('each bundled preset round-trips JSON', () async {
@@ -223,27 +194,6 @@ void main() {
       expect(frame.height, 2);
     });
   });
-}
-
-FaceMeshResult _fakeFaceMesh() {
-  final landmarks = List.generate(
-    FaceMeshResult.expectedLandmarkCount,
-    (index) {
-      final x = 0.35 + (index % 40) * 0.008;
-      final y = 0.25 + (index ~/ 40) * 0.012;
-      return FaceLandmark(
-        index: index,
-        normalized: Offset(x.clamp(0.0, 1.0), y.clamp(0.0, 1.0)),
-        z: index.isEven ? 0.01 : -0.01,
-      );
-    },
-  );
-
-  return FaceMeshResult(
-    landmarks: landmarks,
-    boundingBox: const Rect.fromLTWH(0.2, 0.15, 0.6, 0.7),
-    confidence: 0.95,
-  );
 }
 
 PoseResult _fakeFullBodyPose({double visibility = 0.9}) {

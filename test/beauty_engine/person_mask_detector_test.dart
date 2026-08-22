@@ -85,6 +85,18 @@ class _FailingBindings implements BeautyMediapipeBindings {
       null;
 
   @override
+  Future<List<FaceLandmarkerNativeResult>> detectFaces(
+    NativeImageBuffer buffer,
+  ) async =>
+      const [];
+
+  @override
+  Future<FaceParsingNativeResult?> detectFaceParsing(
+    NativeImageBuffer buffer,
+  ) async =>
+      null;
+
+  @override
   void dispose() {}
 
   @override

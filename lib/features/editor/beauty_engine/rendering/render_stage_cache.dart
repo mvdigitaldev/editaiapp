@@ -27,6 +27,7 @@ class RenderStageCache {
     FaceMeshResult? face,
     bool hasManualBrush = false,
     bool useMeshWarpV3 = false,
+    bool useExtendedRoi = false,
     bool useDirectMeshRender = false,
     bool useGpuPiecewiseAffine = false,
     bool useGpuInpaint = false,
@@ -63,6 +64,7 @@ class RenderStageCache {
       lutAssetPath,
       hasManualBrush,
       useMeshWarpV3,
+      useExtendedRoi,
       useDirectMeshRender,
       useGpuPiecewiseAffine,
       useGpuInpaint,
@@ -80,7 +82,7 @@ class RenderStageCache {
       return 0;
     }
     final mid = rgba.length ~/ 2;
-    final last = rgba.length - 4;
+    final last = rgba.length >= 4 ? rgba.length - 4 : 0;
     return Object.hash(rgba.length, rgba[0], rgba[mid], rgba[last]);
   }
 

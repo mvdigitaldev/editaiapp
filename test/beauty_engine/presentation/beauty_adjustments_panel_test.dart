@@ -26,24 +26,19 @@ void main() {
       ),
     );
 
-    expect(find.text('Afinar rosto'), findsWidgets);
+    expect(find.text('Mandíbula'), findsWidgets);
 
     await tester.drag(find.byType(Slider), const Offset(80, 0));
     await tester.pumpAndSettle();
 
-    expect(lastKey, 'face_slim');
+    expect(lastKey, 'jaw');
     expect(lastValue, greaterThan(0));
-
-    await tester.tap(find.text('Nariz'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Afinar nariz'), findsWidgets);
   });
 
-  test('initialParams inclui todas as keys de warp e pele', () {
+  test('initialParams inclui jaw, corpo e pele', () {
     final params = BeautyAdjustmentsPanel.initialParams();
-    expect(params.containsKey('face_slim'), isTrue);
-    expect(params.containsKey('nose_slim'), isTrue);
+    expect(params.containsKey('jaw'), isTrue);
+    expect(params.containsKey('face_slim'), isFalse);
     expect(params.containsKey('waist_slim'), isTrue);
     expect(params.containsKey('skin_smooth'), isTrue);
     expect(params['link_eyes'], 1);

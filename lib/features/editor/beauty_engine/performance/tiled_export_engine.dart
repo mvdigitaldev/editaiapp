@@ -5,7 +5,6 @@ import '../body_reshape/rendering/export_warp.dart';
 import '../body_reshape/rendering/memory_budget.dart';
 import '../body_reshape/rendering/method_channel_native_export_backend.dart';
 import '../body_reshape/rendering/native_export_backend.dart';
-import '../config/face_warp_v3_config.dart';
 import '../controllers/beauty_engine_controller.dart';
 import '../models/image_source.dart';
 import '../models/image_source_rgba.dart';
@@ -18,8 +17,6 @@ import '../performance/thermal_degradation_policy.dart';
 import '../performance/thermal_monitor.dart';
 import '../rendering/export_encoder.dart';
 import '../rendering/gpu_texture_store.dart';
-import '../warp/face_mesh_export_warp.dart';
-import '../warp/warp_field_builder.dart';
 
 /// Export tiled para imagens > 8MP (Sprint 25 + Sprint 13 GPU/halo).
 ///
@@ -29,7 +26,6 @@ class TiledExportEngine {
   TiledExportEngine({
     this.exportEncoder = const ExportEncoder(),
     ExportWarp? exportWarp,
-    FaceMeshExportWarp? faceMeshExportWarp,
     NativeExportBackend? nativeBackend,
     this.allowCpuFallback = false,
     this.thermalMonitor,
@@ -37,12 +33,10 @@ class TiledExportEngine {
             ExportWarp(
               nativeBackend:
                   nativeBackend ?? MethodChannelNativeExportBackend(),
-            ),
-        faceMeshExportWarp = faceMeshExportWarp ?? FaceMeshExportWarp();
+            );
 
   final ExportEncoder exportEncoder;
   final ExportWarp exportWarp;
-  final FaceMeshExportWarp faceMeshExportWarp;
 
   /// Fallback CPU explícito (testes / dispositivos sem GPU).
   final bool allowCpuFallback;
@@ -100,48 +94,39 @@ class TiledExportEngine {
     )
         ? await controller.detectPersonMask(rgbaSource)
         : null;
+    final params = pipeline.effectiveParameters;
     final faceParts = face != null &&
-            controller.skinFilterPipeline.hasActiveSkin(
-              pipeline.effectiveParameters,
-            )
+            controller.skinFilterPipeline.hasActiveSkin(params)
         ? await controller.detectFaceParts(rgbaSource)
         : null;
     final faceParsing = face != null &&
-            controller.skinFilterPipeline.hasActiveSkin(
-              pipeline.effectiveParameters,
-            )
+            controller.skinFilterPipeline.needsSemanticParsing(params)
         ? await controller.detectFaceParsing(
             rgbaSource,
             face: face,
             parts: faceParts,
           )
         : null;
-
-    final params = pipeline.effectiveParameters;
     final imageSize = Size(
       rgbaSource.width.toDouble(),
       rgbaSource.height.toDouble(),
     );
 
+    final jawRgba = controller.applyJawWarp(
+      sourceRgba: rgbaSource.bytes,
+      width: rgbaSource.width,
+      height: rgbaSource.height,
+      face: face,
+      parameters: params,
+    );
     final bodyField = controller.composeBodyField(
       pose: pose,
       imageSize: imageSize,
       parameters: params,
       personMask: personMask,
     );
-    final faceField = await controller.composeFaceFieldAsync(
-      face: face,
-      imageSize: imageSize,
-      parameters: params,
-      quality: WarpFieldQuality.export,
-    );
-    final faceGpuPayload = FaceWarpV3Config.enabled &&
-            FaceWarpV3Config.useMeshWarpV3 &&
-            FaceWarpV3Config.useGpuPiecewiseAffine
-        ? controller.lastFaceMeshGpuPayload
-        : null;
 
-    final maxDisp = mathMaxDisplacement(bodyField, faceField);
+    final maxDisp = mathMaxDisplacement(bodyField, null);
     final requiredHaloPx = maxDisp.ceil() + 8;
     if (requiredHaloPx > MemoryBudget.maxTileHaloPx) {
       throw StateError(
@@ -165,7 +150,7 @@ class TiledExportEngine {
     }
 
     // Um buffer de saída (+ source). Sem terceira cópia full-frame intermediária.
-    final output = Uint8List.fromList(rgbaSource.bytes);
+    final output = Uint8List.fromList(jawRgba);
     final tiles = ImageTileGrid.specsFor(
       fullWidth: rgbaSource.width,
       fullHeight: rgbaSource.height,
@@ -176,7 +161,7 @@ class TiledExportEngine {
     if (bodyField != null && !bodyField.isIdentity) {
       profiler?.start('body_warp_tiles');
       await _warpTilesToOutput(
-        sourceRgba: rgbaSource.bytes,
+        sourceRgba: jawRgba,
         output: output,
         fullWidth: rgbaSource.width,
         fullHeight: rgbaSource.height,
@@ -188,73 +173,12 @@ class TiledExportEngine {
 
     for (final tile in tiles) {
       profiler?.start('tile');
-      var expanded = ImageTileGrid.extractExpandedTile(
+      final expanded = ImageTileGrid.extractExpandedTile(
         fullRgba: output,
         fullWidth: rgbaSource.width,
         fullHeight: rgbaSource.height,
         tile: tile,
       );
-
-      if (faceField != null && !faceField.isIdentity) {
-        Uint8List warpedExpanded;
-        if (faceGpuPayload != null && !faceGpuPayload.isIdentity) {
-          final meshResult = await faceMeshExportWarp.apply(
-            FaceMeshExportRequest(
-              rgba: expanded,
-              width: tile.expandWidth,
-              height: tile.expandHeight,
-              payload: faceGpuPayload,
-              field: faceField,
-              parameters: params,
-              tileOriginX: tile.expandLeft.toDouble(),
-              tileOriginY: tile.expandTop.toDouble(),
-              fullWidth: rgbaSource.width.toDouble(),
-              fullHeight: rgbaSource.height.toDouble(),
-              applyInpaint: FaceWarpV3Config.usePostWarpInpaint,
-              forceCpuInpaint: allowCpuFallback,
-            ),
-          );
-          if (meshResult != null) {
-            lastWarpBackend = meshResult.backend;
-            warpedExpanded = meshResult.rgba;
-          } else {
-            final warped = await exportWarp.apply(
-              ExportWarpRequest(
-                rgba: expanded,
-                width: tile.expandWidth,
-                height: tile.expandHeight,
-                field: faceField,
-                tileOriginX: tile.expandLeft.toDouble(),
-                tileOriginY: tile.expandTop.toDouble(),
-                fullWidth: rgbaSource.width.toDouble(),
-                fullHeight: rgbaSource.height.toDouble(),
-                fullSourceRgba: output,
-                allowCpuFallback: allowCpuFallback,
-              ),
-            );
-            lastWarpBackend = warped.backend;
-            warpedExpanded = warped.rgba;
-          }
-        } else {
-          final warped = await exportWarp.apply(
-            ExportWarpRequest(
-              rgba: expanded,
-              width: tile.expandWidth,
-              height: tile.expandHeight,
-              field: faceField,
-              tileOriginX: tile.expandLeft.toDouble(),
-              tileOriginY: tile.expandTop.toDouble(),
-              fullWidth: rgbaSource.width.toDouble(),
-              fullHeight: rgbaSource.height.toDouble(),
-              fullSourceRgba: output,
-              allowCpuFallback: allowCpuFallback,
-            ),
-          );
-          lastWarpBackend = warped.backend;
-          warpedExpanded = warped.rgba;
-        }
-        expanded = warpedExpanded;
-      }
 
       // Pós-warp só na região interior (evita costura de filtros locais).
       final interior = _cropInterior(expanded, tile);
@@ -268,7 +192,7 @@ class TiledExportEngine {
         imageSize: imageSize,
         faceParts: faceParts,
         faceParsing: faceParsing,
-        faceWarp: faceField != null && !faceField.isIdentity ? faceField : null,
+        faceWarp: null,
         // As máscaras faciais são normalizadas na imagem completa; sem a
         // origem do tile a pele cairia no lugar errado em cada recorte.
         tileOrigin: Offset(tile.left.toDouble(), tile.top.toDouble()),

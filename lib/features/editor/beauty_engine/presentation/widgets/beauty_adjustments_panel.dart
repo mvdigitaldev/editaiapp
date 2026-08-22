@@ -70,47 +70,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       icon: Icons.face_outlined,
       label: BeautyEngineLabels.sectionFace,
       parameterKeys: [
-        'face_slim',
-        'narrow_face',
-        'v_face',
         'jaw',
-        'chin',
-        'cheekbone',
-        'forehead',
-      ],
-    ),
-    BeautyAdjustmentCategoryDef(
-      category: BeautyAdjustmentCategory.nariz,
-      icon: Icons.notes_outlined,
-      label: 'Nariz',
-      parameterKeys: [
-        'nose_slim',
-        'nose_length',
-        'nose_height',
-        'nose_tip',
-        'nose_bridge',
-      ],
-    ),
-    BeautyAdjustmentCategoryDef(
-      category: BeautyAdjustmentCategory.olhos,
-      icon: Icons.remove_red_eye_outlined,
-      label: 'Olhos',
-      parameterKeys: [
-        'eye_scale',
-        'eye_distance',
-        'eye_height',
-        'eye_rotation',
-        'double_eyelid',
-      ],
-    ),
-    BeautyAdjustmentCategoryDef(
-      category: BeautyAdjustmentCategory.boca,
-      icon: Icons.sentiment_satisfied_alt_outlined,
-      label: 'Boca',
-      parameterKeys: [
-        'mouth_width',
-        'lip_thickness',
-        'smile',
       ],
     ),
     BeautyAdjustmentCategoryDef(
@@ -266,17 +226,6 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                     ),
                   ),
                 ),
-              ),
-            if (_category == BeautyAdjustmentCategory.olhos)
-              SwitchListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                title: Text(
-                  BeautyEngineLabels.linkEyesTitle,
-                  style: theme.textTheme.bodySmall,
-                ),
-                value: widget.linkEyes,
-                onChanged: widget.enabled ? widget.onLinkEyesChanged : null,
               ),
             SizedBox(
               height: 40,

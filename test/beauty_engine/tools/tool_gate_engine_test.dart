@@ -51,7 +51,7 @@ void main() {
 
     test('warp desabilitado sem rosto', () {
       final plan = engine.evaluate(FaceQualityContext.empty);
-      expect(plan.decisionFor('face_slim').isDisabled, isTrue);
+      expect(plan.decisionFor('jaw').isDisabled, isTrue);
     });
 
     test('applyToParameters respeita caps', () {
