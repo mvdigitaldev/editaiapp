@@ -138,9 +138,31 @@ test/beauty_engine/warp/v2/
 Regras do módulo:
 
 - Sem ficheiros “utils” partilhados entre efeitos “para reutilizar depois”.
-- Sem import circular entre módulos de efeito.
 - Sem copiar ROI, Telea, Mesh ACE ou MLS para dentro do módulo.
 - Relatórios do efeito: `docs/beauty/v2-<efeito>-<sprint>.md` (A/B/C/D/E). Não editar este ficheiro de regras para registar um sprint.
+
+Todo Field V2 deve ser autocontido.
+
+Nenhum Field depende de outro Field V2. Cada Field é autocontido e constrói seu DisplacementField apenas a partir de FaceMeshResult, Size e seus próprios parâmetros.
+
+É proibido importar outro Field V2.
+
+Dependências permitidas:
+
+- DisplacementField
+- RegionMaskRaster
+- MeshTopology
+- RegionCatalog
+- infraestrutura V2
+
+Dependências proibidas:
+
+- jaw_field.dart
+- chin_field.dart
+- face_slim_field.dart
+- nose_field.dart
+- eyes_field.dart
+- mouth_field.dart
 
 ---
 
