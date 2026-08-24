@@ -119,6 +119,13 @@ class TiledExportEngine {
       face: face,
       parameters: params,
     );
+    final faceRgba = controller.applyChinWarp(
+      sourceRgba: jawRgba,
+      width: rgbaSource.width,
+      height: rgbaSource.height,
+      face: face,
+      parameters: params,
+    );
     final bodyField = controller.composeBodyField(
       pose: pose,
       imageSize: imageSize,
@@ -150,7 +157,7 @@ class TiledExportEngine {
     }
 
     // Um buffer de saída (+ source). Sem terceira cópia full-frame intermediária.
-    final output = Uint8List.fromList(jawRgba);
+    final output = Uint8List.fromList(faceRgba);
     final tiles = ImageTileGrid.specsFor(
       fullWidth: rgbaSource.width,
       fullHeight: rgbaSource.height,
@@ -161,7 +168,7 @@ class TiledExportEngine {
     if (bodyField != null && !bodyField.isIdentity) {
       profiler?.start('body_warp_tiles');
       await _warpTilesToOutput(
-        sourceRgba: jawRgba,
+        sourceRgba: faceRgba,
         output: output,
         fullWidth: rgbaSource.width,
         fullHeight: rgbaSource.height,

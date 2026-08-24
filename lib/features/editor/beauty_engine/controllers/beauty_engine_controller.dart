@@ -53,6 +53,7 @@ import '../tools/tool_gate_engine.dart';
 import '../warp/anatomy/face_warp_debug_stats.dart';
 import '../warp/warp_engine.dart';
 import '../warp/v2/backward_bilinear_warp.dart' as v2;
+import '../warp/v2/chin/chin_field.dart';
 import '../warp/v2/jaw_field.dart';
 
 /// Orquestrador do Beauty Engine — ponto unico para a UI (sem Widget).
@@ -927,6 +928,36 @@ class BeautyEngineController {
     return warped.rgba;
   }
 
+  /// ChinField + remap bilinear. Independente do Jaw. t=0 não chama o renderer.
+  Uint8List applyChinWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['chin'] ?? 0).clamp(0.0, 1.0);
+    if (face == null || t <= 0 || sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = ChinField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_chin';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
   Future<TextureHandle> _renderTexture({
     required ImageSource source,
     required ProcessingPipeline pipeline,
@@ -988,10 +1019,17 @@ class BeautyEngineController {
       face: face,
       parameters: params,
     );
+    final faceRgba = applyChinWarp(
+      sourceRgba: jawRgba,
+      width: rgbaSource.width,
+      height: rgbaSource.height,
+      face: face,
+      parameters: params,
+    );
 
     final texture = await gpuRenderer.upload(
       TextureUpload(
-        bytes: jawRgba,
+        bytes: faceRgba,
         width: rgbaSource.width,
         height: rgbaSource.height,
       ),

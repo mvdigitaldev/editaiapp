@@ -24,6 +24,12 @@ abstract final class BeautyToolRegistry {
       pipelineStage: ToolPipelineStage.warp,
       requiresFace: true,
     ),
+    ToolDescriptor(
+      key: 'chin',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
   ];
 
   static final _skin = [

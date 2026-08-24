@@ -69,9 +69,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       category: BeautyAdjustmentCategory.rosto,
       icon: Icons.face_outlined,
       label: BeautyEngineLabels.sectionFace,
-      parameterKeys: [
-        'jaw',
-      ],
+      parameterKeys: FaceFilterPipeline.faceWarpParameterKeys,
     ),
     BeautyAdjustmentCategoryDef(
       category: BeautyAdjustmentCategory.corpo,

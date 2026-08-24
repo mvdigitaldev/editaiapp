@@ -35,11 +35,12 @@ void main() {
   group('Regression — face filters', () {
     const pipeline = FaceFilterPipeline();
 
-    test('jaw is the only facial warp key and activates the pipeline', () {
-      expect(FaceFilterPipeline.faceWarpParameterKeys, ['jaw']);
+    test('jaw and chin are the facial warp keys and activate the pipeline', () {
+      expect(FaceFilterPipeline.faceWarpParameterKeys, ['jaw', 'chin']);
       expect(pipeline.hasActiveWarp({'jaw': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'jaw': 0}), isFalse);
-      expect(pipeline.hasActiveWarp({'chin': 0.8}), isFalse);
+      expect(pipeline.hasActiveWarp({'chin': 0.8}), isTrue);
+      expect(pipeline.hasActiveWarp({'chin': 0}), isFalse);
     });
   });
 

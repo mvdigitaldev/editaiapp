@@ -622,6 +622,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   bool _paramsNeedFaceOrSkin(Map<String, double> params) {
     const faceAndSkinKeys = {
       'jaw',
+      'chin',
       'skin_smooth',
       'skin_whitening',
       'remove_acne',
