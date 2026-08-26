@@ -37,6 +37,7 @@ H é uma **crista no oval** da maçã até ao gônio, com peso a descer de forma
 | Params | `cheekbone`, `cheekbone_left`, `cheekbone_right`, `cheekbone_side` (0/1/2) |
 | Field | `tPhotoLeft` / `tPhotoRight`. Foto esquerda = malar MediaPipe direito; foto direita = malar MediaPipe esquerdo |
 | Pipeline | `applyJawWarp` → `applyChinWarp` → `applyCheekbonesWarp` (inspecção; C não assinada) |
+| Preview | Peso unitário cacheado; L/R só escala `dx`. Geometria H intacta |
 
 Isto não é slider composto: é o mesmo Field, amplitudes por lado.
 

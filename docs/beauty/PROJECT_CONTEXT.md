@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-08-26 (H crista oval confirmada no editor; docs alinhadas)
+Última actualização: 2026-08-26 (V Chin: sem ilha no 152; smoothstep na midline)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -36,15 +36,16 @@ A IA actua como **arquitecto** do Facial Warp V2.
 | Peça | Estado |
 |---|---|
 | **Jaw** | Aprovado. Vivo no produto (`jaw`). Encerrado. Não alterar. |
-| **Chin** | Aprovado. Vivo no produto (`chin`). Encerrado. Não alterar. |
+| **Chin** | Reaberto **só** para calibração bipolar Chin Length. Vivo (`chin`, «Tamanho do queixo»). Não assinado no editor. Relatório [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md). **Intacto** no V Chin. |
+| **V Chin** | Em inspecção. Key `v_chin` («V do queixo»). Field e UI no disco. Sem C. Relatório [`v2-v-chin.md`](./v2-v-chin.md). |
 | **Face Slim** | Arquivado. Lab A/B no disco. Sem C/D/E. Sem slider. Não promover. Não renomear para Cheekbones. |
-| **Roadmap de produto** | Aprovado. Próximo slider: Cheekbones. Face Rig congelado. |
-| **Cheekbones** | Em desenvolvimento. Hipótese H vigente (crista oval). Inspecção no editor. Sem C. Relatório [`v2-cheekbones-h-report.md`](./v2-cheekbones-h-report.md). |
+| **Roadmap de produto** | Aprovado. Adenda: V Chin em inspecção. Face Rig congelado. |
+| **Cheekbones** | Em desenvolvimento. Hipótese H vigente (crista oval). Inspecção no editor. Sem C. Relatório [`v2-cheekbones-h-report.md`](./v2-cheekbones-h-report.md). **Intacto** no V Chin. |
 
 Pipeline viva no produto:
 
 ```
-RGBA → applyJawWarp → applyChinWarp → applyCheekbonesWarp → Body → Skin → Color
+RGBA → applyJawWarp → applyChinWarp → applyVChinWarp → applyCheekbonesWarp → Body → Skin → Color
 ```
 
 Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada.
@@ -81,7 +82,8 @@ BackwardBilinearWarp
 - Receitas (blend ponderado de regiões / sliders compostos)
 - Slider composto
 - Alterar Jaw
-- Alterar Chin
+- Alterar Chin **fora** da calibração bipolar de Chin Length
+- Alterar Cheekbones H
 - Alterar o renderer / `DisplacementField` / `WarpRequest` / `WarpResult`
 - Segunda pipeline, wrapper, adapter, facade, flag V1↔V2
 - Promover Face Slim
@@ -116,13 +118,28 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Módulo: `warp/v2/jaw_field.dart`.
 - Papel de produto: estreitar mandíbula nos gônios. Não é o Jawline completo do Meitu (falta pescoço). Suficiente. Não reabrir.
 
-### Chin — encerrado
+### Chin — reaberto (Chin Length bipolar)
 
-- Key: `chin` (Queixo).
-- Só Δy (152 sobe). `dx = 0`. Gônios a zero neste Field.
+- Key: `chin` («Tamanho do queixo»). Não é V Chin nem Double Chin.
+- Só Δy. `dx = 0`. Crista no oval mento→172/397 (peso a descer até 0.08). Gônios **fora** da crista. 132/361 hard-zero. Hull/crista vigentes em [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md).
+- `t ∈ [-1, 1]`. Centro = identidade. Esquerda alonga (`dy > 0` no 152); direita encurta (`dy < 0`).
+- Amplitude: `0.07 × faceWidth`. σ⊥ `0.08 × faceWidth`.
+- Preview: slider não bloqueia; o peso unitário da crista cacheia-se (t só escala `dy`). Métricas de lab não correm no preview.
 - Módulo: `warp/v2/chin/`.
-- Papel de produto: Chin Length (encurtar). Não é V Chin nem Double Chin. Não reabrir.
-- Nota 2026-08-26: Leonardo quer alinhar ao Meitu (sangria residual no maxilar) **depois** de gravar H. Só com aprovação explícita. Não misturar com Cheekbones.
+- Não é Sprint A–E nova. Pendente assinatura visual no editor.
+- Fora deste passo: Double Chin, pescoço, Δx no gônio, alterar Jaw, Cheekbones, V Chin (key nova).
+
+### V Chin — em inspecção
+
+- Key: `v_chin` («V do queixo»). **Não** é `v_face`. Não é Chin Length nem V shape.
+- Só Δx para a midline. `dy = 0`. 152 ≈ 0 por simetria (função ímpar), sem ilha/entalhe. Gônios e 132/361 hard-zero.
+- Crista: **148 → 176 → 149 → 150 → 136** / **377 → 400 → 378 → 379 → 365**. Pesos 1.00 → 0.14. Para antes de 172/58.
+- Slider bipolar; Geral / Esquerda / Direita = lados da **foto**. `tPhotoLeft` / `tPhotoRight`.
+- Amplitude: `0.080 × faceWidth`. σ⊥ `0.11 × faceWidth`. Sem entalhe gaussiano no 152 (fazia o “brush” no mento). Rampa midline `0.11 × faceWidth`.
+- **Esquerda = V** (Meitu, para a midline); direita = quadrado.
+- Preview: cache do peso; métricas de lab fora do preview.
+- Documento: [`v2-v-chin.md`](./v2-v-chin.md). Sem C.
+- Módulo: `warp/v2/v_chin/`. Não importa Chin/Jaw/Cheekbones.
 
 ### Face Slim — arquivo
 
@@ -141,21 +158,25 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - 323 e 454 estão no oval: a pina da orelha trava **fora** da silhueta. Disco centrado nesses IDs fazia o “S” (tragus parado).
 - Primário de métrica direito: **352** (espelho de 123). **Não** 411 (espelho de 187).
 - Calibração: t ∈ [-1, 1] por lado; amplitude `0.022 × faceWidth`; σ⊥ `0.09 × faceWidth`; rampa `0.12 × faceWidth`; rampa orelha `0.035 × faceWidth` na pina. Pesos da crista 0.80→0.22.
+- Preview: mesmo padrão do Chin — slider não bloqueia; peso unitário cacheado (t / L / R só escala `dx`). Métricas de lab não correm no preview. Geometria H intacta.
 - Sprint A encerrada (A1 carimbo; A2 arco interrompido). Hull/losango e dumps B antigos **não** são o Field no disco.
-- **Próximo passo:** Sprint C quando Leonardo assinar as fotos lab. A seguir, Leonardo quer alinhar o **Chin** ao Meitu (sangria residual). Chin permanece encerrado até aprovação explícita para reabrir. Não “ajustar” Chin para compensar Cheekbones.
+- **Próximo passo (Cheekbones):** Sprint C quando Leonardo assinar as fotos lab. H **não** se altera no V Chin.
+- Chin Length e V Chin são sliders distintos. Não “ajustar” um para compensar o outro.
 
 ---
 
 ## Roadmap de produto (aprovado)
 
-Leonardo indicou (2026-08-26), **depois** de gravar H: alinhar o Chin ao Meitu (sangria residual no maxilar). Isso **reabre Chin** só com aprovação escrita. Até lá o Chin permanece encerrado. Não misturar com Cheekbones.
+**Adenda 2026-08-26 (V Chin).** Leonardo abriu o menu V Chin (`v_chin`, «V do queixo»): forma da ponta, Δx subtil, L/R da foto. Inspecção no editor. Documento [`v2-v-chin.md`](./v2-v-chin.md). Chin Length, Jaw e Cheekbones H intactos. Não é V shape. Não é C assinada.
+
+**Adenda 2026-08-26 (Chin Length bipolar).** Leonardo reabriu o Chin **só** para slider bipolar (alongar + encurtar, rótulo «Tamanho do queixo»). Calibração vigente: amplitude `0.07 × faceWidth`, crista no oval até 172/397 (cauda 0.08, só Δy; gônios fora da crista). Preview de rosto sem debounce (coalesce). Documento [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md). Cheekbones H intacto.
 
 Ordem seguinte **depois** de Cheekbones (C → D → E):
 
 1. Temple
 2. Hairline
 3. Width / Jaw Angle — baixa prioridade (o Jaw já cobre o essencial)
-4. V Chin
+4. V Chin — **em inspecção** (não C)
 5. V shape — só depois de Cheek + Jaw + Chin existirem como sliders
 6. Lift
 7. Double Chin — bloqueado (falta pescoço)
@@ -174,6 +195,14 @@ Face Rig (`v2-face-rig-migration-plan.md`): **congelado**. Não implementar.
 - [`FacialWarpV2-Development-Rules.md`](./FacialWarpV2-Development-Rules.md)
 - Relatório da sprint **aberta** do efeito actual
 - Roadmap / audit / spec só se este ficheiro os apontar como vigentes
+
+**Vigente para V Chin**
+
+- [`v2-v-chin.md`](./v2-v-chin.md) — **Field e UI no disco**; inspecção no editor (não é C)
+
+**Vigente para Chin Length bipolar**
+
+- [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md) — calibração do slider `chin` (não é sprint nova)
 
 **Vigentes para Cheekbones**
 

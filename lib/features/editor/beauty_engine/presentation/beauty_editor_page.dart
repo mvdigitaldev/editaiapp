@@ -384,9 +384,19 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       return;
     }
 
+    // Rosto: dispara já e coalesca se ainda estiver a processar (sensação Meitu).
+    // Corpo: mantém o debounce do perfil — o warp de corpo é mais pesado.
+    if (!_hasActiveBodyWarp(_params)) {
+      if (_processing) {
+        _previewQueued = true;
+        return;
+      }
+      unawaited(_processPreview());
+      return;
+    }
+
     final profile = _deviceProfile;
-    final debounceMs = profile?.sliderDebounceMs ??
-        (_hasActiveBodyWarp(_params) ? 120 : 100);
+    final debounceMs = profile?.sliderDebounceMs ?? 120;
 
     _debounceTimer = Timer(Duration(milliseconds: debounceMs), () {
       if (_processing) {
@@ -498,7 +508,11 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       return;
     }
 
-    setState(() => _processing = true);
+    if (_processing) {
+      _previewQueued = true;
+      return;
+    }
+    _processing = true;
 
     final stopwatch = Stopwatch()..start();
 
@@ -620,6 +634,10 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         (_params['cheekbone_right'] ?? 0).abs() > 0.001) {
       return 'cheekbone';
     }
+    if ((_params['v_chin_left'] ?? 0).abs() > 0.001 ||
+        (_params['v_chin_right'] ?? 0).abs() > 0.001) {
+      return 'v_chin';
+    }
     return FaceFilterPipeline.faceWarpParameterKeys.first;
   }
 
@@ -627,6 +645,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     const faceAndSkinKeys = {
       'jaw',
       'chin',
+      'v_chin',
       'cheekbone',
       'skin_smooth',
       'skin_whitening',
@@ -642,6 +661,20 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'iris_enhance',
     };
     for (final key in faceAndSkinKeys) {
+      if (key == 'chin') {
+        if ((params[key] ?? 0).abs() > 0) {
+          return true;
+        }
+        continue;
+      }
+      if (key == 'v_chin') {
+        if ((params[key] ?? 0).abs() > 0 ||
+            (params['v_chin_left'] ?? 0).abs() > 0 ||
+            (params['v_chin_right'] ?? 0).abs() > 0) {
+          return true;
+        }
+        continue;
+      }
       if (key == 'cheekbone') {
         if ((params[key] ?? 0).abs() > 0 ||
             (params['cheekbone_left'] ?? 0).abs() > 0 ||
@@ -1058,7 +1091,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
           else ...[
             BeautyAdjustmentsPanel(
               params: _params,
-              enabled: _source != null && !_processing,
+              enabled: _source != null,
               linkEyes: _linkEyes,
               bodyWarpPlan: _lastBodyWarpPlan,
               bodyOnly: widget.bodyOnly,

@@ -4,7 +4,9 @@ Complemento a [`v2-product-audit.md`](./v2-product-audit.md). Só produto: o que
 
 **Adenda 2026-08-26.** Cheekbones (hipótese H) está em inspecção no editor. Relatório [`v2-cheekbones-h-report.md`](./v2-cheekbones-h-report.md). O “próximo trabalho é Cheekbones” da secção 5 **cumpriu-se ao nível de Field/UI**; falta C formal.
 
-Leonardo quer, a seguir, alinhar o **Chin** ao Meitu (sangria residual no maxilar — já notada na secção 2). Chin permanece encerrado até aprovação explícita para reabrir. Não misturar com o Field Cheekbones.
+**Adenda 2026-08-26 (V Chin).** Leonardo abriu o menu V Chin: key `v_chin`, rótulo «V do queixo», forma da ponta (Δx), L/R da foto, amplitude `0.080 × faceWidth` (calibração a subir aos poucos; 0.018 mal se via). Documento [`v2-v-chin.md`](./v2-v-chin.md). Não é Chin Length. Não é V shape. Chin Length, Jaw e Cheekbones H intactos. Inspecção; C não assinada.
+
+**Adenda 2026-08-26 (Chin Length bipolar).** Leonardo reabriu o Chin **só** para alongar + encurtar no mesmo slider (centro = 0, rótulo «Tamanho do queixo»). Calibração vigente: amplitude `0.07 × faceWidth`, crista no oval mento→172/397 (cauda 0.08, só Δy — gônios fora da crista, não substitui Jaw). Documento [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md). V Chin e Double Chin continuam menus futuros (keys novas). Cheekbones H intacto.
 
 Pergunta a fechar: **o `JawField` actual já é o slider Jawline do Meitu?**
 

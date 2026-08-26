@@ -3,10 +3,10 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import '../displacement_field.dart';
-import 'chin_masks.dart';
+import 'v_chin_masks.dart';
 
-class ChinRegionStats {
-  const ChinRegionStats({
+class VChinRegionStats {
+  const VChinRegionStats({
     required this.pixelCount,
     required this.maxAbs,
     required this.meanAbs,
@@ -18,7 +18,7 @@ class ChinRegionStats {
   final double meanAbs;
   final double p95Abs;
 
-  static const zero = ChinRegionStats(
+  static const zero = VChinRegionStats(
     pixelCount: 0,
     maxAbs: 0,
     meanAbs: 0,
@@ -33,20 +33,24 @@ class ChinRegionStats {
       };
 }
 
-/// Métricas do Chin. Não altera [FieldMetrics] (contrato Jaw).
-class ChinFieldMetrics {
-  const ChinFieldMetrics({
+/// Métricas do V Chin. Não altera [FieldMetrics] (contrato Jaw).
+class VChinFieldMetrics {
+  const VChinFieldMetrics({
     required this.faceWidth,
-    required this.chinAmplitude,
+    required this.vChinAmplitude,
     required this.influenceMax,
     required this.outsideChinZoneP95,
     required this.minDetJ,
     required this.maxNeighborJump,
-    required this.primaryHandle,
-    required this.chinYBefore,
-    required this.chinYAfter,
-    required this.dyAtPrimary,
-    required this.dxAtPrimary,
+    required this.primaryLeft,
+    required this.primaryRight,
+    required this.chinWidthBefore,
+    required this.chinWidthAfter,
+    required this.dxAtPrimaryLeft,
+    required this.dxAtPrimaryRight,
+    required this.dyAtPrimaryLeft,
+    required this.dyAtPrimaryRight,
+    required this.absAtChinTip,
     required this.absAtGonionLeft,
     required this.absAtGonionRight,
     required this.eyes,
@@ -56,74 +60,88 @@ class ChinFieldMetrics {
     required this.faceCenter,
     required this.ears,
     required this.jawDomain,
+    required this.chinTip,
     required this.chinActive,
   });
 
   final double faceWidth;
-  final double chinAmplitude;
+  final double vChinAmplitude;
   final double influenceMax;
   final double outsideChinZoneP95;
   final double minDetJ;
   final double maxNeighborJump;
-  final int primaryHandle;
-  final double chinYBefore;
-  final double chinYAfter;
-  final double dyAtPrimary;
-  final double dxAtPrimary;
+  final int primaryLeft;
+  final int primaryRight;
+  final double chinWidthBefore;
+  final double chinWidthAfter;
+  final double dxAtPrimaryLeft;
+  final double dxAtPrimaryRight;
+  final double dyAtPrimaryLeft;
+  final double dyAtPrimaryRight;
+  final double absAtChinTip;
   final double absAtGonionLeft;
   final double absAtGonionRight;
-  final ChinRegionStats eyes;
-  final ChinRegionStats brows;
-  final ChinRegionStats nose;
-  final ChinRegionStats mouth;
-  final ChinRegionStats faceCenter;
-  final ChinRegionStats ears;
-  final ChinRegionStats jawDomain;
-  final ChinRegionStats chinActive;
+  final VChinRegionStats eyes;
+  final VChinRegionStats brows;
+  final VChinRegionStats nose;
+  final VChinRegionStats mouth;
+  final VChinRegionStats faceCenter;
+  final VChinRegionStats ears;
+  final VChinRegionStats jawDomain;
+  final VChinRegionStats chinTip;
+  final VChinRegionStats chinActive;
 
-  bool get chinShortens => chinYAfter < chinYBefore - 1e-6;
+  bool get vChinSharpens => chinWidthAfter < chinWidthBefore - 1e-6;
 
-  bool get chinLengthens => chinYAfter > chinYBefore + 1e-6;
+  bool get vChinSquares => chinWidthAfter > chinWidthBefore + 1e-6;
 
-  /// Preview/export: não percorre o campo. Só testes e lab A/B.
-  static const skipped = ChinFieldMetrics(
+  static const skipped = VChinFieldMetrics(
     faceWidth: 0,
-    chinAmplitude: 0,
+    vChinAmplitude: 0,
     influenceMax: 0,
     outsideChinZoneP95: 0,
     minDetJ: 1,
     maxNeighborJump: 0,
-    primaryHandle: 152,
-    chinYBefore: 0,
-    chinYAfter: 0,
-    dyAtPrimary: 0,
-    dxAtPrimary: 0,
+    primaryLeft: 148,
+    primaryRight: 377,
+    chinWidthBefore: 0,
+    chinWidthAfter: 0,
+    dxAtPrimaryLeft: 0,
+    dxAtPrimaryRight: 0,
+    dyAtPrimaryLeft: 0,
+    dyAtPrimaryRight: 0,
+    absAtChinTip: 0,
     absAtGonionLeft: 0,
     absAtGonionRight: 0,
-    eyes: ChinRegionStats.zero,
-    brows: ChinRegionStats.zero,
-    nose: ChinRegionStats.zero,
-    mouth: ChinRegionStats.zero,
-    faceCenter: ChinRegionStats.zero,
-    ears: ChinRegionStats.zero,
-    jawDomain: ChinRegionStats.zero,
-    chinActive: ChinRegionStats.zero,
+    eyes: VChinRegionStats.zero,
+    brows: VChinRegionStats.zero,
+    nose: VChinRegionStats.zero,
+    mouth: VChinRegionStats.zero,
+    faceCenter: VChinRegionStats.zero,
+    ears: VChinRegionStats.zero,
+    jawDomain: VChinRegionStats.zero,
+    chinTip: VChinRegionStats.zero,
+    chinActive: VChinRegionStats.zero,
   );
 
   Map<String, Object> toJson() => {
         'faceWidth': faceWidth,
-        'chinAmplitude': chinAmplitude,
+        'vChinAmplitude': vChinAmplitude,
         'influenceMax': influenceMax,
         'outsideChinZoneP95': outsideChinZoneP95,
         'minDetJ': minDetJ,
         'maxNeighborJump': maxNeighborJump,
-        'primaryHandle': primaryHandle,
-        'chinYBefore': chinYBefore,
-        'chinYAfter': chinYAfter,
-        'chinShortens': chinShortens,
-        'chinLengthens': chinLengthens,
-        'dyAtPrimary': dyAtPrimary,
-        'dxAtPrimary': dxAtPrimary,
+        'primaryLeft': primaryLeft,
+        'primaryRight': primaryRight,
+        'chinWidthBefore': chinWidthBefore,
+        'chinWidthAfter': chinWidthAfter,
+        'vChinSharpens': vChinSharpens,
+        'vChinSquares': vChinSquares,
+        'dxAtPrimaryLeft': dxAtPrimaryLeft,
+        'dxAtPrimaryRight': dxAtPrimaryRight,
+        'dyAtPrimaryLeft': dyAtPrimaryLeft,
+        'dyAtPrimaryRight': dyAtPrimaryRight,
+        'absAtChinTip': absAtChinTip,
         'absAtGonionLeft': absAtGonionLeft,
         'absAtGonionRight': absAtGonionRight,
         'eyes': eyes.toJson(),
@@ -133,16 +151,19 @@ class ChinFieldMetrics {
         'faceCenter': faceCenter.toJson(),
         'ears': ears.toJson(),
         'jawDomain': jawDomain.toJson(),
+        'chinTip': chinTip.toJson(),
         'chinActive': chinActive.toJson(),
       };
 
-  static ChinFieldMetrics compute({
+  static VChinFieldMetrics compute({
     required DisplacementField field,
-    required ChinMasks masks,
+    required VChinMasks masks,
     required List<Offset?> px,
     required double faceWidth,
-    required double chinAmplitude,
-    required int primaryHandle,
+    required double vChinAmplitude,
+    required int primaryLeft,
+    required int primaryRight,
+    required int chinTip,
     required int gonionLeft,
     required int gonionRight,
   }) {
@@ -182,23 +203,34 @@ class ChinFieldMetrics {
       minDet = 1;
     }
 
-    final primary = _point(px, primaryHandle);
-    final dyPrimary = primary == null ? 0.0 : _sampleDy(field, primary);
-    final dxPrimary = primary == null ? 0.0 : _sampleDx(field, primary);
-    final yBefore = primary?.dy ?? 0.0;
+    final left = _point(px, primaryLeft);
+    final right = _point(px, primaryRight);
+    final dxLeft = left == null ? 0.0 : _sampleDx(field, left);
+    final dxRight = right == null ? 0.0 : _sampleDx(field, right);
+    final dyLeft = left == null ? 0.0 : _sampleDy(field, left);
+    final dyRight = right == null ? 0.0 : _sampleDy(field, right);
+    final widthBefore =
+        (left == null || right == null) ? 0.0 : (right.dx - left.dx).abs();
+    final widthAfter = (left == null || right == null)
+        ? 0.0
+        : ((right.dx + dxRight) - (left.dx + dxLeft)).abs();
 
-    return ChinFieldMetrics(
+    return VChinFieldMetrics(
       faceWidth: faceWidth,
-      chinAmplitude: chinAmplitude,
+      vChinAmplitude: vChinAmplitude,
       influenceMax: influenceMax,
       outsideChinZoneP95: _p95(outside),
       minDetJ: minDet,
       maxNeighborJump: maxJump,
-      primaryHandle: primaryHandle,
-      chinYBefore: yBefore,
-      chinYAfter: yBefore + dyPrimary,
-      dyAtPrimary: dyPrimary,
-      dxAtPrimary: dxPrimary,
+      primaryLeft: primaryLeft,
+      primaryRight: primaryRight,
+      chinWidthBefore: widthBefore,
+      chinWidthAfter: widthAfter,
+      dxAtPrimaryLeft: dxLeft,
+      dxAtPrimaryRight: dxRight,
+      dyAtPrimaryLeft: dyLeft,
+      dyAtPrimaryRight: dyRight,
+      absAtChinTip: _absAt(field, px, chinTip),
       absAtGonionLeft: _absAt(field, px, gonionLeft),
       absAtGonionRight: _absAt(field, px, gonionRight),
       eyes: statsFor(field, masks.eyes),
@@ -208,11 +240,12 @@ class ChinFieldMetrics {
       faceCenter: statsFor(field, masks.faceCenter),
       ears: statsFor(field, masks.ears),
       jawDomain: statsFor(field, masks.jawDomain),
+      chinTip: statsFor(field, masks.chinTip),
       chinActive: statsFor(field, masks.chinActive),
     );
   }
 
-  static ChinRegionStats statsFor(DisplacementField field, Uint8List mask) {
+  static VChinRegionStats statsFor(DisplacementField field, Uint8List mask) {
     final values = <double>[];
     var sum = 0.0;
     var maxAbs = 0.0;
@@ -228,14 +261,9 @@ class ChinFieldMetrics {
       }
     }
     if (values.isEmpty) {
-      return const ChinRegionStats(
-        pixelCount: 0,
-        maxAbs: 0,
-        meanAbs: 0,
-        p95Abs: 0,
-      );
+      return VChinRegionStats.zero;
     }
-    return ChinRegionStats(
+    return VChinRegionStats(
       pixelCount: values.length,
       maxAbs: maxAbs,
       meanAbs: sum / values.length,

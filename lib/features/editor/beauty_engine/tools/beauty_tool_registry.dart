@@ -31,6 +31,12 @@ abstract final class BeautyToolRegistry {
       requiresFace: true,
     ),
     ToolDescriptor(
+      key: 'v_chin',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
+    ToolDescriptor(
       key: 'cheekbone',
       category: ToolCategory.face,
       pipelineStage: ToolPipelineStage.warp,

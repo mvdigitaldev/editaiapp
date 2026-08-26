@@ -56,6 +56,7 @@ import '../warp/v2/backward_bilinear_warp.dart' as v2;
 import '../warp/v2/chin/chin_field.dart';
 import '../warp/v2/jaw_field.dart';
 import '../warp/v2/cheekbones/cheekbones_field.dart';
+import '../warp/v2/v_chin/v_chin_field.dart';
 
 /// Orquestrador do Beauty Engine — ponto unico para a UI (sem Widget).
 class BeautyEngineController {
@@ -97,6 +98,9 @@ class BeautyEngineController {
 
   final RenderStageCache _renderStageCache = RenderStageCache();
   final MaskFactory maskFactory = MaskFactory();
+  final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
+  final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
+  final CheekbonesFieldRuntime _cheekbonesRuntime = CheekbonesFieldRuntime();
 
   /// Quality Score + gating da foto atual (Sprint 3).
   FaceQualityContext? lastQualityContext;
@@ -937,14 +941,16 @@ class BeautyEngineController {
     required FaceMeshResult? face,
     required Map<String, double> parameters,
   }) {
-    final t = (parameters['chin'] ?? 0).clamp(0.0, 1.0);
-    if (face == null || t <= 0 || sourceRgba.length != width * height * 4) {
+    final t = (parameters['chin'] ?? 0).clamp(-1.0, 1.0);
+    if (face == null || t.abs() <= 1e-6 || sourceRgba.length != width * height * 4) {
       return sourceRgba;
     }
     final built = ChinField.build(
       face: face,
       imageSize: Size(width.toDouble(), height.toDouble()),
       t: t,
+      computeMetrics: false,
+      runtime: _chinRuntime,
     );
     final warped = v2.BackwardBilinearWarp.apply(
       v2.WarpRequest(
@@ -955,6 +961,45 @@ class BeautyEngineController {
       ),
     );
     lastFaceWarpBackend = 'v2_chin';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
+  /// VChinField + remap bilinear. Independente de Jaw, Chin Length e Cheekbones.
+  /// t=0 não chama o renderer.
+  Uint8List applyVChinWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['v_chin'] ?? 0).clamp(-1.0, 1.0);
+    final tPhotoLeft = (parameters['v_chin_left'] ?? t).clamp(-1.0, 1.0);
+    final tPhotoRight = (parameters['v_chin_right'] ?? t).clamp(-1.0, 1.0);
+    if (face == null ||
+        (tPhotoLeft.abs() <= 1e-6 && tPhotoRight.abs() <= 1e-6) ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = VChinField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      tPhotoLeft: tPhotoLeft,
+      tPhotoRight: tPhotoRight,
+      computeMetrics: false,
+      runtime: _vChinRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_v_chin';
     lastFaceWarpField = null;
     return warped.rgba;
   }
@@ -983,13 +1028,8 @@ class BeautyEngineController {
       t: t,
       tPhotoLeft: tPhotoLeft,
       tPhotoRight: tPhotoRight,
-    );
-    debugPrint(
-      '[cheekbones] L=${tPhotoLeft.toStringAsFixed(2)} '
-      'R=${tPhotoRight.toStringAsFixed(2)} '
-      'max=${built.metrics.influenceMax.toStringAsFixed(1)}px '
-      'active=${built.masks.count(built.masks.cheekActive)} '
-      'amp=${built.metrics.cheekAmplitude.toStringAsFixed(1)}',
+      computeMetrics: false,
+      runtime: _cheekbonesRuntime,
     );
     final warped = v2.BackwardBilinearWarp.apply(
       v2.WarpRequest(
@@ -1072,8 +1112,15 @@ class BeautyEngineController {
       face: face,
       parameters: params,
     );
-    final cheekRgba = applyCheekbonesWarp(
+    final vChinRgba = applyVChinWarp(
       sourceRgba: faceRgba,
+      width: rgbaSource.width,
+      height: rgbaSource.height,
+      face: face,
+      parameters: params,
+    );
+    final cheekRgba = applyCheekbonesWarp(
+      sourceRgba: vChinRgba,
       width: rgbaSource.width,
       height: rgbaSource.height,
       face: face,

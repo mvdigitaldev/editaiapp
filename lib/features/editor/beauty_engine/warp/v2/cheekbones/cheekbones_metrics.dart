@@ -18,6 +18,13 @@ class CheekbonesRegionStats {
   final double meanAbs;
   final double p95Abs;
 
+  static const zero = CheekbonesRegionStats(
+    pixelCount: 0,
+    maxAbs: 0,
+    meanAbs: 0,
+    p95Abs: 0,
+  );
+
   Map<String, Object> toJson() => {
         'pixelCount': pixelCount,
         'maxAbs': maxAbs,
@@ -85,6 +92,36 @@ class CheekbonesFieldMetrics {
   final CheekbonesRegionStats cheekActive;
 
   bool get cheekbonesNarrows => malarWidthAfter < malarWidthBefore - 1e-6;
+
+  /// Preview/export: não percorre o campo. Só testes e lab A/B.
+  static const skipped = CheekbonesFieldMetrics(
+    faceWidth: 0,
+    cheekAmplitude: 0,
+    influenceMax: 0,
+    outsideCheekZoneP95: 0,
+    minDetJ: 1,
+    maxNeighborJump: 0,
+    primaryLeft: 123,
+    primaryRight: 352,
+    malarWidthBefore: 0,
+    malarWidthAfter: 0,
+    dxAtPrimaryLeft: 0,
+    dxAtPrimaryRight: 0,
+    dyAtPrimaryLeft: 0,
+    dyAtPrimaryRight: 0,
+    absAtGonionLeft: 0,
+    absAtGonionRight: 0,
+    absAtChinTip: 0,
+    eyes: CheekbonesRegionStats.zero,
+    brows: CheekbonesRegionStats.zero,
+    nose: CheekbonesRegionStats.zero,
+    mouth: CheekbonesRegionStats.zero,
+    faceCenter: CheekbonesRegionStats.zero,
+    ears: CheekbonesRegionStats.zero,
+    jawDomain: CheekbonesRegionStats.zero,
+    chinDomain: CheekbonesRegionStats.zero,
+    cheekActive: CheekbonesRegionStats.zero,
+  );
 
   Map<String, Object> toJson() => {
         'faceWidth': faceWidth,

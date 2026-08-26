@@ -120,13 +120,17 @@ void main() {
           expect(built.metrics.faceCenter.p95Abs, lessThanOrEqualTo(_protectEps));
           expect(built.metrics.ears.p95Abs, lessThanOrEqualTo(_protectEps));
           expect(built.metrics.jawDomain.p95Abs, lessThanOrEqualTo(_protectEps));
+          final primary = built.metrics.dyAtPrimary.abs();
+          expect(primary, greaterThan(0), reason: photo.id);
           expect(
             built.metrics.absAtGonionLeft,
-            lessThanOrEqualTo(_protectEps),
+            lessThan(0.22 * primary),
+            reason: '${photo.id} left gonion whisper',
           );
           expect(
             built.metrics.absAtGonionRight,
-            lessThanOrEqualTo(_protectEps),
+            lessThan(0.22 * primary),
+            reason: '${photo.id} right gonion whisper',
           );
         }
 

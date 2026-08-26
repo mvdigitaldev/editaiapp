@@ -24,6 +24,35 @@ class CheekbonesFieldBuild {
   final CheekbonesMalarPad? rightPad;
 }
 
+/// Cache do peso unitário (independente de t). O slider só escala `dx` por lado.
+class CheekbonesFieldRuntime {
+  FaceMeshResult? face;
+  int width = 0;
+  int height = 0;
+  double faceWidth = 1;
+  double ampScale = 1;
+  Float32List? unitWeight;
+  Int8List? sign;
+  Uint8List? useLeft;
+  List<int>? active;
+  DisplacementField? field;
+  CheekbonesMasks? masks;
+  CheekbonesMalarPad? leftPad;
+  CheekbonesMalarPad? rightPad;
+
+  bool matches(FaceMeshResult face, int width, int height) {
+    return identical(this.face, face) &&
+        this.width == width &&
+        this.height == height &&
+        unitWeight != null &&
+        sign != null &&
+        useLeft != null &&
+        active != null &&
+        field != null &&
+        masks != null;
+  }
+}
+
 /// Constrói o campo cheekbones (só Δx, para a midline). Sem RGBA, sem render.
 ///
 /// Hipótese H: crista no oval (234→93→132→58). Não é MLS. Não é A1/A2.
@@ -91,11 +120,53 @@ abstract final class CheekbonesField {
     double t = 0,
     double? tPhotoLeft,
     double? tPhotoRight,
+    bool computeMetrics = true,
+    CheekbonesFieldRuntime? runtime,
   }) {
     final width = imageSize.width.round();
     final height = imageSize.height.round();
     if (width <= 0 || height <= 0) {
       throw ArgumentError('cheekbones_field_invalid_size: ${width}x$height');
+    }
+
+    final signedLeft = (tPhotoLeft ?? t).clamp(-1.0, 1.0);
+    final signedRight = (tPhotoRight ?? t).clamp(-1.0, 1.0);
+
+    if (runtime != null && runtime.matches(face, width, height)) {
+      final amplitudeMpLeft = signedRight * runtime.ampScale;
+      final amplitudeMpRight = signedLeft * runtime.ampScale;
+      _scaleActive(
+        field: runtime.field!,
+        unitWeight: runtime.unitWeight!,
+        sign: runtime.sign!,
+        useLeft: runtime.useLeft!,
+        active: runtime.active!,
+        amplitudeMpLeft: amplitudeMpLeft,
+        amplitudeMpRight: amplitudeMpRight,
+      );
+      final amplitude =
+          math.max(amplitudeMpLeft.abs(), amplitudeMpRight.abs());
+      final metrics = computeMetrics
+          ? CheekbonesFieldMetrics.compute(
+              field: runtime.field!,
+              masks: runtime.masks!,
+              px: CheekbonesMasks.landmarkPixels(face, imageSize),
+              faceWidth: runtime.faceWidth,
+              cheekAmplitude: amplitude,
+              primaryLeft: primaryLeft,
+              primaryRight: primaryRight,
+              gonionLeft: gonionLeft,
+              gonionRight: gonionRight,
+              chinTip: chinTip,
+            )
+          : CheekbonesFieldMetrics.skipped;
+      return CheekbonesFieldBuild(
+        field: runtime.field!,
+        masks: runtime.masks!,
+        metrics: metrics,
+        leftPad: runtime.leftPad,
+        rightPad: runtime.rightPad,
+      );
     }
 
     final px = CheekbonesMasks.landmarkPixels(face, imageSize);
@@ -128,41 +199,64 @@ abstract final class CheekbonesField {
       leftPad: leftPad,
       rightPad: rightPad,
     );
-    final signedLeft = (tPhotoLeft ?? t).clamp(-1.0, 1.0);
-    final signedRight = (tPhotoRight ?? t).clamp(-1.0, 1.0);
     final ampScale = amplitudeFaceWidth * geometry.faceWidth;
     // Foto esquerda = malar MediaPipe direito; foto direita = malar MediaPipe esquerdo.
     final amplitudeMpLeft = signedRight * ampScale;
     final amplitudeMpRight = signedLeft * ampScale;
     final amplitude = math.max(amplitudeMpLeft.abs(), amplitudeMpRight.abs());
-
+    final packed = _packUnitWeights(
+      width: width,
+      height: height,
+      masks: masks,
+      leftPad: leftPad,
+      rightPad: rightPad,
+      midlineX: geometry.midlineX,
+      faceWidth: geometry.faceWidth,
+    );
     final field = DisplacementField.zeros(width: width, height: height);
-    if (amplitude > 1e-6 && masks.count(masks.cheekActive) > 0) {
-      _applyDisplacement(
+    if (amplitude > 1e-6) {
+      _scaleActive(
         field: field,
-        masks: masks,
-        leftPad: leftPad,
-        rightPad: rightPad,
-        midlineX: geometry.midlineX,
+        unitWeight: packed.unitWeight,
+        sign: packed.sign,
+        useLeft: packed.useLeft,
+        active: packed.active,
         amplitudeMpLeft: amplitudeMpLeft,
         amplitudeMpRight: amplitudeMpRight,
-        falloff: math.max(12.0, falloffFaceWidth * geometry.faceWidth),
-        earFalloff: math.max(6.0, earFalloffFaceWidth * geometry.faceWidth),
       );
     }
 
-    final metrics = CheekbonesFieldMetrics.compute(
-      field: field,
-      masks: masks,
-      px: px,
-      faceWidth: geometry.faceWidth,
-      cheekAmplitude: amplitude.abs(),
-      primaryLeft: primaryLeft,
-      primaryRight: primaryRight,
-      gonionLeft: gonionLeft,
-      gonionRight: gonionRight,
-      chinTip: chinTip,
-    );
+    if (runtime != null) {
+      runtime
+        ..face = face
+        ..width = width
+        ..height = height
+        ..faceWidth = geometry.faceWidth
+        ..ampScale = ampScale
+        ..unitWeight = packed.unitWeight
+        ..sign = packed.sign
+        ..useLeft = packed.useLeft
+        ..active = packed.active
+        ..field = field
+        ..masks = masks
+        ..leftPad = leftPad
+        ..rightPad = rightPad;
+    }
+
+    final metrics = computeMetrics
+        ? CheekbonesFieldMetrics.compute(
+            field: field,
+            masks: masks,
+            px: px,
+            faceWidth: geometry.faceWidth,
+            cheekAmplitude: amplitude.abs(),
+            primaryLeft: primaryLeft,
+            primaryRight: primaryRight,
+            gonionLeft: gonionLeft,
+            gonionRight: gonionRight,
+            chinTip: chinTip,
+          )
+        : CheekbonesFieldMetrics.skipped;
     return CheekbonesFieldBuild(
       field: field,
       masks: masks,
@@ -207,20 +301,24 @@ abstract final class CheekbonesField {
     );
   }
 
-  static void _applyDisplacement({
-    required DisplacementField field,
+  static ({
+    Float32List unitWeight,
+    Int8List sign,
+    Uint8List useLeft,
+    List<int> active,
+  }) _packUnitWeights({
+    required int width,
+    required int height,
     required CheekbonesMasks masks,
     required CheekbonesMalarPad? leftPad,
     required CheekbonesMalarPad? rightPad,
     required double midlineX,
-    required double amplitudeMpLeft,
-    required double amplitudeMpRight,
-    required double falloff,
-    required double earFalloff,
+    required double faceWidth,
   }) {
-    final inactive = Uint8List(field.pixelCount);
-    final earSeed = Uint8List(field.pixelCount);
-    for (var i = 0; i < inactive.length; i++) {
+    final pixelCount = width * height;
+    final inactive = Uint8List(pixelCount);
+    final earSeed = Uint8List(pixelCount);
+    for (var i = 0; i < pixelCount; i++) {
       if (masks.cheekActive[i] == 0 && masks.ears[i] == 0) {
         inactive[i] = 255;
       }
@@ -228,39 +326,59 @@ abstract final class CheekbonesField {
         earSeed[i] = 255;
       }
     }
-    final dist = _distanceToProtected(
-      inactive,
-      field.width,
-      field.height,
-    );
-    final distEar = _distanceToProtected(
-      earSeed,
-      field.width,
-      field.height,
-    );
-    for (var i = 0; i < field.pixelCount; i++) {
+    final dist = _distanceToProtected(inactive, width, height);
+    final distEar = _distanceToProtected(earSeed, width, height);
+    final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
+    final earFalloff = math.max(6.0, earFalloffFaceWidth * faceWidth);
+    final active = <int>[];
+    final weights = <double>[];
+    final signs = <int>[];
+    final leftFlags = <int>[];
+    for (var i = 0; i < pixelCount; i++) {
       if (masks.cheekActive[i] == 0 || masks.ears[i] != 0) {
         continue;
       }
-      final x = (i % field.width) + 0.5;
-      final y = (i ~/ field.width) + 0.5;
+      final x = (i % width) + 0.5;
+      final y = (i ~/ width) + 0.5;
       final wL = leftPad?.weight(x, y) ?? 0;
       final wR = rightPad?.weight(x, y) ?? 0;
       final useLeft = wL >= wR;
       final pad = useLeft ? wL : wR;
-      final amp = useLeft ? amplitudeMpLeft : amplitudeMpRight;
-      final boundary = math.min(1.0, dist[i] / falloff);
-      final earBoundary = math.min(1.0, distEar[i] / earFalloff);
-      final weight = pad * boundary * earBoundary;
-      if (weight <= 1e-6 || amp.abs() <= 1e-6) {
-        continue;
-      }
       final toward = midlineX - x;
       if (toward.abs() < 1e-6) {
         continue;
       }
-      field.dx[i] = toward.sign * amp * weight;
-      field.dy[i] = 0;
+      final boundary = math.min(1.0, dist[i] / falloff);
+      final earBoundary = math.min(1.0, distEar[i] / earFalloff);
+      final weight = pad * boundary * earBoundary;
+      if (weight <= 1e-6) {
+        continue;
+      }
+      active.add(i);
+      weights.add(weight);
+      signs.add(toward.sign.toInt());
+      leftFlags.add(useLeft ? 1 : 0);
+    }
+    return (
+      unitWeight: Float32List.fromList(weights),
+      sign: Int8List.fromList(signs),
+      useLeft: Uint8List.fromList(leftFlags),
+      active: active,
+    );
+  }
+
+  static void _scaleActive({
+    required DisplacementField field,
+    required Float32List unitWeight,
+    required Int8List sign,
+    required Uint8List useLeft,
+    required List<int> active,
+    required double amplitudeMpLeft,
+    required double amplitudeMpRight,
+  }) {
+    for (var k = 0; k < active.length; k++) {
+      final amp = useLeft[k] != 0 ? amplitudeMpLeft : amplitudeMpRight;
+      field.dx[active[k]] = sign[k] * amp * unitWeight[k];
     }
   }
 

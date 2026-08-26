@@ -27,7 +27,8 @@ void main() {
     );
 
     expect(find.text('Mandíbula'), findsWidgets);
-    expect(find.text('Queixo'), findsWidgets);
+    expect(find.text('Tamanho do queixo'), findsWidgets);
+    expect(find.text('V do queixo'), findsWidgets);
 
     await tester.drag(find.byType(Slider), const Offset(80, 0));
     await tester.pumpAndSettle();
@@ -43,6 +44,10 @@ void main() {
     expect(params.containsKey('cheekbone'), isTrue);
     expect(params.containsKey('cheekbone_left'), isTrue);
     expect(params.containsKey('cheekbone_right'), isTrue);
+    expect(params.containsKey('v_chin'), isTrue);
+    expect(params.containsKey('v_chin_left'), isTrue);
+    expect(params.containsKey('v_chin_right'), isTrue);
+    expect(params.containsKey('v_chin_side'), isTrue);
     expect(params.containsKey('face_slim'), isFalse);
     expect(params.containsKey('waist_slim'), isTrue);
     expect(params.containsKey('skin_smooth'), isTrue);

@@ -102,6 +102,9 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       'cheekbone_left': 0,
       'cheekbone_right': 0,
       'cheekbone_side': 0,
+      'v_chin_left': 0,
+      'v_chin_right': 0,
+      'v_chin_side': 0,
     };
     return params;
   }
@@ -167,9 +170,9 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final activeKey = _activeParamKey;
-    final isCheekbone = activeKey == 'cheekbone';
-    final activeValue = isCheekbone
-        ? _cheekboneSliderValue()
+    final isSideWarp = activeKey == 'cheekbone' || activeKey == 'v_chin';
+    final activeValue = isSideWarp
+        ? _sideSliderValue(activeKey)
         : (widget.params[activeKey] ?? 0);
     final isBody = _category == BeautyAdjustmentCategory.corpo;
     final sliderRange = _sliderRangeForKey(activeKey);
@@ -212,10 +215,12 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                 divisions: sliderRange.divisions,
                 bipolar: sliderRange.bipolar,
                 enabled: paramEnabled,
-                trailing: isCheekbone ? _cheekboneSideMenu(paramEnabled) : null,
+                trailing: isSideWarp
+                    ? _sideMenu(activeKey, paramEnabled)
+                    : null,
                 onChanged: paramEnabled
-                    ? (value) => isCheekbone
-                        ? _onCheekboneSliderChanged(value)
+                    ? (value) => isSideWarp
+                        ? _onSideSliderChanged(activeKey, value)
                         : widget.onParamChanged(activeKey, value)
                     : null,
               ),
@@ -297,52 +302,49 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
   }
 
   /// 0 = Geral, 1 = esquerda da foto, 2 = direita da foto (convenção Meitu).
-  int get _cheekboneSide => (widget.params['cheekbone_side'] ?? 0).round();
+  int _sideFor(String key) => (widget.params['${key}_side'] ?? 0).round();
 
-  double _cheekboneSliderValue() {
-    switch (_cheekboneSide) {
+  double _sideSliderValue(String key) {
+    switch (_sideFor(key)) {
       case 1:
-        return widget.params['cheekbone_left'] ??
-            widget.params['cheekbone'] ??
-            0;
+        return widget.params['${key}_left'] ?? widget.params[key] ?? 0;
       case 2:
-        return widget.params['cheekbone_right'] ??
-            widget.params['cheekbone'] ??
-            0;
+        return widget.params['${key}_right'] ?? widget.params[key] ?? 0;
       default:
-        return widget.params['cheekbone'] ?? 0;
+        return widget.params[key] ?? 0;
     }
   }
 
-  void _onCheekboneSliderChanged(double value) {
-    switch (_cheekboneSide) {
+  void _onSideSliderChanged(String key, double value) {
+    switch (_sideFor(key)) {
       case 1:
-        widget.onParamChanged('cheekbone_left', value);
+        widget.onParamChanged('${key}_left', value);
         return;
       case 2:
-        widget.onParamChanged('cheekbone_right', value);
+        widget.onParamChanged('${key}_right', value);
         return;
       default:
-        widget.onParamChanged('cheekbone', value);
-        widget.onParamChanged('cheekbone_left', value);
-        widget.onParamChanged('cheekbone_right', value);
+        widget.onParamChanged(key, value);
+        widget.onParamChanged('${key}_left', value);
+        widget.onParamChanged('${key}_right', value);
     }
   }
 
-  Widget _cheekboneSideMenu(bool enabled) {
+  Widget _sideMenu(String key, bool enabled) {
     const items = <({int side, String label})>[
       (side: 0, label: BeautyEngineLabels.cheekboneSideBoth),
       (side: 1, label: BeautyEngineLabels.cheekboneSideLeft),
       (side: 2, label: BeautyEngineLabels.cheekboneSideRight),
     ];
     final current = items.firstWhere(
-      (item) => item.side == _cheekboneSide,
+      (item) => item.side == _sideFor(key),
       orElse: () => items.first,
     );
     return PopupMenuButton<int>(
       enabled: enabled,
       tooltip: current.label,
-      onSelected: (side) => widget.onParamChanged('cheekbone_side', side.toDouble()),
+      onSelected: (side) =>
+          widget.onParamChanged('${key}_side', side.toDouble()),
       itemBuilder: (context) => [
         for (final item in items)
           PopupMenuItem<int>(
@@ -379,8 +381,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
   }
 
   _SliderRange _sliderRangeForKey(String key) {
-    if (key == 'cheekbone') {
-      return const _SliderRange(min: -1, max: 1, divisions: 200, bipolar: true);
+    if (key == 'cheekbone' || key == 'chin' || key == 'v_chin') {
+      return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {
       return const _SliderRange(min: -0.5, max: 0.5, divisions: 200);

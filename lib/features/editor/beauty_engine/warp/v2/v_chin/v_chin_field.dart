@@ -5,148 +5,160 @@ import 'dart:ui';
 import '../../../models/face_mesh_result.dart';
 import '../displacement_field.dart';
 import '../region_catalog.dart';
-import 'chin_masks.dart';
-import 'chin_metrics.dart';
+import 'v_chin_masks.dart';
+import 'v_chin_metrics.dart';
 
-class ChinFieldBuild {
-  const ChinFieldBuild({
+class VChinFieldBuild {
+  const VChinFieldBuild({
     required this.field,
     required this.masks,
     required this.metrics,
   });
 
   final DisplacementField field;
-  final ChinMasks masks;
-  final ChinFieldMetrics metrics;
+  final VChinMasks masks;
+  final VChinFieldMetrics metrics;
 }
 
-/// Cache do peso unitário (independente de t). O slider só escala `dy`.
-class ChinFieldRuntime {
+/// Cache do peso unitário (independente de t). O slider só escala `dx` por lado.
+class VChinFieldRuntime {
   FaceMeshResult? face;
   int width = 0;
   int height = 0;
   double faceWidth = 1;
+  double ampScale = 1;
   Float32List? unitWeight;
+  Int8List? sign;
+  Uint8List? useLeft;
   List<int>? active;
   DisplacementField? field;
-  ChinMasks? masks;
+  VChinMasks? masks;
 
   bool matches(FaceMeshResult face, int width, int height) {
     return identical(this.face, face) &&
         this.width == width &&
         this.height == height &&
         unitWeight != null &&
+        sign != null &&
+        useLeft != null &&
         active != null &&
         field != null &&
         masks != null;
   }
 }
 
-/// Constrói o campo chin (só Δy). Sem RGBA, sem render, sem produto.
+/// Constrói o campo V Chin (só Δx, para a midline). Sem RGBA, sem render.
 ///
-/// `t ∈ [-1, 1]`: t>0 encurta (152 sobe); t<0 alonga (152 desce); t=0 identidade.
-/// Crista no oval do mento até perto da mandíbula (172/397). Sem max(gaussianas).
-abstract final class ChinField {
-  ChinField._();
+/// Crista 148→176→149 / 377→400→378. Não importa Chin/Jaw/Cheekbones.
+abstract final class VChinField {
+  VChinField._();
 
-  /// Handle principal de métrica (MediaPipe mento).
-  static const primaryHandles = {152};
+  static const primaryLeft = 148;
+  static const primaryRight = 377;
+  static const chinTip = 152;
 
-  /// Oval esquerdo: mento → perto da mandíbula. Para em 172, não no gônio 58.
-  static const curveLeft = [152, 148, 176, 149, 150, 136, 172];
+  static const curveLeft = [148, 176, 149, 150, 136];
+  static const curveRight = [377, 400, 378, 379, 365];
+  static const curveWeights = [1.00, 0.78, 0.55, 0.32, 0.14];
 
-  /// Oval direito: mento → perto da mandíbula. Para em 397, não no gônio 288.
-  static const curveRight = [152, 377, 400, 378, 379, 365, 397];
-
-  /// Pesos na crista (mesmo comprimento que [curveLeft] / [curveRight]).
-  static const curveWeights = [1.00, 0.90, 0.78, 0.60, 0.40, 0.22, 0.08];
-
-  /// Hull activo: curva do queixo até 172/397. Sem 58/288.
   static const hullLandmarks = {
-    152, 148, 176, 149, 150, 136, 172,
-    377, 400, 378, 379, 365, 397,
+    152, 148, 176, 149, 150, 136, 377, 400, 378, 379, 365,
   };
+  static const chinTipLandmarks = {152};
+  static const jawDomainLandmarks = {58, 288, 132, 361};
 
-  /// Entalhe oval (acima do gônio) — hard-zero. Não é o slider Jaw.
-  static const jawNotchLandmarks = {132, 361};
-
-  static Set<int> get jawDomainLandmarks => jawNotchLandmarks;
-
-  static const amplitudeFaceWidth = 0.07;
+  static const amplitudeFaceWidth = 0.080;
   static const falloffFaceWidth = 0.12;
-  static const hullPadFaceWidth = 0.07;
-  static const sigmaAcrossFaceWidth = 0.08;
+  static const hullPadFaceWidth = 0.06;
+  static const sigmaAcrossFaceWidth = 0.11;
+  static const midBlendFaceWidth = 0.11;
 
-  static ChinFieldBuild build({
+  static VChinFieldBuild build({
     required FaceMeshResult face,
     required Size imageSize,
-    required double t,
+    double t = 0,
+    double? tPhotoLeft,
+    double? tPhotoRight,
     bool computeMetrics = true,
-    ChinFieldRuntime? runtime,
+    VChinFieldRuntime? runtime,
   }) {
     final width = imageSize.width.round();
     final height = imageSize.height.round();
     if (width <= 0 || height <= 0) {
-      throw ArgumentError('chin_field_invalid_size: ${width}x$height');
+      throw ArgumentError('v_chin_field_invalid_size: ${width}x$height');
     }
 
-    final intensity = t.clamp(-1.0, 1.0);
+    final signedLeft = (tPhotoLeft ?? t).clamp(-1.0, 1.0);
+    final signedRight = (tPhotoRight ?? t).clamp(-1.0, 1.0);
 
     if (runtime != null && runtime.matches(face, width, height)) {
-      final amplitude =
-          intensity.abs() * amplitudeFaceWidth * runtime.faceWidth;
-      final signedAmplitude = -intensity.sign * amplitude;
+      final amplitudeMpLeft = -signedRight * runtime.ampScale;
+      final amplitudeMpRight = -signedLeft * runtime.ampScale;
       _scaleActive(
         field: runtime.field!,
         unitWeight: runtime.unitWeight!,
+        sign: runtime.sign!,
+        useLeft: runtime.useLeft!,
         active: runtime.active!,
-        signedAmplitude: signedAmplitude,
+        amplitudeMpLeft: amplitudeMpLeft,
+        amplitudeMpRight: amplitudeMpRight,
       );
+      final amplitude =
+          math.max(amplitudeMpLeft.abs(), amplitudeMpRight.abs());
       final metrics = computeMetrics
-          ? ChinFieldMetrics.compute(
+          ? VChinFieldMetrics.compute(
               field: runtime.field!,
               masks: runtime.masks!,
-              px: ChinMasks.landmarkPixels(face, imageSize),
+              px: VChinMasks.landmarkPixels(face, imageSize),
               faceWidth: runtime.faceWidth,
-              chinAmplitude: amplitude,
-              primaryHandle:
-                  primaryHandles.isEmpty ? 152 : primaryHandles.first,
+              vChinAmplitude: amplitude,
+              primaryLeft: primaryLeft,
+              primaryRight: primaryRight,
+              chinTip: chinTip,
               gonionLeft: V2RegionCatalog.gonionLeft,
               gonionRight: V2RegionCatalog.gonionRight,
             )
-          : ChinFieldMetrics.skipped;
-      return ChinFieldBuild(
+          : VChinFieldMetrics.skipped;
+      return VChinFieldBuild(
         field: runtime.field!,
         masks: runtime.masks!,
         metrics: metrics,
       );
     }
 
-    final px = ChinMasks.landmarkPixels(face, imageSize);
-    final masks = ChinMasks.build(
+    final px = VChinMasks.landmarkPixels(face, imageSize);
+    final geometry = _geometry(px);
+    final masks = VChinMasks.build(
       face: face,
       imageSize: imageSize,
       hullLandmarks: hullLandmarks,
       jawDomainLandmarks: jawDomainLandmarks,
+      chinTipLandmarks: chinTipLandmarks,
       hullPadFaceWidth: hullPadFaceWidth,
     );
-    final faceWidth = _faceWidth(px);
-    final amplitude = intensity.abs() * amplitudeFaceWidth * faceWidth;
-    final signedAmplitude = -intensity.sign * amplitude;
+    final ampScale = amplitudeFaceWidth * geometry.faceWidth;
+    // Meitu: esquerda do slider (t<0) = V para dentro. Foto esquerda = cadeia MP direita.
+    final amplitudeMpLeft = -signedRight * ampScale;
+    final amplitudeMpRight = -signedLeft * ampScale;
+    final amplitude = math.max(amplitudeMpLeft.abs(), amplitudeMpRight.abs());
     final packed = _packUnitWeights(
       width: width,
       height: height,
       masks: masks,
       px: px,
-      faceWidth: faceWidth,
+      midlineX: geometry.midlineX,
+      faceWidth: geometry.faceWidth,
     );
     final field = DisplacementField.zeros(width: width, height: height);
-    if (intensity.abs() > 1e-6 && amplitude > 0) {
+    if (amplitude > 1e-6) {
       _scaleActive(
         field: field,
-        unitWeight: packed.weights,
+        unitWeight: packed.unitWeight,
+        sign: packed.sign,
+        useLeft: packed.useLeft,
         active: packed.active,
-        signedAmplitude: signedAmplitude,
+        amplitudeMpLeft: amplitudeMpLeft,
+        amplitudeMpRight: amplitudeMpRight,
       );
     }
 
@@ -155,30 +167,34 @@ abstract final class ChinField {
         ..face = face
         ..width = width
         ..height = height
-        ..faceWidth = faceWidth
-        ..unitWeight = packed.weights
+        ..faceWidth = geometry.faceWidth
+        ..ampScale = ampScale
+        ..unitWeight = packed.unitWeight
+        ..sign = packed.sign
+        ..useLeft = packed.useLeft
         ..active = packed.active
         ..field = field
         ..masks = masks;
     }
 
-    final primary = primaryHandles.isEmpty ? 152 : primaryHandles.first;
     final metrics = computeMetrics
-        ? ChinFieldMetrics.compute(
+        ? VChinFieldMetrics.compute(
             field: field,
             masks: masks,
             px: px,
-            faceWidth: faceWidth,
-            chinAmplitude: amplitude,
-            primaryHandle: primary,
+            faceWidth: geometry.faceWidth,
+            vChinAmplitude: amplitude.abs(),
+            primaryLeft: primaryLeft,
+            primaryRight: primaryRight,
+            chinTip: chinTip,
             gonionLeft: V2RegionCatalog.gonionLeft,
             gonionRight: V2RegionCatalog.gonionRight,
           )
-        : ChinFieldMetrics.skipped;
-    return ChinFieldBuild(field: field, masks: masks, metrics: metrics);
+        : VChinFieldMetrics.skipped;
+    return VChinFieldBuild(field: field, masks: masks, metrics: metrics);
   }
 
-  static double _faceWidth(List<Offset?> px) {
+  static ({double faceWidth, double midlineX}) _geometry(List<Offset?> px) {
     final oval = <Offset>[];
     for (final id in V2RegionCatalog.faceOval) {
       final p = id >= 0 && id < px.length ? px[id] : null;
@@ -187,54 +203,75 @@ abstract final class ChinField {
       }
     }
     if (oval.isEmpty) {
-      return 1.0;
+      return (faceWidth: 1.0, midlineX: 0);
     }
     var minX = oval.first.dx;
     var maxX = oval.first.dx;
+    var sumX = 0.0;
     for (final p in oval) {
       minX = math.min(minX, p.dx);
       maxX = math.max(maxX, p.dx);
-    }
-    return math.max(maxX - minX, 1.0);
-  }
-
-  static ({Float32List weights, List<int> active}) _packUnitWeights({
-    required int width,
-    required int height,
-    required ChinMasks masks,
-    required List<Offset?> px,
-    required double faceWidth,
-  }) {
-    final dist = _distanceToInactive(masks.chinActive, width, height);
-    final left = _curveRidge(px, curveLeft);
-    final right = _curveRidge(px, curveRight);
-    final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
-    final sigmaAcross = math.max(8.0, sigmaAcrossFaceWidth * faceWidth);
-    final active = <int>[];
-    final weights = <double>[];
-    if (left.length >= 2 || right.length >= 2) {
-      final pixelCount = width * height;
-      for (var i = 0; i < pixelCount; i++) {
-        if (masks.chinActive[i] == 0) {
-          continue;
-        }
-        final x = (i % width) + 0.5;
-        final y = (i ~/ width) + 0.5;
-        final boundary = math.min(1.0, dist[i] / falloff);
-        final ridge = math.max(
-          _ridgeWeight(left, x, y, sigmaAcross),
-          _ridgeWeight(right, x, y, sigmaAcross),
-        );
-        final weight = boundary * ridge;
-        if (weight <= 1e-6) {
-          continue;
-        }
-        active.add(i);
-        weights.add(weight);
-      }
+      sumX += p.dx;
     }
     return (
-      weights: Float32List.fromList(weights),
+      faceWidth: math.max(maxX - minX, 1.0),
+      midlineX: sumX / oval.length,
+    );
+  }
+
+  static ({
+    Float32List unitWeight,
+    Int8List sign,
+    Uint8List useLeft,
+    List<int> active,
+  }) _packUnitWeights({
+    required int width,
+    required int height,
+    required VChinMasks masks,
+    required List<Offset?> px,
+    required double midlineX,
+    required double faceWidth,
+  }) {
+    final left = _curveRidge(px, curveLeft);
+    final right = _curveRidge(px, curveRight);
+    final sigmaAcross = math.max(6.0, sigmaAcrossFaceWidth * faceWidth);
+    final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
+    final midBlend = math.max(8.0, midBlendFaceWidth * faceWidth);
+    final dist = _distanceToInactive(masks.chinActive, width, height);
+    final pixelCount = width * height;
+    final active = <int>[];
+    final weights = <double>[];
+    final signs = <int>[];
+    final leftFlags = <int>[];
+    for (var i = 0; i < pixelCount; i++) {
+      if (masks.chinActive[i] == 0) {
+        continue;
+      }
+      final x = (i % width) + 0.5;
+      final y = (i ~/ width) + 0.5;
+      final wL = _ridgeWeight(left, x, y, sigmaAcross);
+      final wR = _ridgeWeight(right, x, y, sigmaAcross);
+      final mpLeft = wL >= wR;
+      final pad = mpLeft ? wL : wR;
+      final toward = midlineX - x;
+      if (toward.abs() < 1e-6) {
+        continue;
+      }
+      final boundary = math.min(1.0, dist[i] / falloff);
+      final midGate = math.min(1.0, toward.abs() / midBlend);
+      final weight = pad * boundary * midGate;
+      if (weight <= 1e-6) {
+        continue;
+      }
+      active.add(i);
+      weights.add(weight);
+      signs.add(toward.sign.toInt());
+      leftFlags.add(mpLeft ? 1 : 0);
+    }
+    return (
+      unitWeight: Float32List.fromList(weights),
+      sign: Int8List.fromList(signs),
+      useLeft: Uint8List.fromList(leftFlags),
       active: active,
     );
   }
@@ -242,15 +279,20 @@ abstract final class ChinField {
   static void _scaleActive({
     required DisplacementField field,
     required Float32List unitWeight,
+    required Int8List sign,
+    required Uint8List useLeft,
     required List<int> active,
-    required double signedAmplitude,
+    required double amplitudeMpLeft,
+    required double amplitudeMpRight,
   }) {
     for (var k = 0; k < active.length; k++) {
-      field.dy[active[k]] = signedAmplitude * unitWeight[k];
+      final i = active[k];
+      final amp = useLeft[k] != 0 ? amplitudeMpLeft : amplitudeMpRight;
+      field.dx[i] = sign[k] * amp * unitWeight[k];
+      field.dy[i] = 0;
     }
   }
 
-  /// Polilinha com pontos médios — evita vales de `max(gaussianas)` na curva.
   static List<({Offset p, double weight})> _curveRidge(
     List<Offset?> px,
     List<int> ids,

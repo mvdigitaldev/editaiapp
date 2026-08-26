@@ -200,6 +200,46 @@ void main() {
     }
   });
 
+  test('runtime cache scales the same unit weights', () {
+    final f = faces.first;
+    final runtime = CheekbonesFieldRuntime();
+    final cold = CheekbonesField.build(
+      face: f.face,
+      imageSize: f.imageSize,
+      t: 0.5,
+    );
+    final warm = CheekbonesField.build(
+      face: f.face,
+      imageSize: f.imageSize,
+      t: 0.5,
+      runtime: runtime,
+    );
+    final again = CheekbonesField.build(
+      face: f.face,
+      imageSize: f.imageSize,
+      t: 0.5,
+      computeMetrics: false,
+      runtime: runtime,
+    );
+    expect(
+      warm.metrics.dxAtPrimaryLeft,
+      closeTo(cold.metrics.dxAtPrimaryLeft, 1e-4),
+    );
+    expect(
+      warm.metrics.dxAtPrimaryRight,
+      closeTo(cold.metrics.dxAtPrimaryRight, 1e-4),
+    );
+    expect(identical(again.field, warm.field), isTrue);
+    var maxDiff = 0.0;
+    for (var i = 0; i < cold.field.pixelCount; i++) {
+      maxDiff = math.max(
+        maxDiff,
+        (again.field.dx[i] - cold.field.dx[i]).abs(),
+      );
+    }
+    expect(maxDiff, lessThan(1e-4));
+  });
+
   test('builder API has no image RGBA and does not import other Fields', () {
     const paths = [
       'lib/features/editor/beauty_engine/warp/v2/cheekbones/cheekbones_field.dart',
