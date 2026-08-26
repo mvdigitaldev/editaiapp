@@ -87,6 +87,9 @@ abstract final class BeautyEngineLabels {
       '$count rostos detectados — toque no rosto que deseja editar';
   static const faceFiltersDevTitle = 'Filtros faciais (dev)';
   static const linkEyesTitle = 'Olhos vinculados (simetria L/R)';
+  static const cheekboneSideBoth = 'Geral';
+  static const cheekboneSideLeft = 'Esquerda';
+  static const cheekboneSideRight = 'Direita';
 
   static const filterCreatorTitle = 'Criar filtro custom';
   static const filterCreatorPersonalUseBanner =

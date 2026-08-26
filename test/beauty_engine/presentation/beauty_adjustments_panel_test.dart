@@ -40,6 +40,9 @@ void main() {
     final params = BeautyAdjustmentsPanel.initialParams();
     expect(params.containsKey('jaw'), isTrue);
     expect(params.containsKey('chin'), isTrue);
+    expect(params.containsKey('cheekbone'), isTrue);
+    expect(params.containsKey('cheekbone_left'), isTrue);
+    expect(params.containsKey('cheekbone_right'), isTrue);
     expect(params.containsKey('face_slim'), isFalse);
     expect(params.containsKey('waist_slim'), isTrue);
     expect(params.containsKey('skin_smooth'), isTrue);

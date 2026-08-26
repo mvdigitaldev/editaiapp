@@ -612,9 +612,13 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   String? _firstActiveFaceWarpKey() {
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
-      if ((_params[key] ?? 0) > 0.001) {
+      if ((_params[key] ?? 0).abs() > 0.001) {
         return key;
       }
+    }
+    if ((_params['cheekbone_left'] ?? 0).abs() > 0.001 ||
+        (_params['cheekbone_right'] ?? 0).abs() > 0.001) {
+      return 'cheekbone';
     }
     return FaceFilterPipeline.faceWarpParameterKeys.first;
   }
@@ -623,6 +627,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     const faceAndSkinKeys = {
       'jaw',
       'chin',
+      'cheekbone',
       'skin_smooth',
       'skin_whitening',
       'remove_acne',
@@ -637,6 +642,14 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'iris_enhance',
     };
     for (final key in faceAndSkinKeys) {
+      if (key == 'cheekbone') {
+        if ((params[key] ?? 0).abs() > 0 ||
+            (params['cheekbone_left'] ?? 0).abs() > 0 ||
+            (params['cheekbone_right'] ?? 0).abs() > 0) {
+          return true;
+        }
+        continue;
+      }
       if ((params[key] ?? 0) > 0) {
         return true;
       }

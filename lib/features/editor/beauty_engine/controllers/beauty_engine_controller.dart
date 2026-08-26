@@ -55,6 +55,7 @@ import '../warp/warp_engine.dart';
 import '../warp/v2/backward_bilinear_warp.dart' as v2;
 import '../warp/v2/chin/chin_field.dart';
 import '../warp/v2/jaw_field.dart';
+import '../warp/v2/cheekbones/cheekbones_field.dart';
 
 /// Orquestrador do Beauty Engine — ponto unico para a UI (sem Widget).
 class BeautyEngineController {
@@ -958,6 +959,51 @@ class BeautyEngineController {
     return warped.rgba;
   }
 
+  /// CheekbonesField + remap bilinear. Independente de Jaw e Chin. t=0 não chama o renderer.
+  Uint8List applyCheekbonesWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['cheekbone'] ?? 0).clamp(-1.0, 1.0);
+    final tPhotoLeft =
+        (parameters['cheekbone_left'] ?? t).clamp(-1.0, 1.0);
+    final tPhotoRight =
+        (parameters['cheekbone_right'] ?? t).clamp(-1.0, 1.0);
+    if (face == null ||
+        (tPhotoLeft.abs() <= 1e-6 && tPhotoRight.abs() <= 1e-6) ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = CheekbonesField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      tPhotoLeft: tPhotoLeft,
+      tPhotoRight: tPhotoRight,
+    );
+    debugPrint(
+      '[cheekbones] L=${tPhotoLeft.toStringAsFixed(2)} '
+      'R=${tPhotoRight.toStringAsFixed(2)} '
+      'max=${built.metrics.influenceMax.toStringAsFixed(1)}px '
+      'active=${built.masks.count(built.masks.cheekActive)} '
+      'amp=${built.metrics.cheekAmplitude.toStringAsFixed(1)}',
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_cheekbone';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
   Future<TextureHandle> _renderTexture({
     required ImageSource source,
     required ProcessingPipeline pipeline,
@@ -1026,10 +1072,17 @@ class BeautyEngineController {
       face: face,
       parameters: params,
     );
+    final cheekRgba = applyCheekbonesWarp(
+      sourceRgba: faceRgba,
+      width: rgbaSource.width,
+      height: rgbaSource.height,
+      face: face,
+      parameters: params,
+    );
 
     final texture = await gpuRenderer.upload(
       TextureUpload(
-        bytes: faceRgba,
+        bytes: cheekRgba,
         width: rgbaSource.width,
         height: rgbaSource.height,
       ),

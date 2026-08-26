@@ -99,6 +99,9 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       for (final key in SkinFilterPipeline.skinParameterKeys) key: 0,
       for (final key in ColorFilterPipeline.colorParameterKeys) key: 0,
       'link_eyes': linkEyes ? 1 : 0,
+      'cheekbone_left': 0,
+      'cheekbone_right': 0,
+      'cheekbone_side': 0,
     };
     return params;
   }
@@ -164,7 +167,10 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final activeKey = _activeParamKey;
-    final activeValue = widget.params[activeKey] ?? 0;
+    final isCheekbone = activeKey == 'cheekbone';
+    final activeValue = isCheekbone
+        ? _cheekboneSliderValue()
+        : (widget.params[activeKey] ?? 0);
     final isBody = _category == BeautyAdjustmentCategory.corpo;
     final sliderRange = _sliderRangeForKey(activeKey);
     final gate = widget.gatePlan?.decisionFor(activeKey);
@@ -204,9 +210,13 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                 min: sliderRange.min,
                 max: sliderRange.max,
                 divisions: sliderRange.divisions,
+                bipolar: sliderRange.bipolar,
                 enabled: paramEnabled,
+                trailing: isCheekbone ? _cheekboneSideMenu(paramEnabled) : null,
                 onChanged: paramEnabled
-                    ? (value) => widget.onParamChanged(activeKey, value)
+                    ? (value) => isCheekbone
+                        ? _onCheekboneSliderChanged(value)
+                        : widget.onParamChanged(activeKey, value)
                     : null,
               ),
             ),
@@ -286,7 +296,92 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     );
   }
 
+  /// 0 = Geral, 1 = esquerda da foto, 2 = direita da foto (convenção Meitu).
+  int get _cheekboneSide => (widget.params['cheekbone_side'] ?? 0).round();
+
+  double _cheekboneSliderValue() {
+    switch (_cheekboneSide) {
+      case 1:
+        return widget.params['cheekbone_left'] ??
+            widget.params['cheekbone'] ??
+            0;
+      case 2:
+        return widget.params['cheekbone_right'] ??
+            widget.params['cheekbone'] ??
+            0;
+      default:
+        return widget.params['cheekbone'] ?? 0;
+    }
+  }
+
+  void _onCheekboneSliderChanged(double value) {
+    switch (_cheekboneSide) {
+      case 1:
+        widget.onParamChanged('cheekbone_left', value);
+        return;
+      case 2:
+        widget.onParamChanged('cheekbone_right', value);
+        return;
+      default:
+        widget.onParamChanged('cheekbone', value);
+        widget.onParamChanged('cheekbone_left', value);
+        widget.onParamChanged('cheekbone_right', value);
+    }
+  }
+
+  Widget _cheekboneSideMenu(bool enabled) {
+    const items = <({int side, String label})>[
+      (side: 0, label: BeautyEngineLabels.cheekboneSideBoth),
+      (side: 1, label: BeautyEngineLabels.cheekboneSideLeft),
+      (side: 2, label: BeautyEngineLabels.cheekboneSideRight),
+    ];
+    final current = items.firstWhere(
+      (item) => item.side == _cheekboneSide,
+      orElse: () => items.first,
+    );
+    return PopupMenuButton<int>(
+      enabled: enabled,
+      tooltip: current.label,
+      onSelected: (side) => widget.onParamChanged('cheekbone_side', side.toDouble()),
+      itemBuilder: (context) => [
+        for (final item in items)
+          PopupMenuItem<int>(
+            value: item.side,
+            child: Text(item.label),
+          ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              current.label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: enabled
+                    ? Theme.of(context).colorScheme.onSurface
+                    : Theme.of(context).disabledColor,
+              ),
+            ),
+            Icon(
+              Icons.arrow_drop_up,
+              size: 18,
+              color: enabled
+                  ? Theme.of(context).colorScheme.onSurface
+                  : Theme.of(context).disabledColor,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   _SliderRange _sliderRangeForKey(String key) {
+    if (key == 'cheekbone') {
+      return const _SliderRange(min: -1, max: 1, divisions: 200, bipolar: true);
+    }
     if (key == 'temperature') {
       return const _SliderRange(min: -0.5, max: 0.5, divisions: 200);
     }
@@ -298,11 +393,17 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
 }
 
 class _SliderRange {
-  const _SliderRange({this.min = 0, this.max = 1, this.divisions});
+  const _SliderRange({
+    this.min = 0,
+    this.max = 1,
+    this.divisions,
+    this.bipolar = false,
+  });
 
   final double min;
   final double max;
   final int? divisions;
+  final bool bipolar;
 }
 
 class _CategoryNavItem extends StatelessWidget {

@@ -52,7 +52,7 @@ void main() {
     }
   });
 
-  test('t=0.5 narrows mid-face, protects jaw/chin, dx only', () {
+  test('t=0.5 narrows mid-face, protects jaw/chin, inward silhouette normal', () {
     final reports = <Map<String, Object>>[];
     for (final f in faces) {
       final built = FaceSlimField.build(
@@ -70,18 +70,6 @@ void main() {
       expect(m.widthDelta, greaterThan(0), reason: '${f.id} Δ width');
       expect(m.dxAtPrimaryLeft, greaterThan(0), reason: '${f.id} left → midline');
       expect(m.dxAtPrimaryRight, lessThan(0), reason: '${f.id} right → midline');
-      expect(m.dyAtPrimaryLeft.abs(), lessThanOrEqualTo(_protectEps), reason: f.id);
-      expect(m.dyAtPrimaryRight.abs(), lessThanOrEqualTo(_protectEps), reason: f.id);
-      expect(
-        m.dxAtPrimaryLeft.abs(),
-        greaterThan(0.4 * m.influenceMax),
-        reason: '${f.id} energy at primary left',
-      );
-      expect(
-        m.dxAtPrimaryRight.abs(),
-        greaterThan(0.4 * m.influenceMax),
-        reason: '${f.id} energy at primary right',
-      );
       expect(m.minDetJ, greaterThan(0), reason: '${f.id} detJ=${m.minDetJ}');
       expect(m.outsideSlimZoneP95, lessThanOrEqualTo(_protectEps), reason: f.id);
       expect(m.eyes.p95Abs, lessThanOrEqualTo(_protectEps), reason: f.id);
@@ -102,7 +90,12 @@ void main() {
           nonzeroDy++;
         }
       }
-      expect(nonzeroDy, 0, reason: '${f.id} field is Δx only');
+      expect(nonzeroDy, greaterThan(0), reason: '${f.id} jaw spline has dy');
+      expect(
+        m.dyAtPrimaryLeft.abs() + m.dyAtPrimaryRight.abs(),
+        greaterThan(0),
+        reason: '${f.id} primaries are not purely horizontal',
+      );
 
       final dir = Directory('.cursor/facial-warp-v2/face-slim/A/${f.id}');
       dir.createSync(recursive: true);

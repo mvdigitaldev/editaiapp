@@ -81,24 +81,27 @@ class FaceSlimMasks {
       RegionMaskRaster.fillPolygon(oval, width, height, ovalRing);
     }
 
-    final leftHull = RegionMaskRaster.zeros(width, height);
-    final rightHull = RegionMaskRaster.zeros(width, height);
-    RegionMaskRaster.fillConvexHull(
-      leftHull,
+    final bandWidth = math.max(8, (0.10 * faceWidth).round());
+    final silhouette = _silhouetteBand(oval, width, height, bandWidth);
+    _clipVertical(
+      silhouette,
       width,
       height,
-      _points(px, leftHullLandmarks),
+      _zoneTop(px, faceWidth),
+      _zoneBottom(px, faceWidth),
     );
-    RegionMaskRaster.fillConvexHull(
-      rightHull,
-      width,
-      height,
-      _points(px, rightHullLandmarks),
-    );
-    RegionMaskRaster.orInto(slim, leftHull);
-    RegionMaskRaster.orInto(slim, rightHull);
-    final pad = math.max(4, (hullPadFaceWidth * faceWidth).round());
+    _clipCenter(silhouette, width, height, px, 0.22 * faceWidth);
+    RegionMaskRaster.orInto(slim, silhouette);
+    final pad = math.max(3, (hullPadFaceWidth * 0.4 * faceWidth).round());
     RegionMaskRaster.dilate(slim, width, height, pad);
+    if (slim.every((v) => v == 0)) {
+      RegionMaskRaster.fillConvexHull(
+        slim,
+        width,
+        height,
+        _points(px, {...leftHullLandmarks, ...rightHullLandmarks}),
+      );
+    }
 
     RegionMaskRaster.fillConvexHull(
       eyes,
@@ -212,6 +215,98 @@ class FaceSlimMasks {
       }
     }
     return out;
+  }
+
+  /// Faixa interior do oval: pixéis da cara a menos de [bandWidth] da
+  /// silhueta. Liga as bochechas ao contorno, sem preencher o miolo.
+  static Uint8List _silhouetteBand(
+    Uint8List oval,
+    int width,
+    int height,
+    int bandWidth,
+  ) {
+    final exterior = Uint8List(oval.length);
+    for (var i = 0; i < oval.length; i++) {
+      exterior[i] = oval[i] == 0 ? 255 : 0;
+    }
+    RegionMaskRaster.dilate(exterior, width, height, bandWidth);
+    final band = RegionMaskRaster.zeros(width, height);
+    for (var i = 0; i < oval.length; i++) {
+      if (oval[i] != 0 && exterior[i] != 0) {
+        band[i] = 255;
+      }
+    }
+    return band;
+  }
+
+  static void _clipVertical(
+    Uint8List mask,
+    int width,
+    int height,
+    double yTop,
+    double yBot,
+  ) {
+    for (var y = 0; y < height; y++) {
+      final cy = y + 0.5;
+      if (cy >= yTop && cy <= yBot) {
+        continue;
+      }
+      final row = y * width;
+      for (var x = 0; x < width; x++) {
+        mask[row + x] = 0;
+      }
+    }
+  }
+
+  static void _clipCenter(
+    Uint8List mask,
+    int width,
+    int height,
+    List<Offset?> px,
+    double halfGap,
+  ) {
+    final oval = _points(px, V2RegionCatalog.faceOval);
+    if (oval.isEmpty) {
+      return;
+    }
+    var minX = oval.first.dx;
+    var maxX = oval.first.dx;
+    for (final p in oval) {
+      minX = math.min(minX, p.dx);
+      maxX = math.max(maxX, p.dx);
+    }
+    final midX = (minX + maxX) * 0.5;
+    for (var i = 0; i < mask.length; i++) {
+      if (mask[i] == 0) {
+        continue;
+      }
+      final x = (i % width) + 0.5;
+      if ((x - midX).abs() < halfGap) {
+        mask[i] = 0;
+      }
+    }
+  }
+
+  /// Abaixo dos olhos / arco zigomático.
+  static double _zoneTop(List<Offset?> px, double faceWidth) {
+    final eyes = _points(px, V2RegionCatalog.eyes);
+    if (eyes.isEmpty) {
+      return 0;
+    }
+    var maxY = eyes.first.dy;
+    for (final p in eyes) {
+      maxY = math.max(maxY, p.dy);
+    }
+    return maxY - 0.02 * faceWidth;
+  }
+
+  /// Termina junto do mento; o disco do Chin continua a proteger o 152.
+  static double _zoneBottom(List<Offset?> px, double faceWidth) {
+    final chin = 152 < px.length ? px[152] : null;
+    if (chin == null) {
+      return 1e9;
+    }
+    return chin.dy - 0.08 * faceWidth;
   }
 
   static double _faceWidth(List<Offset?> px) {
