@@ -1,9 +1,10 @@
-/// Catálogo facial do produto: Jaw + Chin Length + V Chin + V Shape + Cheekbones (Facial Warp V2).
+/// Catálogo facial do produto: Jaw + Jaw Angle + Chin Length + V Chin + V Shape + Cheekbones (Facial Warp V2).
 class FaceFilterPipeline {
   const FaceFilterPipeline();
 
   static const faceWarpParameterKeys = [
     'jaw',
+    'jaw_angle',
     'chin',
     'v_chin',
     'v_shape',
@@ -12,6 +13,9 @@ class FaceFilterPipeline {
 
   bool hasActiveWarp(Map<String, double> parameters) {
     final jaw = parameters['jaw'] ?? parameters['Jaw'] ?? 0;
+    final jawAngle = parameters['jaw_angle'] ?? 0;
+    final jawAngleL = parameters['jaw_angle_left'] ?? 0;
+    final jawAngleR = parameters['jaw_angle_right'] ?? 0;
     final chin = parameters['chin'] ?? parameters['Chin'] ?? 0;
     final vChin = parameters['v_chin'] ?? 0;
     final vChinL = parameters['v_chin_left'] ?? 0;
@@ -23,6 +27,9 @@ class FaceFilterPipeline {
     final cheekL = parameters['cheekbone_left'] ?? 0;
     final cheekR = parameters['cheekbone_right'] ?? 0;
     return jaw > 0 ||
+        jawAngle.abs() > 1e-6 ||
+        jawAngleL.abs() > 1e-6 ||
+        jawAngleR.abs() > 1e-6 ||
         chin.abs() > 1e-6 ||
         vChin.abs() > 1e-6 ||
         vChinL.abs() > 1e-6 ||

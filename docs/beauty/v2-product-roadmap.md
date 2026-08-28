@@ -2,6 +2,8 @@
 
 Complemento a [`v2-product-audit.md`](./v2-product-audit.md). Só produto: o que o utilizador vê e o que o Field faz.
 
+**Adenda 2026-08-27 (Jaw Angle).** Leonardo abriu o Ângulo da mandíbula: key `jaw_angle`, só Δy nos gônios, sopro 172/397, L/R. Calibração vigente: amplitude `0.085 × faceWidth`, gônio no planalto. Documento [`v2-jaw-angle.md`](./v2-jaw-angle.md). Não é o Jaw (Δx). Jaw, Chin, V Chin, V Shape e Cheekbones H intactos. Inspecção; C não assinada.
+
 **Adenda 2026-08-26.** Cheekbones (hipótese H) está em inspecção no editor. Relatório [`v2-cheekbones-h-report.md`](./v2-cheekbones-h-report.md). O “próximo trabalho é Cheekbones” da secção 5 **cumpriu-se ao nível de Field/UI**; falta C formal.
 
 **Adenda 2026-08-26 (V Shape).** Leonardo abriu o Formato V: key `v_shape`, silhueta externa do queixo, sopro na curva da mandíbula, L/R, amplitude `0.055 × faceWidth`. Documento [`v2-v-shape.md`](./v2-v-shape.md). Não é V Chin. Não é o arco maçã. V Chin, Jaw e Cheekbones H intactos. Inspecção; C não assinada.

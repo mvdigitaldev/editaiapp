@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-08-26 (V Shape: corte seco na curva; V Chin, Jaw e Cheekbones H intactos)
+Última actualização: 2026-08-28 (Jaw Angle: cunha 58→172→136, amplitude `0.052`; Jaw, Chin, V Chin, V Shape e Cheekbones H intactos)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -35,21 +35,22 @@ A IA actua como **arquitecto** do Facial Warp V2.
 
 | Peça | Estado |
 |---|---|
-| **Jaw** | Aprovado. Vivo no produto (`jaw`). Encerrado. Não alterar. |
-| **Chin** | Reaberto **só** para calibração bipolar Chin Length. Vivo (`chin`, «Tamanho do queixo»). Não assinado no editor. Relatório [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md). **Intacto** no V Chin. |
-| **V Chin** | Aprovado. Vivo no produto (`v_chin`, «V do queixo»). Encerrado. Não alterar. Relatório [`v2-v-chin.md`](./v2-v-chin.md). **Intacto** no V Shape. |
-| **V Shape** | Em inspecção. Key `v_shape` («Formato V»). Sem C. Relatório [`v2-v-shape.md`](./v2-v-shape.md). |
+| **Jaw** | Aprovado. Vivo no produto (`jaw`). Encerrado. Não alterar. **Intacto** no Jaw Angle. |
+| **Jaw Angle** | Em inspecção. Key `jaw_angle` («Ângulo da mandíbula»). Sem C. Relatório [`v2-jaw-angle.md`](./v2-jaw-angle.md). |
+| **Chin** | Reaberto **só** para calibração bipolar Chin Length. Vivo (`chin`, «Tamanho do queixo»). Não assinado no editor. Relatório [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md). **Intacto** no Jaw Angle. |
+| **V Chin** | Aprovado. Vivo no produto (`v_chin`, «V do queixo»). Encerrado. Não alterar. Relatório [`v2-v-chin.md`](./v2-v-chin.md). **Intacto** no Jaw Angle. |
+| **V Shape** | Em inspecção. Key `v_shape` («Formato V»). Sem C. Relatório [`v2-v-shape.md`](./v2-v-shape.md). **Intacto** no Jaw Angle. |
 | **Face Slim** | Arquivado. Lab A/B no disco. Sem C/D/E. Sem slider. Não promover. Não renomear para Cheekbones. |
 | **Roadmap de produto** | Aprovado. Adenda: V Shape em inspecção. Face Rig congelado. |
-| **Cheekbones** | Em desenvolvimento. Hipótese H vigente (crista oval). Inspecção no editor. Sem C. Relatório [`v2-cheekbones-h-report.md`](./v2-cheekbones-h-report.md). **Intacto** no V Shape. |
+| **Cheekbones** | Em desenvolvimento. Hipótese H vigente (crista oval). Inspecção no editor. Sem C. Relatório [`v2-cheekbones-h-report.md`](./v2-cheekbones-h-report.md). **Intacto** no Jaw Angle. |
 
 Pipeline viva no produto:
 
 ```
-RGBA → applyJawWarp → applyChinWarp → applyVChinWarp → applyVShapeWarp → applyCheekbonesWarp → Body → Skin → Color
+RGBA → applyJawWarp → applyJawAngleWarp → applyChinWarp → applyVChinWarp → applyVShapeWarp → applyCheekbonesWarp → Body → Skin → Color
 ```
 
-Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin está na mesma cadeia, **aprovado**. V Shape está na cadeia como inspecção.
+Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin está na mesma cadeia, **aprovado**. V Shape e Jaw Angle estão na cadeia como inspecção.
 
 ---
 
@@ -120,6 +121,18 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Módulo: `warp/v2/jaw_field.dart`.
 - Papel de produto: estreitar mandíbula nos gônios. Não é o Jawline completo do Meitu (falta pescoço). Suficiente. Não reabrir.
 
+### Jaw Angle — em inspecção
+
+- Key: `jaw_angle` («Ângulo da mandíbula»). **Não** é o `jaw`. Não é Chin Length.
+- Só Δy. `dx = 0`. Cunha oval **58→172→136** / **288→397→365**. Ponta 152 com sangria (chão 0.22), não trava dura. Maçã 123/352 hard-zero.
+- Crista: pesos 1.00 → 0.72 → 0.48. Pico no gônio; lados do queixo seguem (Meitu).
+- Slider bipolar; Geral / Esquerda / Direita = lados da **foto**. `tPhotoLeft` / `tPhotoRight`.
+- Amplitude: `0.052 × faceWidth`. σ⊥ `0.14 × faceWidth`. Hull pad `0.16 × faceWidth`. Rampa `0.15 × faceWidth`. Rampa midline `0.045 × faceWidth`.
+- **Direita = sobe** (`t > 0`, `dy < 0` no gônio); esquerda = desce.
+- Preview: cache do peso; métricas de lab fora do preview.
+- Documento: [`v2-jaw-angle.md`](./v2-jaw-angle.md). Sem C.
+- Módulo: `warp/v2/jaw_angle/`. Não importa Jaw/Chin/V Chin/V Shape/Cheekbones.
+
 ### Chin — reaberto (Chin Length bipolar)
 
 - Key: `chin` («Tamanho do queixo»). Não é V Chin nem Double Chin.
@@ -175,12 +188,18 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Calibração: t ∈ [-1, 1] por lado; amplitude `0.022 × faceWidth`; σ⊥ `0.09 × faceWidth`; rampa `0.12 × faceWidth`; rampa orelha `0.035 × faceWidth` na pina. Pesos da crista 0.80→0.22.
 - Preview: mesmo padrão do Chin — slider não bloqueia; peso unitário cacheado (t / L / R só escala `dx`). Métricas de lab não correm no preview. Geometria H intacta.
 - Sprint A encerrada (A1 carimbo; A2 arco interrompido). Hull/losango e dumps B antigos **não** são o Field no disco.
-- **Próximo passo (Cheekbones):** Sprint C quando Leonardo assinar as fotos lab. H **não** se altera. V Chin encerrado. V Shape não pisa H.
+- **Próximo passo (Cheekbones):** Sprint C quando Leonardo assinar as fotos lab. H **não** se altera. V Chin encerrado. V Shape e Jaw Angle não pisam H.
 - Chin Length e V Chin são sliders distintos. Não “ajustar” um para compensar o outro.
 
 ---
 
 ## Roadmap de produto (aprovado)
+
+**Adenda 2026-08-28 (Jaw Angle cunha).** Leonardo: o máximo inchava o gônio e havia **trava no queixo**. Riscas Meitu = cunha até aos lados do queixo, não ilha no 58. Calibração vigente: amplitude `0.052`, crista **58→172→136** (1.00→0.72→0.48), midline `0.045`, sangria no 152 (chão 0.22). Jaw e Chin Length intactos. C não assinada.
+
+**Adenda 2026-08-27 (Jaw Angle calibração).** No máximo à esquerda o ângulo não se via: o 58 estava na rampa (pad 0.08 / falloff 0.14 ⇒ peso ~0.57) e o disco 132/361 travava o ramo. Superado pela cunha 2026-08-28.
+
+**Adenda 2026-08-27 (Jaw Angle).** Leonardo abriu o Ângulo da mandíbula (`jaw_angle`): inclinação Δy dos gônios, sopro no 172/397, L/R da foto. Inspecção. Documento [`v2-jaw-angle.md`](./v2-jaw-angle.md). Jaw (Δx), Chin, V Chin, V Shape e Cheekbones H intactos. C não assinada.
 
 **Adenda 2026-08-26 (V Shape).** Leonardo abriu o Formato V (`v_shape`): silhueta externa do queixo, sopro na curva da mandíbula, L/R da foto. Inspecção. Documento [`v2-v-shape.md`](./v2-v-shape.md). V Chin, Jaw e Cheekbones H intactos. Não é o arco maçã→mandíbula. C não assinada.
 
@@ -194,12 +213,13 @@ Ordem seguinte **depois** de Cheekbones (C → D → E):
 
 1. Temple
 2. Hairline
-3. Width / Jaw Angle — baixa prioridade (o Jaw já cobre o essencial)
+3. Width — baixa prioridade (o Jaw já cobre o essencial em Δx)
 4. Lift
 5. Double Chin — bloqueado (falta pescoço)
 
 V Chin: **feito** (aprovado 2026-08-26).  
-V Shape: **em inspecção** (silhueta externa; não o arco maçã).
+V Shape: **em inspecção** (silhueta externa; não o arco maçã).  
+Jaw Angle: **em inspecção** (inclinação Δy; não o Jaw).
 
 Fora do roadmap: Face Slim, Narrow Face, Smooth (pele, não Rosto).
 
@@ -215,6 +235,10 @@ Face Rig (`v2-face-rig-migration-plan.md`): **congelado**. Não implementar.
 - [`FacialWarpV2-Development-Rules.md`](./FacialWarpV2-Development-Rules.md)
 - Relatório da sprint **aberta** do efeito actual
 - Roadmap / audit / spec só se este ficheiro os apontar como vigentes
+
+**Vigente para Jaw Angle**
+
+- [`v2-jaw-angle.md`](./v2-jaw-angle.md) — **Field e UI no disco**; inspecção no editor (não é C)
 
 **Vigente para V Shape**
 

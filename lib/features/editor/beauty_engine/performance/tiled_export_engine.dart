@@ -119,8 +119,15 @@ class TiledExportEngine {
       face: face,
       parameters: params,
     );
-    final faceRgba = controller.applyChinWarp(
+    final jawAngleRgba = controller.applyJawAngleWarp(
       sourceRgba: jawRgba,
+      width: rgbaSource.width,
+      height: rgbaSource.height,
+      face: face,
+      parameters: params,
+    );
+    final faceRgba = controller.applyChinWarp(
+      sourceRgba: jawAngleRgba,
       width: rgbaSource.width,
       height: rgbaSource.height,
       face: face,

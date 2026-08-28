@@ -55,6 +55,7 @@ import '../warp/warp_engine.dart';
 import '../warp/v2/backward_bilinear_warp.dart' as v2;
 import '../warp/v2/chin/chin_field.dart';
 import '../warp/v2/jaw_field.dart';
+import '../warp/v2/jaw_angle/jaw_angle_field.dart';
 import '../warp/v2/cheekbones/cheekbones_field.dart';
 import '../warp/v2/v_chin/v_chin_field.dart';
 import '../warp/v2/v_shape/v_shape_field.dart';
@@ -100,6 +101,7 @@ class BeautyEngineController {
   final RenderStageCache _renderStageCache = RenderStageCache();
   final MaskFactory maskFactory = MaskFactory();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
+  final JawAngleFieldRuntime _jawAngleRuntime = JawAngleFieldRuntime();
   final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
   final VShapeFieldRuntime _vShapeRuntime = VShapeFieldRuntime();
   final CheekbonesFieldRuntime _cheekbonesRuntime = CheekbonesFieldRuntime();
@@ -935,6 +937,44 @@ class BeautyEngineController {
     return warped.rgba;
   }
 
+  /// JawAngleField + remap bilinear. Independente do Jaw (Δx). t=0 não chama o renderer.
+  Uint8List applyJawAngleWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['jaw_angle'] ?? 0).clamp(-1.0, 1.0);
+    final tPhotoLeft = (parameters['jaw_angle_left'] ?? t).clamp(-1.0, 1.0);
+    final tPhotoRight = (parameters['jaw_angle_right'] ?? t).clamp(-1.0, 1.0);
+    if (face == null ||
+        (tPhotoLeft.abs() <= 1e-6 && tPhotoRight.abs() <= 1e-6) ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = JawAngleField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      tPhotoLeft: tPhotoLeft,
+      tPhotoRight: tPhotoRight,
+      computeMetrics: false,
+      runtime: _jawAngleRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_jaw_angle';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
   /// ChinField + remap bilinear. Independente do Jaw. t=0 não chama o renderer.
   Uint8List applyChinWarp({
     required Uint8List sourceRgba,
@@ -1146,8 +1186,15 @@ class BeautyEngineController {
       face: face,
       parameters: params,
     );
-    final faceRgba = applyChinWarp(
+    final jawAngleRgba = applyJawAngleWarp(
       sourceRgba: jawRgba,
+      width: rgbaSource.width,
+      height: rgbaSource.height,
+      face: face,
+      parameters: params,
+    );
+    final faceRgba = applyChinWarp(
+      sourceRgba: jawAngleRgba,
       width: rgbaSource.width,
       height: rgbaSource.height,
       face: face,

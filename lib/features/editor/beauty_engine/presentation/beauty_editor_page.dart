@@ -642,12 +642,17 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         (_params['v_shape_right'] ?? 0).abs() > 0.001) {
       return 'v_shape';
     }
+    if ((_params['jaw_angle_left'] ?? 0).abs() > 0.001 ||
+        (_params['jaw_angle_right'] ?? 0).abs() > 0.001) {
+      return 'jaw_angle';
+    }
     return FaceFilterPipeline.faceWarpParameterKeys.first;
   }
 
   bool _paramsNeedFaceOrSkin(Map<String, double> params) {
     const faceAndSkinKeys = {
       'jaw',
+      'jaw_angle',
       'chin',
       'v_chin',
       'v_shape',
@@ -668,6 +673,14 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     for (final key in faceAndSkinKeys) {
       if (key == 'chin') {
         if ((params[key] ?? 0).abs() > 0) {
+          return true;
+        }
+        continue;
+      }
+      if (key == 'jaw_angle') {
+        if ((params[key] ?? 0).abs() > 0 ||
+            (params['jaw_angle_left'] ?? 0).abs() > 0 ||
+            (params['jaw_angle_right'] ?? 0).abs() > 0) {
           return true;
         }
         continue;

@@ -9,6 +9,11 @@ void main() {
     var lastKey = '';
     var lastValue = 0.0;
 
+    tester.view.physicalSize = const Size(1600, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -27,6 +32,7 @@ void main() {
     );
 
     expect(find.text('Mandíbula'), findsWidgets);
+    expect(find.text('Ângulo da mandíbula'), findsWidgets);
     expect(find.text('Tamanho do queixo'), findsWidgets);
     expect(find.text('V do queixo'), findsWidgets);
     expect(find.text('Formato V'), findsWidgets);
@@ -41,6 +47,10 @@ void main() {
   test('initialParams inclui jaw, chin, corpo e pele', () {
     final params = BeautyAdjustmentsPanel.initialParams();
     expect(params.containsKey('jaw'), isTrue);
+    expect(params.containsKey('jaw_angle'), isTrue);
+    expect(params.containsKey('jaw_angle_left'), isTrue);
+    expect(params.containsKey('jaw_angle_right'), isTrue);
+    expect(params.containsKey('jaw_angle_side'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);
     expect(params.containsKey('cheekbone_left'), isTrue);

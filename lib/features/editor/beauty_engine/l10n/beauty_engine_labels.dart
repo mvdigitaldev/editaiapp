@@ -18,6 +18,7 @@ abstract final class BeautyEngineLabels {
     'eye_rotation': 'Rotação dos olhos',
     'double_eyelid': 'Pálpebra dupla',
     'jaw': 'Mandíbula',
+    'jaw_angle': 'Ângulo da mandíbula',
     'chin': 'Tamanho do queixo',
     'v_chin': 'V do queixo',
     'v_shape': 'Formato V',
