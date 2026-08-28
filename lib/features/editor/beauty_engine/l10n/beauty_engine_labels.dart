@@ -20,6 +20,7 @@ abstract final class BeautyEngineLabels {
     'jaw': 'Mandíbula',
     'chin': 'Tamanho do queixo',
     'v_chin': 'V do queixo',
+    'v_shape': 'Formato V',
     'head_size': 'Tamanho da cabeça',
     'cheekbone': 'Maçãs do rosto',
     'forehead': 'Testa',

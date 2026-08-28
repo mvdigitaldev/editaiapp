@@ -638,6 +638,10 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         (_params['v_chin_right'] ?? 0).abs() > 0.001) {
       return 'v_chin';
     }
+    if ((_params['v_shape_left'] ?? 0).abs() > 0.001 ||
+        (_params['v_shape_right'] ?? 0).abs() > 0.001) {
+      return 'v_shape';
+    }
     return FaceFilterPipeline.faceWarpParameterKeys.first;
   }
 
@@ -646,6 +650,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'jaw',
       'chin',
       'v_chin',
+      'v_shape',
       'cheekbone',
       'skin_smooth',
       'skin_whitening',
@@ -671,6 +676,14 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         if ((params[key] ?? 0).abs() > 0 ||
             (params['v_chin_left'] ?? 0).abs() > 0 ||
             (params['v_chin_right'] ?? 0).abs() > 0) {
+          return true;
+        }
+        continue;
+      }
+      if (key == 'v_shape') {
+        if ((params[key] ?? 0).abs() > 0 ||
+            (params['v_shape_left'] ?? 0).abs() > 0 ||
+            (params['v_shape_right'] ?? 0).abs() > 0) {
           return true;
         }
         continue;

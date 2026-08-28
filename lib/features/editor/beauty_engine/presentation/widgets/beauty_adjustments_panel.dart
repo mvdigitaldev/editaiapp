@@ -105,6 +105,9 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       'v_chin_left': 0,
       'v_chin_right': 0,
       'v_chin_side': 0,
+      'v_shape_left': 0,
+      'v_shape_right': 0,
+      'v_shape_side': 0,
     };
     return params;
   }
@@ -170,7 +173,9 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final activeKey = _activeParamKey;
-    final isSideWarp = activeKey == 'cheekbone' || activeKey == 'v_chin';
+    final isSideWarp = activeKey == 'cheekbone' ||
+        activeKey == 'v_chin' ||
+        activeKey == 'v_shape';
     final activeValue = isSideWarp
         ? _sideSliderValue(activeKey)
         : (widget.params[activeKey] ?? 0);
@@ -381,7 +386,10 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
   }
 
   _SliderRange _sliderRangeForKey(String key) {
-    if (key == 'cheekbone' || key == 'chin' || key == 'v_chin') {
+    if (key == 'cheekbone' ||
+        key == 'chin' ||
+        key == 'v_chin' ||
+        key == 'v_shape') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

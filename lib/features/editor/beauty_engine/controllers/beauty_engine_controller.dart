@@ -57,6 +57,7 @@ import '../warp/v2/chin/chin_field.dart';
 import '../warp/v2/jaw_field.dart';
 import '../warp/v2/cheekbones/cheekbones_field.dart';
 import '../warp/v2/v_chin/v_chin_field.dart';
+import '../warp/v2/v_shape/v_shape_field.dart';
 
 /// Orquestrador do Beauty Engine — ponto unico para a UI (sem Widget).
 class BeautyEngineController {
@@ -100,6 +101,7 @@ class BeautyEngineController {
   final MaskFactory maskFactory = MaskFactory();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
   final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
+  final VShapeFieldRuntime _vShapeRuntime = VShapeFieldRuntime();
   final CheekbonesFieldRuntime _cheekbonesRuntime = CheekbonesFieldRuntime();
 
   /// Quality Score + gating da foto atual (Sprint 3).
@@ -1004,6 +1006,45 @@ class BeautyEngineController {
     return warped.rgba;
   }
 
+  /// VShapeField + remap bilinear. Independente de V Chin, Jaw, Chin Length e Cheekbones.
+  /// t=0 não chama o renderer.
+  Uint8List applyVShapeWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['v_shape'] ?? 0).clamp(-1.0, 1.0);
+    final tPhotoLeft = (parameters['v_shape_left'] ?? t).clamp(-1.0, 1.0);
+    final tPhotoRight = (parameters['v_shape_right'] ?? t).clamp(-1.0, 1.0);
+    if (face == null ||
+        (tPhotoLeft.abs() <= 1e-6 && tPhotoRight.abs() <= 1e-6) ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = VShapeField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      tPhotoLeft: tPhotoLeft,
+      tPhotoRight: tPhotoRight,
+      computeMetrics: false,
+      runtime: _vShapeRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_v_shape';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
   /// CheekbonesField + remap bilinear. Independente de Jaw e Chin. t=0 não chama o renderer.
   Uint8List applyCheekbonesWarp({
     required Uint8List sourceRgba,
@@ -1119,8 +1160,15 @@ class BeautyEngineController {
       face: face,
       parameters: params,
     );
-    final cheekRgba = applyCheekbonesWarp(
+    final vShapeRgba = applyVShapeWarp(
       sourceRgba: vChinRgba,
+      width: rgbaSource.width,
+      height: rgbaSource.height,
+      face: face,
+      parameters: params,
+    );
+    final cheekRgba = applyCheekbonesWarp(
+      sourceRgba: vShapeRgba,
       width: rgbaSource.width,
       height: rgbaSource.height,
       face: face,

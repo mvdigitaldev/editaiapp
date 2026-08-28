@@ -133,8 +133,15 @@ class TiledExportEngine {
       face: face,
       parameters: params,
     );
-    final cheekRgba = controller.applyCheekbonesWarp(
+    final vShapeRgba = controller.applyVShapeWarp(
       sourceRgba: vChinRgba,
+      width: rgbaSource.width,
+      height: rgbaSource.height,
+      face: face,
+      parameters: params,
+    );
+    final cheekRgba = controller.applyCheekbonesWarp(
+      sourceRgba: vShapeRgba,
       width: rgbaSource.width,
       height: rgbaSource.height,
       face: face,

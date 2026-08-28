@@ -1,9 +1,8 @@
 # V Chin — formato V do queixo
 
-Efeito novo. **Não** é Chin Length. **Não** é V shape. **Não** é Sprint C assinada.
+**Aprovado e encerrado** no editor (2026-08-26). Não reabrir.
 
-Data: 2026-08-26.  
-Aprovação: Leonardo pediu o menu V Chin (quadrado ↔ pontudo, L/R, subtil). Jaw, `chin` e Cheekbones H não se mexem.
+**Não** é Chin Length. **Não** é V shape.
 
 Módulo: `lib/features/editor/beauty_engine/warp/v2/v_chin/`.  
 Memória: [`PROJECT_CONTEXT.md`](./PROJECT_CONTEXT.md).
@@ -23,8 +22,7 @@ Meitu V Chin: forma da ponta do mento (ícone a tracejado). O slider `chin` cont
 | Field | Só Δx. `dy = 0`. 152 ≈ 0 por simetria. Gônios hard-zero |
 | Amplitude | `0.080 × faceWidth` |
 | Params | `v_chin`, `v_chin_left`, `v_chin_right`, `v_chin_side` |
-
-Inspecção no editor. C/D/E **não** assinadas.
+| Estado | Aprovado. Vivo em preview/export. Encerrado |
 
 ---
 
@@ -34,11 +32,11 @@ Inspecção no editor. C/D/E **não** assinadas.
 t ∈ [-1, 1] por lado da foto
 identidade se |tPhotoLeft| e |tPhotoRight| ≤ 1e-6
 
-dx = sign(midlineX − x) · t_lado · 0.080 · faceWidth · w
+dx = sign(midlineX − x) · (−t_lado) · 0.080 · faceWidth · w
 dy = 0
 ```
 
-Foto esquerda = cadeia MediaPipe direita (377). Foto direita = cadeia MediaPipe esquerda (148).
+`t_lado < 0` (esquerda) produz deslocamento para a midline. Foto esquerda = cadeia MediaPipe direita (377). Foto direita = cadeia MediaPipe esquerda (148).
 
 - `t < 0` → para a midline / ponta mais em V (esquerda Meitu)
 - `t > 0` → para fora / queixo mais quadrado
@@ -71,8 +69,7 @@ Para **antes** de 172/58. Não sobe a 132/361.
 
 ## 4. O que não entra
 
-- Alterar `ChinField` / Jaw / Cheekbones H
+- Alterar `ChinField` / Jaw / Cheekbones H / este Field
 - V shape (arco maçã→mandíbula) — `v_face` continua fantasma
 - Double Chin, pescoço
 - Reutilizar a key `v_face`
-- Assinar Sprint C

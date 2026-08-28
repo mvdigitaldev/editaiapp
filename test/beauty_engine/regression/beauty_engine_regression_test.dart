@@ -35,10 +35,10 @@ void main() {
   group('Regression — face filters', () {
     const pipeline = FaceFilterPipeline();
 
-    test('jaw, chin, v_chin and cheekbone are the facial warp keys and activate the pipeline', () {
+    test('jaw, chin, v_chin, v_shape and cheekbone are the facial warp keys and activate the pipeline', () {
       expect(
         FaceFilterPipeline.faceWarpParameterKeys,
-        ['jaw', 'chin', 'v_chin', 'cheekbone'],
+        ['jaw', 'chin', 'v_chin', 'v_shape', 'cheekbone'],
       );
       expect(pipeline.hasActiveWarp({'jaw': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'jaw': 0}), isFalse);
@@ -50,6 +50,11 @@ void main() {
       expect(pipeline.hasActiveWarp({'v_chin': 0}), isFalse);
       expect(pipeline.hasActiveWarp({'v_chin_left': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'v_chin_right': -0.4}), isTrue);
+      expect(pipeline.hasActiveWarp({'v_shape': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'v_shape': -0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'v_shape': 0}), isFalse);
+      expect(pipeline.hasActiveWarp({'v_shape_left': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'v_shape_right': -0.4}), isTrue);
       expect(pipeline.hasActiveWarp({'cheekbone': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'cheekbone': -0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'cheekbone': 0}), isFalse);

@@ -4,7 +4,11 @@ Complemento a [`v2-product-audit.md`](./v2-product-audit.md). Só produto: o que
 
 **Adenda 2026-08-26.** Cheekbones (hipótese H) está em inspecção no editor. Relatório [`v2-cheekbones-h-report.md`](./v2-cheekbones-h-report.md). O “próximo trabalho é Cheekbones” da secção 5 **cumpriu-se ao nível de Field/UI**; falta C formal.
 
-**Adenda 2026-08-26 (V Chin).** Leonardo abriu o menu V Chin: key `v_chin`, rótulo «V do queixo», forma da ponta (Δx), L/R da foto, amplitude `0.080 × faceWidth` (calibração a subir aos poucos; 0.018 mal se via). Documento [`v2-v-chin.md`](./v2-v-chin.md). Não é Chin Length. Não é V shape. Chin Length, Jaw e Cheekbones H intactos. Inspecção; C não assinada.
+**Adenda 2026-08-26 (V Shape).** Leonardo abriu o Formato V: key `v_shape`, silhueta externa do queixo, sopro na curva da mandíbula, L/R, amplitude `0.055 × faceWidth`. Documento [`v2-v-shape.md`](./v2-v-shape.md). Não é V Chin. Não é o arco maçã. V Chin, Jaw e Cheekbones H intactos. Inspecção; C não assinada.
+
+**Adenda 2026-08-26 (V Chin encerrado).** Leonardo fechou o V Chin no editor: key `v_chin`, «V do queixo», amplitude `0.080 × faceWidth`, esquerda = V. Aprovado. Não alterar. Documento [`v2-v-chin.md`](./v2-v-chin.md).
+
+**Adenda 2026-08-26 (V Chin aberto).** Leonardo abriu o menu V Chin. Superado pelo fecho no mesmo dia.
 
 **Adenda 2026-08-26 (Chin Length bipolar).** Leonardo reabriu o Chin **só** para alongar + encurtar no mesmo slider (centro = 0, rótulo «Tamanho do queixo»). Calibração vigente: amplitude `0.07 × faceWidth`, crista no oval mento→172/397 (cauda 0.08, só Δy — gônios fora da crista, não substitui Jaw). Documento [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md). V Chin e Double Chin continuam menus futuros (keys novas). Cheekbones H intacto.
 
@@ -119,7 +123,7 @@ Ordem para **parecer Meitu no menu e no ecrã**, dado que Jaw (gônio) e Chin (l
 | 3 | **Hairline** | Ícone no topo da testa. Distinto de Temple. `forehead` no código é só um nome morto. |
 | 4 | **Width** | No Meitu é a base da cara. O Jaw **já faz** esse movimento. Prioridade baixa: ou é o mesmo slider com outro nome, ou um segundo controlo no **mesmo** sítio (só depois de Jawline/Jaw estarem aceites como estão). |
 | 5 | **Jaw Angle** | Idem: o Jaw já vive no canto. Separar só se o produto quiser dois knobs no gônio. |
-| 6 | **V Chin** | O Chin Length já mexe o 152. V Chin é *forma* da ponta, não length. Vem depois do mento vertical estar estável (já está). |
+| 6 | **V Chin** | **Feito** (aprovado 2026-08-26). Forma da ponta, não length. |
 | 7 | **V shape** | O ícone atravessa bochecha + mandíbula + queixo. Sem Cheekbones (e sem aceitar Jaw+Chin como estão) vira um operador único outra vez. |
 | 8 | **Lift** | Mesmo andar do Width, sentido contrário. Só com Jaw estável. |
 | 9 | **Double Chin** | Pedem pescoço/submento. Não temos essa região. |

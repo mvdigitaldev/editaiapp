@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-08-26 (V Chin: sem ilha no 152; smoothstep na midline)
+Última actualização: 2026-08-26 (V Shape: corte seco na curva; V Chin, Jaw e Cheekbones H intactos)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -37,18 +37,19 @@ A IA actua como **arquitecto** do Facial Warp V2.
 |---|---|
 | **Jaw** | Aprovado. Vivo no produto (`jaw`). Encerrado. Não alterar. |
 | **Chin** | Reaberto **só** para calibração bipolar Chin Length. Vivo (`chin`, «Tamanho do queixo»). Não assinado no editor. Relatório [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md). **Intacto** no V Chin. |
-| **V Chin** | Em inspecção. Key `v_chin` («V do queixo»). Field e UI no disco. Sem C. Relatório [`v2-v-chin.md`](./v2-v-chin.md). |
+| **V Chin** | Aprovado. Vivo no produto (`v_chin`, «V do queixo»). Encerrado. Não alterar. Relatório [`v2-v-chin.md`](./v2-v-chin.md). **Intacto** no V Shape. |
+| **V Shape** | Em inspecção. Key `v_shape` («Formato V»). Sem C. Relatório [`v2-v-shape.md`](./v2-v-shape.md). |
 | **Face Slim** | Arquivado. Lab A/B no disco. Sem C/D/E. Sem slider. Não promover. Não renomear para Cheekbones. |
-| **Roadmap de produto** | Aprovado. Adenda: V Chin em inspecção. Face Rig congelado. |
-| **Cheekbones** | Em desenvolvimento. Hipótese H vigente (crista oval). Inspecção no editor. Sem C. Relatório [`v2-cheekbones-h-report.md`](./v2-cheekbones-h-report.md). **Intacto** no V Chin. |
+| **Roadmap de produto** | Aprovado. Adenda: V Shape em inspecção. Face Rig congelado. |
+| **Cheekbones** | Em desenvolvimento. Hipótese H vigente (crista oval). Inspecção no editor. Sem C. Relatório [`v2-cheekbones-h-report.md`](./v2-cheekbones-h-report.md). **Intacto** no V Shape. |
 
 Pipeline viva no produto:
 
 ```
-RGBA → applyJawWarp → applyChinWarp → applyVChinWarp → applyCheekbonesWarp → Body → Skin → Color
+RGBA → applyJawWarp → applyChinWarp → applyVChinWarp → applyVShapeWarp → applyCheekbonesWarp → Body → Skin → Color
 ```
 
-Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada.
+Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin está na mesma cadeia, **aprovado**. V Shape está na cadeia como inspecção.
 
 ---
 
@@ -82,6 +83,7 @@ BackwardBilinearWarp
 - Receitas (blend ponderado de regiões / sliders compostos)
 - Slider composto
 - Alterar Jaw
+- Alterar V Chin
 - Alterar Chin **fora** da calibração bipolar de Chin Length
 - Alterar Cheekbones H
 - Alterar o renderer / `DisplacementField` / `WarpRequest` / `WarpResult`
@@ -127,19 +129,32 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Preview: slider não bloqueia; o peso unitário da crista cacheia-se (t só escala `dy`). Métricas de lab não correm no preview.
 - Módulo: `warp/v2/chin/`.
 - Não é Sprint A–E nova. Pendente assinatura visual no editor.
-- Fora deste passo: Double Chin, pescoço, Δx no gônio, alterar Jaw, Cheekbones, V Chin (key nova).
+- Fora deste passo: Double Chin, pescoço, Δx no gônio, alterar Jaw, Cheekbones, V Chin (encerrado).
 
-### V Chin — em inspecção
+### V Chin — encerrado
 
 - Key: `v_chin` («V do queixo»). **Não** é `v_face`. Não é Chin Length nem V shape.
+- Aprovado no editor (2026-08-26). Vivo em preview/export. Não reabrir.
 - Só Δx para a midline. `dy = 0`. 152 ≈ 0 por simetria (função ímpar), sem ilha/entalhe. Gônios e 132/361 hard-zero.
 - Crista: **148 → 176 → 149 → 150 → 136** / **377 → 400 → 378 → 379 → 365**. Pesos 1.00 → 0.14. Para antes de 172/58.
 - Slider bipolar; Geral / Esquerda / Direita = lados da **foto**. `tPhotoLeft` / `tPhotoRight`.
-- Amplitude: `0.080 × faceWidth`. σ⊥ `0.11 × faceWidth`. Sem entalhe gaussiano no 152 (fazia o “brush” no mento). Rampa midline `0.11 × faceWidth`.
-- **Esquerda = V** (Meitu, para a midline); direita = quadrado.
+- Amplitude: `0.080 × faceWidth`. σ⊥ `0.11 × faceWidth`. Rampa midline `0.11 × faceWidth` (fixa).
+- **Esquerda = V** (Meitu, para a midline); direita = quadrado. `t < 0` puxa para dentro.
 - Preview: cache do peso; métricas de lab fora do preview.
-- Documento: [`v2-v-chin.md`](./v2-v-chin.md). Sem C.
+- Documento: [`v2-v-chin.md`](./v2-v-chin.md).
 - Módulo: `warp/v2/v_chin/`. Não importa Chin/Jaw/Cheekbones.
+
+### V Shape — em inspecção
+
+- Key: `v_shape` («Formato V»). **Não** é `v_face`. Não é V Chin nem Jaw.
+- Só Δx. `dy = 0`. Interior 148/176/149 hard-zero. 152 hard-zero. 132/361 hard-zero.
+- Crista no oval: **58 → 172 → 136** / **288 → 397 → 365** (sopro→pico→mento). Pesos 0.20 → 1.00 → 0.62. **Não** 172→136→58 (volta atrás e corta a silhueta).
+- Slider bipolar; Geral / Esquerda / Direita = lados da **foto**. `tPhotoLeft` / `tPhotoRight`.
+- Amplitude: `0.055 × faceWidth`. σ⊥ `0.13 × faceWidth`. Hull pad `0.09`. Rampa de bordo `0.16 × faceWidth`. Rampa midline `0.10 × faceWidth` (fixa).
+- **Direita = V** (Meitu, bordo para a midline); esquerda = quadrado. `t > 0` puxa para dentro.
+- Preview: cache do peso; métricas de lab fora do preview.
+- Documento: [`v2-v-shape.md`](./v2-v-shape.md). Sem C.
+- Módulo: `warp/v2/v_shape/`. Não importa V Chin/Chin/Jaw/Cheekbones.
 
 ### Face Slim — arquivo
 
@@ -160,14 +175,18 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Calibração: t ∈ [-1, 1] por lado; amplitude `0.022 × faceWidth`; σ⊥ `0.09 × faceWidth`; rampa `0.12 × faceWidth`; rampa orelha `0.035 × faceWidth` na pina. Pesos da crista 0.80→0.22.
 - Preview: mesmo padrão do Chin — slider não bloqueia; peso unitário cacheado (t / L / R só escala `dx`). Métricas de lab não correm no preview. Geometria H intacta.
 - Sprint A encerrada (A1 carimbo; A2 arco interrompido). Hull/losango e dumps B antigos **não** são o Field no disco.
-- **Próximo passo (Cheekbones):** Sprint C quando Leonardo assinar as fotos lab. H **não** se altera no V Chin.
+- **Próximo passo (Cheekbones):** Sprint C quando Leonardo assinar as fotos lab. H **não** se altera. V Chin encerrado. V Shape não pisa H.
 - Chin Length e V Chin são sliders distintos. Não “ajustar” um para compensar o outro.
 
 ---
 
 ## Roadmap de produto (aprovado)
 
-**Adenda 2026-08-26 (V Chin).** Leonardo abriu o menu V Chin (`v_chin`, «V do queixo»): forma da ponta, Δx subtil, L/R da foto. Inspecção no editor. Documento [`v2-v-chin.md`](./v2-v-chin.md). Chin Length, Jaw e Cheekbones H intactos. Não é V shape. Não é C assinada.
+**Adenda 2026-08-26 (V Shape).** Leonardo abriu o Formato V (`v_shape`): silhueta externa do queixo, sopro na curva da mandíbula, L/R da foto. Inspecção. Documento [`v2-v-shape.md`](./v2-v-shape.md). V Chin, Jaw e Cheekbones H intactos. Não é o arco maçã→mandíbula. C não assinada.
+
+**Adenda 2026-08-26 (V Chin encerrado).** Leonardo fechou o V Chin no editor. Aprovado. Vivo (`v_chin`). Não alterar. Documento [`v2-v-chin.md`](./v2-v-chin.md).
+
+**Adenda 2026-08-26 (V Chin aberto).** Leonardo abriu o menu V Chin (`v_chin`, «V do queixo»): forma da ponta, Δx, L/R da foto. Superado pelo fecho no mesmo dia.
 
 **Adenda 2026-08-26 (Chin Length bipolar).** Leonardo reabriu o Chin **só** para slider bipolar (alongar + encurtar, rótulo «Tamanho do queixo»). Calibração vigente: amplitude `0.07 × faceWidth`, crista no oval até 172/397 (cauda 0.08, só Δy; gônios fora da crista). Preview de rosto sem debounce (coalesce). Documento [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md). Cheekbones H intacto.
 
@@ -176,10 +195,11 @@ Ordem seguinte **depois** de Cheekbones (C → D → E):
 1. Temple
 2. Hairline
 3. Width / Jaw Angle — baixa prioridade (o Jaw já cobre o essencial)
-4. V Chin — **em inspecção** (não C)
-5. V shape — só depois de Cheek + Jaw + Chin existirem como sliders
-6. Lift
-7. Double Chin — bloqueado (falta pescoço)
+4. Lift
+5. Double Chin — bloqueado (falta pescoço)
+
+V Chin: **feito** (aprovado 2026-08-26).  
+V Shape: **em inspecção** (silhueta externa; não o arco maçã).
 
 Fora do roadmap: Face Slim, Narrow Face, Smooth (pele, não Rosto).
 
@@ -196,9 +216,13 @@ Face Rig (`v2-face-rig-migration-plan.md`): **congelado**. Não implementar.
 - Relatório da sprint **aberta** do efeito actual
 - Roadmap / audit / spec só se este ficheiro os apontar como vigentes
 
+**Vigente para V Shape**
+
+- [`v2-v-shape.md`](./v2-v-shape.md) — **Field e UI no disco**; inspecção no editor (não é C)
+
 **Vigente para V Chin**
 
-- [`v2-v-chin.md`](./v2-v-chin.md) — **Field e UI no disco**; inspecção no editor (não é C)
+- [`v2-v-chin.md`](./v2-v-chin.md) — **aprovado e encerrado** (Field e UI no disco)
 
 **Vigente para Chin Length bipolar**
 
