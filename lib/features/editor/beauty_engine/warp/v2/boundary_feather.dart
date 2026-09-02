@@ -28,6 +28,17 @@ abstract final class BoundaryFeather {
   /// suporte (`3σ`) fechar dentro da rampa.
   static const _sigmaOfFalloff = 1 / 3;
 
+  /// Desvio do alisamento da distância, em pixels de imagem.
+  ///
+  /// Fixo, e não em fracção da cara, porque o que corrige são os dentes da
+  /// rasterização das máscaras, que medem um pixel qualquer que seja o tamanho
+  /// da cara.
+  static const rasterSigmaPx = 1.2;
+
+  /// Valor médio da rampa `max(0, d)` alisada, medido na fronteira: para uma
+  /// fronteira recta vale `σ/√(2π)`. Subtrair isto devolve o zero à fronteira.
+  static const _rasterBias = rasterSigmaPx * 0.3989;
+
   /// Rampa medida a partir da fronteira do domínio activo, onde [mask] é não
   /// nula.
   ///
@@ -73,11 +84,21 @@ abstract final class BoundaryFeather {
     required double sigmaPx,
   }) {
     final pixelCount = width * height;
+    _smoothRaster(dist, width, height);
+    // A rampa é um smoothstep e não `d / falloff`: a rampa linear arranca com
+    // derivada `1 / falloff`, portanto o primeiro pixel dentro do domínio já
+    // vale um passo inteiro. Como a fronteira é a rasterização de uma máscara
+    // binária, esse passo corre em degraus de um pixel ao longo dela — no
+    // `v_shape` o campo entrava a 0,23 px de golpe, e na borda pele/cabelo, com
+    // contraste máximo, lia-se como serrilhado. O smoothstep tem derivada nula
+    // nas duas pontas, logo o campo arranca do zero sem passo e fecha na
+    // saturação sem joelho, ao preço de 1,5× no gradiente ao meio da rampa —
+    // que continua muito abaixo de 1 e por isso não ameaça `detJ`.
     final ramp = Float32List(pixelCount);
     final inverse = falloffPx > 1e-6 ? 1.0 / falloffPx : 0.0;
     for (var i = 0; i < pixelCount; i++) {
       final r = dist[i] * inverse;
-      ramp[i] = r >= 1.0 ? 1.0 : r;
+      ramp[i] = r >= 1.0 ? 1.0 : r * r * (3 - 2 * r);
     }
     // O borrão tem de caber na rampa. Quando o suporte passa `falloffPx` a
     // mistura ainda está aberta onde a rampa já saturou, devolve o cru em toda
@@ -124,6 +145,45 @@ abstract final class BoundaryFeather {
       ramp[i] += (blurred[i] - ramp[i]) * g;
     }
     return ramp;
+  }
+
+  /// Alisa [dist] no lugar para apagar os dentes da rasterização das máscaras.
+  ///
+  /// As máscaras são binárias e desenhadas a pixel cheio, portanto a fronteira
+  /// do domínio serrilha, e a distância exacta a uma fronteira serrilhada
+  /// oscila meio pixel de linha para linha. Junto à fronteira a mistura deste
+  /// ficheiro devolve a rampa crua, que herda essa oscilação: no `v_shape`
+  /// media 0,23 px de vaivém entre pixels vizinhos, e na borda pele/cabelo,
+  /// onde o contraste é máximo, isso lê-se como serrilhado.
+  ///
+  /// O borrão apaga a oscilação, que corre ao longo da fronteira, mas também
+  /// levanta a rampa acima do zero na travessia. Por isso desconta-se
+  /// [_rasterBias] e corta-se em zero: a fronteira efectiva passa a ser a
+  /// curva de nível de uma função já alisada, lisa ao longo dela, e o campo
+  /// volta a casar com o exterior parado.
+  static void _smoothRaster(Float32List dist, int width, int height) {
+    final radius = boxRadiusFor(rasterSigmaPx);
+    if (radius < 1) {
+      return;
+    }
+    // Quem está fora do domínio tem de lá ficar: o borrão espalha distância
+    // para fora e sem esta guarda a rampa deixava de valer zero no exterior,
+    // que é o que faz o campo casar com a parte parada da imagem.
+    final outside = Uint8List(dist.length);
+    for (var i = 0; i < dist.length; i++) {
+      if (dist[i] <= 0) {
+        outside[i] = 1;
+      }
+    }
+    final scratch = Float32List(dist.length);
+    for (var pass = 0; pass < boxPasses; pass++) {
+      _boxHorizontal(dist, scratch, width, height, radius);
+      _boxVertical(scratch, dist, width, height, radius);
+    }
+    for (var i = 0; i < dist.length; i++) {
+      final d = outside[i] != 0 ? 0.0 : dist[i] - _rasterBias;
+      dist[i] = d > 0 ? d : 0;
+    }
   }
 
   /// Raio de caixa que, repetido [boxPasses] vezes, aproxima `sigmaPx`.

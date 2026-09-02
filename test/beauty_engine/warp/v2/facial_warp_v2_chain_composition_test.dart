@@ -115,6 +115,34 @@ double _minDetJ(DisplacementField f) {
 /// vértice no peso passa esse crivo e ainda assim imprime uma linha na pele. O
 /// núcleo exclui a fronteira do domínio, onde a rampa arranca de zero e deixa
 /// sempre um joelho que nada tem a ver com o defeito.
+/// Degrau com que o campo entra no domínio: maior deslocamento num pixel que
+/// tenha um vizinho parado.
+///
+/// Mede serrilhado. As máscaras de região são binárias e rasterizadas a pixel
+/// cheio, portanto a fronteira do domínio sai em degraus de um pixel; se o
+/// campo entrar nela com um passo, esse passo corre em dentes ao longo da
+/// silhueta. Num limite de contraste alto, como a pele contra o cabelo, lê-se
+/// como serrilhado mesmo valendo menos de um pixel.
+double _entryStep(DisplacementField f) {
+  var worst = 0.0;
+  for (var y = 1; y + 1 < f.height; y++) {
+    for (var x = 1; x + 1 < f.width; x++) {
+      final i = y * f.width + x;
+      final v = math.sqrt(f.dx[i] * f.dx[i] + f.dy[i] * f.dy[i]);
+      if (v <= worst) {
+        continue;
+      }
+      for (final j in [i - 1, i + 1, i - f.width, i + f.width]) {
+        if (f.dx[j].abs() < 1e-9 && f.dy[j].abs() < 1e-9) {
+          worst = v;
+          break;
+        }
+      }
+    }
+  }
+  return worst;
+}
+
 double _coreCurvature(DisplacementField f) {
   var peak = 0.0;
   for (var i = 0; i < f.pixelCount; i++) {
@@ -475,6 +503,24 @@ void main() {
       'cheekbone': 0.25,
     };
 
+    // Tectos do degrau de entrada, em pixels. Com a rampa linear o campo
+    // entrava no domínio a 0,20 px no `jaw` e a 0,23 px no `v_shape`, e era
+    // esse passo que serrilhava a silhueta contra o cabelo. O smoothstep e o
+    // alisamento da rasterização deixaram-nos abaixo de 0,09 px.
+    //
+    // O `cheekbone` tem tecto próprio: quem lhe manda o campo a zero junto à
+    // orelha é a rampa de 13 px do `earFalloff`, curta de mais para a zona onde
+    // o efeito está no seu pico. Encurtar esse degrau pede recalibrar o
+    // `earFalloff`, que é decisão do Sprint do efeito e não desta correcção.
+    const entryCeiling = <String, double>{
+      'jaw': 0.08,
+      'jaw_angle': 0.06,
+      'chin': 0.10,
+      'v_chin': 0.14,
+      'v_shape': 0.06,
+      'cheekbone': 0.30,
+    };
+
     // Oval do lado direito MP (esquerda da foto), de cima para baixo: têmpora,
     // lateral do rosto, gónio, curva da mandíbula, mento.
     const silhouette = [93, 132, 58, 172, 136, 150];
@@ -543,7 +589,8 @@ void main() {
     }
 
     for (final sample in faces) {
-      test('nenhum efeito vinca o seu núcleo — ${sample.id}', () {
+      test('nenhum efeito vinca o núcleo nem entra com degrau — ${sample.id}',
+          () {
         for (final t in [1.0, -1.0]) {
           final fields = <String, DisplacementField>{
             'jaw': JawField.build(
@@ -587,6 +634,11 @@ void main() {
               _coreCurvature(e.value),
               lessThan(coreCeiling[e.key]!),
               reason: '${e.key} vinca o núcleo a t=$t',
+            );
+            expect(
+              _entryStep(e.value),
+              lessThan(entryCeiling[e.key]!),
+              reason: '${e.key} entra no domínio com degrau a t=$t',
             );
           }
         }

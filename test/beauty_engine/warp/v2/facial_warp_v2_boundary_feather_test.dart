@@ -18,6 +18,20 @@ Uint8List _stripe(int width, int height, int stripe) {
   return mask;
 }
 
+/// Meio plano activo com fronteira oblíqua, rasterizada a pixel cheio como as
+/// máscaras de região. A fronteira sai em degraus de um pixel, que é a origem
+/// do serrilhado.
+Uint8List _slanted(int width, int height, double slope) {
+  final mask = Uint8List(width * height);
+  for (var y = 0; y < height; y++) {
+    final edge = (width * 0.25 + slope * y).round();
+    for (var x = edge; x < width; x++) {
+      mask[y * width + x] = 255;
+    }
+  }
+  return mask;
+}
+
 double _worstSecondDifference(
   Float32List v,
   int width,
@@ -55,6 +69,44 @@ void main() {
       // O primeiro pixel activo está a meio pixel da fronteira, logo a rampa
       // ainda tem de ser desprezável face ao seu alcance.
       expect(ramp[row * width + from], lessThan(0.1));
+    });
+
+    test('entra no domínio sem degrau, mesmo em fronteira oblíqua', () {
+      // A rampa linear arrancava com derivada `1 / falloff`, portanto o
+      // primeiro pixel activo valia logo um passo inteiro. Numa fronteira
+      // oblíqua rasterizada esse passo corre em degraus de um pixel ao longo
+      // dela, e num limite de contraste alto lê-se como serrilhado.
+      const w = 120;
+      const h = 120;
+      const falloff = 60.0;
+      final mask = _slanted(w, h, 0.4);
+      final ramp = BoundaryFeather.insideActive(
+        mask: mask,
+        width: w,
+        height: h,
+        falloffPx: falloff,
+        sigmaPx: 12,
+      );
+
+      var worstEntry = 0.0;
+      for (var y = 1; y + 1 < h; y++) {
+        for (var x = 1; x + 1 < w; x++) {
+          final i = y * w + x;
+          if (ramp[i] <= 0) {
+            continue;
+          }
+          final touchesOutside = ramp[i - 1] <= 0 ||
+              ramp[i + 1] <= 0 ||
+              ramp[i - w] <= 0 ||
+              ramp[i + w] <= 0;
+          if (touchesOutside) {
+            worstEntry = math.max(worstEntry, ramp[i]);
+          }
+        }
+      }
+      // Uma rampa linear entraria em `1 / falloff`; o smoothstep entra uma
+      // ordem de grandeza abaixo.
+      expect(worstEntry, lessThan(0.1 / falloff));
     });
 
     test('satura em um a partir do falloff', () {
@@ -121,9 +173,15 @@ void main() {
         to: from + stripe,
       );
       // Com a largura par o vértice cai entre dois pixels e o salto reparte-se,
-      // pelo que a rampa crua marca `1 / falloff` e não `2 / falloff`.
-      expect(rawWorst, greaterThan(0.02));
-      expect(smoothWorst, lessThan(rawWorst / 4));
+      // pelo que a rampa sem borrão marca cerca de `1 / falloff` e não
+      // `2 / falloff`. O alisamento da rasterização, que corre sempre, já lhe
+      // arredonda a ponta, e é por isso que a referência fica abaixo disso.
+      expect(rawWorst, greaterThan(0.01));
+      expect(smoothWorst, lessThan(rawWorst / 3));
+      // O que interessa é a escala do próprio vinco: sem borrão o gradiente da
+      // rampa salta a ordem de `1 / falloff` ao atravessar a medial axis, e com
+      // borrão a segunda diferença fica cinco vezes abaixo disso.
+      expect(smoothWorst, lessThan(0.2 / 40));
     });
 
     test('preserva o perfil da rampa', () {
@@ -175,11 +233,11 @@ void main() {
         final i = row * width + x;
         worst = math.max(worst, (smooth[i + 1] - smooth[i]).abs());
       }
-      // Arredondar o joelho obriga a rampa a subir um pouco mais depressa
-      // antes de saturar; o excesso mede-se em poucos por cento e é o que
-      // separa esta mistura de uma porta multiplicativa, que apertava a rampa
-      // pelo factor 1,5 do smoothstep.
-      expect(worst, lessThanOrEqualTo(1.06 / falloff));
+      // A rampa é um smoothstep, cujo gradiente ao meio vale `1,5 / falloff`:
+      // é o preço de arrancar do zero sem passo. O borrão não pode acrescentar
+      // aperto a isso — foi uma porta multiplicativa a fazê-lo que punha o
+      // `chin` a inverter.
+      expect(worst, lessThanOrEqualTo(1.55 / falloff));
     });
 
     test('limita o borrão ao falloff', () {

@@ -276,6 +276,193 @@ Fica igualmente por tratar o arranque da rampa na própria fronteira do domínio
 onde o campo sai de zero com gradiente `amplitude / falloff`. É um joelho
 inerente à rampa linear e está fora do núcleo do efeito, logo longe do olho.
 
+> Esta última pendência era o serrilhado fino que Leonardo viu a seguir. Estava
+> mal avaliada: o joelho não está longe do olho, está exactamente sobre a
+> silhueta. Ver o Passo 5.
+
+---
+
+## Passo 5 — o serrilhado fino: a rampa entrava com um passo
+
+Leonardo, com o bico já resolvido: «está quase perfeito, quase; ficaram alguns
+serrilhados bem pequenos, mas geram reclamações dos clientes». As setas caem
+sobre a fronteira pele/cabelo na têmpora.
+
+### Diagnóstico
+
+As métricas em uso não o apanhavam. O `minDetJ` estava em 0,57 e a curvatura no
+núcleo em 0,26, ambos dentro dos tectos — e com razão, porque o defeito não está
+no núcleo: está na **fronteira**, que o núcleo exclui de propósito.
+
+Medido o campo pixel a pixel a atravessar a fronteira do domínio do `v_shape`
+(p01, `t=1`), na horizontal:
+
+```
+0,000   0,000   −0,226   −0,361   −0,529   −0,720
+        ↑ fronteira      ↑ primeiro pixel dentro
+```
+
+O primeiro pixel dentro do domínio vale já 0,23 px. É aritmética da rampa: com
+`min(1, d / falloff)` a derivada no arranque é `1 / falloff`, portanto o primeiro
+pixel, que está a um pixel da fronteira, leva `amplitude / falloff` — com 13,5 px
+de amplitude e 60 px de `falloff`, 0,23 px.
+
+Um passo constante ao longo de uma fronteira lisa seria invisível. O que o torna
+visível é a fronteira **não** ser lisa: as máscaras de região são binárias e
+rasterizadas a pixel cheio, logo uma silhueta oblíqua sai em dentes de um pixel.
+O passo acompanha os dentes, e o resultado é uma orla que salta 0,23 px para
+dentro e para fora ao descer a face. Na pele contra o cabelo, onde o contraste é
+máximo, isso lê-se como serrilhado apesar de ser sub-pixel.
+
+Foi por isso que a rampa borrada não bastou: junto à fronteira o `BoundaryFeather`
+**mistura de volta ao cru**, de propósito, para não desfazer o zero da borda — e
+o cru é precisamente onde o passo vive.
+
+### Correcção
+
+Duas mudanças, ambas em `warp/v2/boundary_feather.dart`. Nenhum efeito foi
+tocado, nenhuma amplitude mexeu.
+
+**A rampa passou a smoothstep**, `r²(3−2r)`. Tem derivada nula nas duas pontas:
+entra do zero sem passo e fecha na saturação sem joelho. O primeiro pixel passa
+a valer `3 (1/falloff)²`, uma ordem de grandeza abaixo. O preço é `1,5 / falloff`
+de gradiente ao meio da rampa em vez de `1 / falloff`; com os `falloff` em uso
+isso fica muito abaixo de 1 e por isso não ameaça o `detJ`.
+
+**A distância é alisada** com σ fixo de 1,2 px antes da rampa. Fixo em pixels, e
+não em fracção da cara, porque o dente da rasterização mede um pixel qualquer que
+seja o tamanho da cara. O borrão apaga a oscilação, que corre ao longo da
+fronteira, mas também levanta a rampa acima do zero na travessia, pelo que se
+desconta `σ/√(2π)` — o valor médio de `max(0, d)` alisado sobre uma fronteira
+recta — e se corta em zero. A fronteira efectiva passa a ser a curva de nível de
+uma função já alisada, lisa ao longo dela. Quem está fora do domínio fica fora:
+sem essa guarda o borrão espalha distância para o exterior e a rampa deixa de
+valer zero lá, que é o que faz o campo casar com a parte parada da imagem.
+
+### Verificação
+
+Degrau de entrada, o maior deslocamento num pixel com vizinho parado, pior das
+cinco faces reais nos dois extremos:
+
+| Efeito | Antes | Depois |
+| --- | --- | --- |
+| `jaw` | 0.20 | **0.042** |
+| `v_shape` | 0.23 | **0.029** |
+| `chin` | — | **0.063** |
+| `v_chin` | — | **0.089** |
+| `jaw_angle` | — | **0.029** |
+| `cheekbone` | — | 0.244 |
+
+O `minDetJ` continua positivo em todos, com mínimo de 0,196 no `chin` a `t=−1`,
+e a curvatura no núcleo desceu ou manteve-se. O alisamento da distância paga por
+si: sem ele o degrau ficaria em 0,042 no `v_shape` e 0,114 no `v_chin`, e a
+curvatura no núcleo do `cheekbone` em 0,237 em vez de 0,183.
+
+Custo: +8% na construção dos campos, 682 ms contra 631 ms para os seis a
+695×1024.
+
+A métrica entrou nos testes, ao lado da curvatura no núcleo, no
+`nenhum efeito vinca o núcleo nem entra com degrau`. O `BoundaryFeather` ganhou
+também um teste com fronteira oblíqua rasterizada, que é a geometria do defeito.
+
+### Pendência conhecida
+
+O `cheekbone` fica em 0,244, seis vezes acima dos outros. Não é a rampa de bordo:
+quem lhe manda o campo a zero junto à orelha é a rampa de 13 px do `earFalloff`,
+e 13 px são curtos para uma zona onde o efeito está no seu pico — em p01 o último
+pixel activo junto ao landmark 454 sai a 0,117 px. Encurtar esse degrau é
+recalibrar o `earFalloff`, decisão do Sprint do Cheekbones, que está em inspecção
+sem Sprint C.
+
+---
+
+## Passo 6 — o aliasing onde o remap comprime
+
+Leonardo, com a rampa já corrigida e a testar **só** a Mandíbula a 100%: «está
+98%, no meio das linhas vermelhas fica um pouco serrilhado». A faixa marcada é
+interior à bochecha, não a silhueta.
+
+### O campo não era o culpado
+
+Primeiro excluí a hipótese óbvia. Medido o resíduo de alta frequência do `jaw`
+bem dentro do domínio — o campo menos a sua versão alisada a σ ≈ 1,15 px, que
+deixa passar só o que varia em um ou dois pixels — o pior valor é 0,06 px em p01
+e 0,13 px em p06, e as vizinhanças descem monotonamente:
+
+```
+-9,973  -9,922  -9,838  -9,720  -9,565  -9,373  -9,144
+```
+
+Sem escada. O defeito está na **amostragem**, não no campo.
+
+### Diagnóstico
+
+O remap é `src = p − D(p)`, logo a sua jacobiana é `A = I − JD`. Onde o maior
+valor singular de `A` passa de um, um passo de um pixel no destino salta mais de
+um pixel na origem — e a bilinear, que lê o quadrado `2×2` em volta do ponto,
+deixa cair tudo o que fica no meio. É aliasing por falta de pré-filtro, e numa
+borda de contraste lê-se como serrilhado.
+
+Medido nas cinco faces com o `jaw` no extremo:
+
+| Face | Compressão máxima | Pixels deslocados que comprimem |
+| --- | --- | --- |
+| p01 | 1.373 | 42.1% |
+| p05 | 1.410 | 43.9% |
+| p06 | 1.336 | 42.9% |
+| p12 | 1.428 | 43.0% |
+| p21 | 1.352 | 42.7% |
+
+Quase metade da zona do efeito. Contra o filtro de área exacto, com 8×8
+sub-amostras, num alvo de contraste 20–245: **33 de erro RMS e 57 de pior caso**.
+
+Isto **não é um defeito só do preview**. A compressão é uma razão de gradientes,
+e como a amplitude e o `falloff` escalam ambos com a cara, ela é a mesma em
+qualquer resolução: existe igual no export. O preview apenas a torna mais
+visível, porque corre a 720–1080 px de maior lado e é esticado para o ecrã com
+`FilterQuality.medium`, mais o zoom do `InteractiveViewer` — um artefacto de um
+pixel no preview chega ao olho com um pixel e meio ou dois.
+
+### Correcção
+
+`BackwardBilinearWarp` passou a filtrar por área os pixels que comprimem: uma
+grelha de `n×n` sub-amostras dentro do pixel de destino, com `n = ⌈σ_max⌉` até
+três, cada uma lendo o campo interpolado. A média sobre a grelha do destino é o
+filtro de área da sua pré-imagem, que é exactamente o que falta à bilinear.
+
+Duas decisões deliberadas:
+
+- **Acima de `σ_max ≤ 1,05` fica a bilinear pura.** Filtrar por área onde não há
+  compressão só custaria nitidez. Translação pura, que tem compressão exactamente
+  um, continua a sair da bilinear, e há teste para isso.
+- **Sub-amostra com origem fora do rect é descartada da média**, não presa à
+  borda, para manter a regra de não fazer clamp da coordenada de origem.
+
+### Verificação
+
+Erro face ao filtro de área, nos pixels que comprimem:
+
+| | Antes | Depois |
+| --- | --- | --- |
+| RMS | 33.0 | **2.8** |
+| Pior caso | 57 | **7** |
+
+Doze vezes menos, num alvo que só vai de 20 a 245. Custo: +6,4 ms por remap,
+17,8 contra 11,4 ms a 695×1024, face aos cerca de 113 ms que a construção de cada
+campo já leva.
+
+Fixado em `facial_warp_v2_antialias_test.dart`, com três afirmações: translação
+pura não perde nitidez, compressão uniforme de 1,35× fica junto ao filtro de
+área, e nenhum dos seis efeitos no extremo alia onde comprime, nas cinco faces.
+
+### Nota sobre o teste do Face Slim
+
+O `renderer applies vertical displacement on slimActive` passou a escolher um
+ponto com a vizinhança toda activa. Esse teste pinta um campo sintético que salta
+5 px na fronteira da máscara, e aí o renderer filtra por área de propósito —
+exigir-lhe o valor de uma amostra pontual seria exigir o aliasing que ele existe
+para evitar. O que o teste afirma, o deslocamento, mantém-se intacto.
+
 ---
 
 ## O que mudou no resultado visual

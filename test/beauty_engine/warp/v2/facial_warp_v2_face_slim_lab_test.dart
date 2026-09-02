@@ -80,19 +80,35 @@ void main() {
       height: photo.height,
     );
     var painted = 0;
-    var sample = -1;
     for (var i = 0; i < field.pixelCount; i++) {
       if (built.masks.slimActive[i] == 0) {
         continue;
       }
       field.dy[i] = -5;
       painted++;
-      final y = i ~/ photo.width;
-      if (sample < 0 && y >= 8 && y + 5 < photo.height) {
-        sample = i;
-      }
     }
     expect(painted, greaterThan(0));
+
+    // Ponto com a vizinhança toda activa, ou seja onde este campo é localmente
+    // constante. Na fronteira da máscara ele salta 5 px de um pixel para o
+    // outro, e aí o renderer filtra por área de propósito — exigir-lhe o valor
+    // de uma amostra pontual seria exigir o aliasing que ele existe para
+    // evitar. O que este teste afirma é o deslocamento, não a amostragem.
+    var sample = -1;
+    for (var y = 8; y + 5 < photo.height - 1 && sample < 0; y++) {
+      for (var x = 1; x + 1 < photo.width; x++) {
+        final i = y * photo.width + x;
+        final flat = built.masks.slimActive[i] != 0 &&
+            built.masks.slimActive[i - 1] != 0 &&
+            built.masks.slimActive[i + 1] != 0 &&
+            built.masks.slimActive[i - photo.width] != 0 &&
+            built.masks.slimActive[i + photo.width] != 0;
+        if (flat) {
+          sample = i;
+          break;
+        }
+      }
+    }
     final warped = BackwardBilinearWarp.apply(
       WarpRequest(
         sourceRgba: photo.rgba,
