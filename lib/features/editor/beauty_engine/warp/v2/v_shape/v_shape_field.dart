@@ -3,9 +3,10 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import '../../../models/face_mesh_result.dart';
+import '../boundary_feather.dart';
 import '../displacement_field.dart';
-import '../distance_transform.dart';
 import '../region_catalog.dart';
+import '../ridge_weight.dart';
 import 'v_shape_masks.dart';
 import 'v_shape_metrics.dart';
 
@@ -61,16 +62,30 @@ abstract final class VShapeField {
   static const innerLeft = 148;
   static const innerRight = 377;
 
-  /// Ordem do oval: sopro no gônio → pico na silhueta → cauda para o mento.
-  /// Não 172→136→58: isso volta atrás e corta a crista (fold / corte seco).
-  static const curveLeft = [58, 172, 136];
-  static const curveRight = [288, 397, 365];
-  static const curveWeights = [0.20, 1.00, 0.62];
+  /// Ordem do oval, de cima para baixo: cauda na lateral do rosto → gónio →
+  /// pico na curva da mandíbula → cauda para o mento. Não voltar atrás: isso
+  /// corta a crista (fold / corte seco).
+  ///
+  /// A crista era só `58 → 172 → 136` com `0.20 → 1.00 → 0.62`, e caía a um
+  /// quinto no gónio. Somada ao Jaw, que na silhueta é um planalto, dava um
+  /// bico: com ambos no extremo, 23,5 px no 172 contra 14 px nos vizinhos.
+  /// As duas caudas espalham o efeito pela silhueta com pouca intensidade em
+  /// vez de o concentrar num arco de 35 px.
+  static const curveLeft = [93, 132, 58, 172, 136, 150];
+  static const curveRight = [323, 361, 288, 397, 365, 379];
+  static const curveWeights = [0.06, 0.28, 0.68, 1.00, 0.86, 0.45];
 
   static const hullLandmarks = {172, 136, 58, 397, 365, 288, 152};
   static const chinTipLandmarks = {152};
   static const innerPadLandmarks = {148, 176, 149, 377, 400, 378};
-  static const jawDomainLandmarks = {132, 361};
+
+  /// Onde as caudas actuam. Sem isto o peso baixo não tem domínio e a extensão
+  /// da crista não muda nada.
+  static const taperLandmarks = {132, 361, 93, 323, 150, 379};
+
+  /// Régua da zona do Jaw. Já não corta o campo — ver [VShapeMasks.build] — mas
+  /// as métricas continuam a medi-la para se saber quanto lá entra.
+  static const metricJawLandmarks = {132, 361};
 
   static const amplitudeFaceWidth = 0.055;
   static const falloffFaceWidth = 0.16;
@@ -79,6 +94,13 @@ abstract final class VShapeField {
   static const midBlendFaceWidth = 0.10;
   static const innerNotchFaceWidth = 0.038;
   static const tipNotchFaceWidth = 0.028;
+
+  /// Largura da troca de segmento na crista. Ver [RidgeWeight].
+  static const ridgeBlendFaceWidth = 0.012;
+
+  /// Borrão da rampa de fronteira. Ver [BoundaryFeather]: sem isto a medial
+  /// axis do domínio imprime um vinco diagonal na bochecha.
+  static const boundarySmoothFaceWidth = 0.022;
 
   static VShapeFieldBuild build({
     required FaceMeshResult face,
@@ -141,7 +163,8 @@ abstract final class VShapeField {
       face: face,
       imageSize: imageSize,
       hullLandmarks: hullLandmarks,
-      jawDomainLandmarks: jawDomainLandmarks,
+      jawDomainLandmarks: metricJawLandmarks,
+      taperLandmarks: taperLandmarks,
       chinTipLandmarks: chinTipLandmarks,
       innerPadLandmarks: innerPadLandmarks,
       hullPadFaceWidth: hullPadFaceWidth,
@@ -247,16 +270,19 @@ abstract final class VShapeField {
     final left = _curveRidge(px, curveLeft);
     final right = _curveRidge(px, curveRight);
     final sigmaAcross = math.max(6.0, sigmaAcrossFaceWidth * faceWidth);
+    final ridgeBlend = math.max(1.5, ridgeBlendFaceWidth * faceWidth);
     final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
     final midBlend = math.max(8.0, midBlendFaceWidth * faceWidth);
     final innerNotch = math.max(6.0, innerNotchFaceWidth * faceWidth);
     final tipNotch = math.max(5.0, tipNotchFaceWidth * faceWidth);
     final innerPts = _points(px, innerPadLandmarks);
     final tipPts = _points(px, chinTipLandmarks);
-    final dist = EuclideanDistanceTransform.toZeroOf(
-      masks.chinActive,
-      width,
-      height,
+    final boundaryRamp = BoundaryFeather.insideActive(
+      mask: masks.chinActive,
+      width: width,
+      height: height,
+      falloffPx: falloff,
+      sigmaPx: math.max(1.0, boundarySmoothFaceWidth * faceWidth),
     );
     final pixelCount = width * height;
     final active = <int>[];
@@ -269,15 +295,27 @@ abstract final class VShapeField {
       }
       final x = (i % width) + 0.5;
       final y = (i ~/ width) + 0.5;
-      final wL = _ridgeWeight(left, x, y, sigmaAcross);
-      final wR = _ridgeWeight(right, x, y, sigmaAcross);
+      final wL = RidgeWeight.at(
+        nodes: left,
+        x: x,
+        y: y,
+        sigmaAcross: sigmaAcross,
+        blendPx: ridgeBlend,
+      );
+      final wR = RidgeWeight.at(
+        nodes: right,
+        x: x,
+        y: y,
+        sigmaAcross: sigmaAcross,
+        blendPx: ridgeBlend,
+      );
       final mpLeft = wL >= wR;
       final pad = mpLeft ? wL : wR;
       final toward = midlineX - x;
       if (toward.abs() < 1e-6) {
         continue;
       }
-      final boundary = math.min(1.0, dist[i] / falloff);
+      final boundary = boundaryRamp[i];
       final midGate = math.min(1.0, toward.abs() / midBlend);
       final innerGate = _notchGate(innerPts, x, y, innerNotch);
       final tipGate = _notchGate(tipPts, x, y, tipNotch);
@@ -327,22 +365,7 @@ abstract final class VShapeField {
         anchors.add((p: p, weight: curveWeights[i]));
       }
     }
-    if (anchors.length < 2) {
-      return anchors;
-    }
-    final out = <({Offset p, double weight})>[];
-    for (var i = 0; i < anchors.length; i++) {
-      out.add(anchors[i]);
-      if (i + 1 < anchors.length) {
-        final a = anchors[i];
-        final b = anchors[i + 1];
-        out.add((
-          p: Offset((a.p.dx + b.p.dx) * 0.5, (a.p.dy + b.p.dy) * 0.5),
-          weight: (a.weight + b.weight) * 0.5,
-        ));
-      }
-    }
-    return out;
+    return RidgeWeight.densify(anchors);
   }
 
   static List<Offset> _points(List<Offset?> px, Set<int> ids) {
@@ -374,49 +397,6 @@ abstract final class VShapeField {
       }
     }
     return gate;
-  }
-
-  static double _ridgeWeight(
-    List<({Offset p, double weight})> handles,
-    double x,
-    double y,
-    double sigmaAcross,
-  ) {
-    if (sigmaAcross < 1e-6 || handles.isEmpty) {
-      return 0;
-    }
-    if (handles.length == 1) {
-      final ddx = x - handles.first.p.dx;
-      final ddy = y - handles.first.p.dy;
-      final g = handles.first.weight *
-          math.exp(-(ddx * ddx + ddy * ddy) / (2 * sigmaAcross * sigmaAcross));
-      return g > 1.0 ? 1.0 : g;
-    }
-    var bestD2 = double.infinity;
-    var bestW = 0.0;
-    for (var i = 0; i < handles.length - 1; i++) {
-      final a = handles[i];
-      final b = handles[i + 1];
-      final abx = b.p.dx - a.p.dx;
-      final aby = b.p.dy - a.p.dy;
-      final len2 = abx * abx + aby * aby;
-      var tSeg = 0.0;
-      if (len2 > 1e-12) {
-        tSeg = ((x - a.p.dx) * abx + (y - a.p.dy) * aby) / len2;
-        tSeg = tSeg.clamp(0.0, 1.0);
-      }
-      final px = a.p.dx + abx * tSeg;
-      final py = a.p.dy + aby * tSeg;
-      final dx = x - px;
-      final dy = y - py;
-      final d2 = dx * dx + dy * dy;
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        bestW = a.weight + (b.weight - a.weight) * tSeg;
-      }
-    }
-    final g = bestW * math.exp(-bestD2 / (2 * sigmaAcross * sigmaAcross));
-    return g > 1.0 ? 1.0 : g;
   }
 
 }

@@ -109,7 +109,20 @@ void main() {
       expect(m.outsideChinZoneP95, lessThanOrEqualTo(_protectEps), reason: f.id);
       expect(m.eyes.p95Abs, lessThanOrEqualTo(_protectEps), reason: f.id);
       expect(m.mouth.p95Abs, lessThanOrEqualTo(_protectEps), reason: f.id);
-      expect(m.jawDomain.p95Abs, lessThanOrEqualTo(_protectEps), reason: f.id);
+      // A zona do Jaw deixou de ser hard-zero: era um disco binário que, com a
+      // rampa de bordo por cima, apagava o efeito em todo o gónio e fazia o
+      // total dar um bico no 172. Passou a cauda graduada pelo peso da crista,
+      // logo aqui exige-se que entre — mas só como cauda, nunca a mandar.
+      expect(
+        m.jawDomain.p95Abs,
+        greaterThan(_protectEps),
+        reason: '${f.id} a cauda tem de entrar na zona do Jaw',
+      );
+      expect(
+        m.jawDomain.p95Abs,
+        lessThan(0.55 * m.dxAtPrimaryRight.abs()),
+        reason: '${f.id} cauda na zona do Jaw acima de meio pico',
+      );
 
       var nonzeroDy = 0;
       for (var i = 0; i < built.field.pixelCount; i++) {

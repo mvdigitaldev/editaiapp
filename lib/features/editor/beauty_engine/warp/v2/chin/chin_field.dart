@@ -3,9 +3,10 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import '../../../models/face_mesh_result.dart';
+import '../boundary_feather.dart';
 import '../displacement_field.dart';
-import '../distance_transform.dart';
 import '../region_catalog.dart';
+import '../ridge_weight.dart';
 import 'chin_masks.dart';
 import 'chin_metrics.dart';
 
@@ -77,6 +78,13 @@ abstract final class ChinField {
   static const falloffFaceWidth = 0.12;
   static const hullPadFaceWidth = 0.07;
   static const sigmaAcrossFaceWidth = 0.08;
+
+  /// Largura da troca de segmento na crista. Ver [RidgeWeight]: sem isto o peso
+  /// dá um degrau na medial axis e o campo inverte (`minDetJ` −0,046 a t=1).
+  static const ridgeBlendFaceWidth = 0.012;
+
+  /// Borrão da rampa de fronteira. Ver [BoundaryFeather].
+  static const boundarySmoothFaceWidth = 0.022;
 
   static ChinFieldBuild build({
     required FaceMeshResult face,
@@ -206,15 +214,18 @@ abstract final class ChinField {
     required List<Offset?> px,
     required double faceWidth,
   }) {
-    final dist = EuclideanDistanceTransform.toZeroOf(
-      masks.chinActive,
-      width,
-      height,
-    );
     final left = _curveRidge(px, curveLeft);
     final right = _curveRidge(px, curveRight);
     final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
+    final boundaryRamp = BoundaryFeather.insideActive(
+      mask: masks.chinActive,
+      width: width,
+      height: height,
+      falloffPx: falloff,
+      sigmaPx: math.max(1.0, boundarySmoothFaceWidth * faceWidth),
+    );
     final sigmaAcross = math.max(8.0, sigmaAcrossFaceWidth * faceWidth);
+    final ridgeBlend = math.max(1.5, ridgeBlendFaceWidth * faceWidth);
     final active = <int>[];
     final weights = <double>[];
     if (left.length >= 2 || right.length >= 2) {
@@ -225,10 +236,22 @@ abstract final class ChinField {
         }
         final x = (i % width) + 0.5;
         final y = (i ~/ width) + 0.5;
-        final boundary = math.min(1.0, dist[i] / falloff);
+        final boundary = boundaryRamp[i];
         final ridge = math.max(
-          _ridgeWeight(left, x, y, sigmaAcross),
-          _ridgeWeight(right, x, y, sigmaAcross),
+          RidgeWeight.at(
+            nodes: left,
+            x: x,
+            y: y,
+            sigmaAcross: sigmaAcross,
+            blendPx: ridgeBlend,
+          ),
+          RidgeWeight.at(
+            nodes: right,
+            x: x,
+            y: y,
+            sigmaAcross: sigmaAcross,
+            blendPx: ridgeBlend,
+          ),
         );
         final weight = boundary * ridge;
         if (weight <= 1e-6) {
@@ -256,11 +279,8 @@ abstract final class ChinField {
   }
 
   /// Polilinha com pontos médios — evita vales de `max(gaussianas)` na curva.
-  static List<({Offset p, double weight})> _curveRidge(
-    List<Offset?> px,
-    List<int> ids,
-  ) {
-    final anchors = <({Offset p, double weight})>[];
+  static List<RidgeNode> _curveRidge(List<Offset?> px, List<int> ids) {
+    final anchors = <RidgeNode>[];
     for (var i = 0; i < ids.length; i++) {
       final id = ids[i];
       final p = id < px.length ? px[id] : null;
@@ -268,65 +288,6 @@ abstract final class ChinField {
         anchors.add((p: p, weight: curveWeights[i]));
       }
     }
-    if (anchors.length < 2) {
-      return anchors;
-    }
-    final out = <({Offset p, double weight})>[];
-    for (var i = 0; i < anchors.length; i++) {
-      out.add(anchors[i]);
-      if (i + 1 < anchors.length) {
-        final a = anchors[i];
-        final b = anchors[i + 1];
-        out.add((
-          p: Offset((a.p.dx + b.p.dx) * 0.5, (a.p.dy + b.p.dy) * 0.5),
-          weight: (a.weight + b.weight) * 0.5,
-        ));
-      }
-    }
-    return out;
+    return RidgeWeight.densify(anchors);
   }
-
-  static double _ridgeWeight(
-    List<({Offset p, double weight})> handles,
-    double x,
-    double y,
-    double sigmaAcross,
-  ) {
-    if (sigmaAcross < 1e-6 || handles.isEmpty) {
-      return 0;
-    }
-    if (handles.length == 1) {
-      final ddx = x - handles.first.p.dx;
-      final ddy = y - handles.first.p.dy;
-      final g = handles.first.weight *
-          math.exp(-(ddx * ddx + ddy * ddy) / (2 * sigmaAcross * sigmaAcross));
-      return g > 1.0 ? 1.0 : g;
-    }
-    var bestD2 = double.infinity;
-    var bestW = 0.0;
-    for (var i = 0; i < handles.length - 1; i++) {
-      final a = handles[i];
-      final b = handles[i + 1];
-      final abx = b.p.dx - a.p.dx;
-      final aby = b.p.dy - a.p.dy;
-      final len2 = abx * abx + aby * aby;
-      var tSeg = 0.0;
-      if (len2 > 1e-12) {
-        tSeg = ((x - a.p.dx) * abx + (y - a.p.dy) * aby) / len2;
-        tSeg = tSeg.clamp(0.0, 1.0);
-      }
-      final px = a.p.dx + abx * tSeg;
-      final py = a.p.dy + aby * tSeg;
-      final dx = x - px;
-      final dy = y - py;
-      final d2 = dx * dx + dy * dy;
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        bestW = a.weight + (b.weight - a.weight) * tSeg;
-      }
-    }
-    final g = bestW * math.exp(-bestD2 / (2 * sigmaAcross * sigmaAcross));
-    return g > 1.0 ? 1.0 : g;
-  }
-
 }

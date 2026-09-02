@@ -3,8 +3,8 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import '../../../models/face_mesh_result.dart';
+import '../boundary_feather.dart';
 import '../displacement_field.dart';
-import '../distance_transform.dart';
 import '../region_catalog.dart';
 import 'cheekbones_masks.dart';
 import 'cheekbones_metrics.dart';
@@ -114,6 +114,9 @@ abstract final class CheekbonesField {
   static const falloffFaceWidth = 0.12;
   /// Rampa curta na orelha: evita fold sem comer o malar (0.12 comia o lado direito).
   static const earFalloffFaceWidth = 0.035;
+
+  /// Borrão das rampas de fronteira. Ver [BoundaryFeather].
+  static const boundarySmoothFaceWidth = 0.022;
 
   static CheekbonesFieldBuild build({
     required FaceMeshResult face,
@@ -327,11 +330,23 @@ abstract final class CheekbonesField {
         earSeed[i] = 255;
       }
     }
-    final dist = EuclideanDistanceTransform.toNonZeroOf(inactive, width, height);
-    final distEar =
-        EuclideanDistanceTransform.toNonZeroOf(earSeed, width, height);
     final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
     final earFalloff = math.max(6.0, earFalloffFaceWidth * faceWidth);
+    final boundarySmooth = math.max(1.0, boundarySmoothFaceWidth * faceWidth);
+    final boundaryRamp = BoundaryFeather.awayFromInactive(
+      mask: inactive,
+      width: width,
+      height: height,
+      falloffPx: falloff,
+      sigmaPx: boundarySmooth,
+    );
+    final earRamp = BoundaryFeather.awayFromInactive(
+      mask: earSeed,
+      width: width,
+      height: height,
+      falloffPx: earFalloff,
+      sigmaPx: boundarySmooth,
+    );
     final active = <int>[];
     final weights = <double>[];
     final signs = <int>[];
@@ -350,8 +365,8 @@ abstract final class CheekbonesField {
       if (toward.abs() < 1e-6) {
         continue;
       }
-      final boundary = math.min(1.0, dist[i] / falloff);
-      final earBoundary = math.min(1.0, distEar[i] / earFalloff);
+      final boundary = boundaryRamp[i];
+      final earBoundary = earRamp[i];
       final weight = pad * boundary * earBoundary;
       if (weight <= 1e-6) {
         continue;

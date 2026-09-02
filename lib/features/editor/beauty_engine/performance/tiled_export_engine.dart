@@ -112,43 +112,8 @@ class TiledExportEngine {
       rgbaSource.height.toDouble(),
     );
 
-    final jawRgba = controller.applyJawWarp(
+    final cheekRgba = controller.applyFaceWarpChain(
       sourceRgba: rgbaSource.bytes,
-      width: rgbaSource.width,
-      height: rgbaSource.height,
-      face: face,
-      parameters: params,
-    );
-    final jawAngleRgba = controller.applyJawAngleWarp(
-      sourceRgba: jawRgba,
-      width: rgbaSource.width,
-      height: rgbaSource.height,
-      face: face,
-      parameters: params,
-    );
-    final faceRgba = controller.applyChinWarp(
-      sourceRgba: jawAngleRgba,
-      width: rgbaSource.width,
-      height: rgbaSource.height,
-      face: face,
-      parameters: params,
-    );
-    final vChinRgba = controller.applyVChinWarp(
-      sourceRgba: faceRgba,
-      width: rgbaSource.width,
-      height: rgbaSource.height,
-      face: face,
-      parameters: params,
-    );
-    final vShapeRgba = controller.applyVShapeWarp(
-      sourceRgba: vChinRgba,
-      width: rgbaSource.width,
-      height: rgbaSource.height,
-      face: face,
-      parameters: params,
-    );
-    final cheekRgba = controller.applyCheekbonesWarp(
-      sourceRgba: vShapeRgba,
       width: rgbaSource.width,
       height: rgbaSource.height,
       face: face,

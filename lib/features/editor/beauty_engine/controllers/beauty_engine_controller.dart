@@ -57,6 +57,8 @@ import '../warp/v2/chin/chin_field.dart';
 import '../warp/v2/jaw_field.dart';
 import '../warp/v2/jaw_angle/jaw_angle_field.dart';
 import '../warp/v2/cheekbones/cheekbones_field.dart';
+import '../warp/v2/displacement_field.dart';
+import '../warp/v2/landmark_advection.dart';
 import '../warp/v2/v_chin/v_chin_field.dart';
 import '../warp/v2/v_shape/v_shape_field.dart';
 
@@ -1125,6 +1127,220 @@ class BeautyEngineController {
     return warped.rgba;
   }
 
+  /// Ordem da cadeia facial. Os parâmetros de cada etapa servem também de chave
+  /// do cache de advecção.
+  static const List<({String backend, List<String> parameters})>
+      faceWarpChainStages = [
+    (backend: 'v2_jaw', parameters: ['jaw']),
+    (
+      backend: 'v2_jaw_angle',
+      parameters: ['jaw_angle', 'jaw_angle_left', 'jaw_angle_right'],
+    ),
+    (backend: 'v2_chin', parameters: ['chin']),
+    (
+      backend: 'v2_v_chin',
+      parameters: ['v_chin', 'v_chin_left', 'v_chin_right'],
+    ),
+    (
+      backend: 'v2_v_shape',
+      parameters: ['v_shape', 'v_shape_left', 'v_shape_right'],
+    ),
+    (
+      backend: 'v2_cheekbone',
+      parameters: ['cheekbone', 'cheekbone_left', 'cheekbone_right'],
+    ),
+  ];
+
+  final List<FaceMeshResult?> _advectionFrom =
+      List.filled(faceWarpChainStages.length, null);
+  final List<FaceMeshResult?> _advectionTo =
+      List.filled(faceWarpChainStages.length, null);
+  final List<String?> _advectionKey =
+      List.filled(faceWarpChainStages.length, null);
+
+  /// Cadeia facial única: cada efeito constrói o seu campo sobre os landmarks já
+  /// deslocados pelos anteriores e aplica um remap.
+  ///
+  /// Substitui o encadeamento em que os seis efeitos partilhavam o `face`
+  /// original. Nesse arranjo, o efeito a jusante recebia o RGBA deformado mas
+  /// media a geometria na imagem de origem, e a crista ficava fora da silhueta
+  /// — ver [LandmarkAdvection].
+  ///
+  /// Não soma campos. A soma alinharia a geometria com uma única reamostragem,
+  /// mas com os seis efeitos no extremo o campo resultante inverte
+  /// (`minDetJ ≈ −0,7`); encadear remaps injectivos preserva a garantia.
+  Uint8List applyFaceWarpChain({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    if (face == null || sourceRgba.length != width * height * 4) {
+      lastFaceWarpBackend = null;
+      lastFaceWarpField = null;
+      return sourceRgba;
+    }
+    final imageSize = Size(width.toDouble(), height.toDouble());
+
+    var rgba = sourceRgba;
+    var current = face;
+    String? backend;
+
+    for (var stage = 0; stage < faceWarpChainStages.length; stage++) {
+      final field = _buildFaceWarpStage(
+        stage: stage,
+        face: current,
+        imageSize: imageSize,
+        parameters: parameters,
+      );
+      if (field == null) {
+        continue;
+      }
+      rgba = v2.BackwardBilinearWarp.apply(
+        v2.WarpRequest(
+          sourceRgba: rgba,
+          width: width,
+          height: height,
+          field: field,
+        ),
+      ).rgba;
+      backend = faceWarpChainStages[stage].backend;
+      if (stage + 1 < faceWarpChainStages.length) {
+        current = _advectFace(
+          stage: stage,
+          from: current,
+          field: field,
+          imageSize: imageSize,
+          parameters: parameters,
+        );
+      }
+    }
+
+    lastFaceWarpBackend = backend;
+    lastFaceWarpField = null;
+    return rgba;
+  }
+
+  /// Campo da etapa, ou `null` quando o slider está em identidade — aí a etapa
+  /// não gasta remap nem advecção.
+  DisplacementField? _buildFaceWarpStage({
+    required int stage,
+    required FaceMeshResult face,
+    required Size imageSize,
+    required Map<String, double> parameters,
+  }) {
+    final keys = faceWarpChainStages[stage].parameters;
+    final general = (parameters[keys.first] ?? 0).clamp(-1.0, 1.0);
+    final left = keys.length > 1
+        ? (parameters[keys[1]] ?? general).clamp(-1.0, 1.0)
+        : general;
+    final right = keys.length > 2
+        ? (parameters[keys[2]] ?? general).clamp(-1.0, 1.0)
+        : general;
+    if (left.abs() <= 1e-6 && right.abs() <= 1e-6) {
+      return null;
+    }
+
+    switch (faceWarpChainStages[stage].backend) {
+      case 'v2_jaw':
+        final t = general.clamp(0.0, 1.0);
+        if (t <= 0) {
+          return null;
+        }
+        return JawField.build(face: face, imageSize: imageSize, t: t).field;
+      case 'v2_jaw_angle':
+        return JawAngleField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          tPhotoLeft: left,
+          tPhotoRight: right,
+          computeMetrics: false,
+          runtime: _jawAngleRuntime,
+        ).field;
+      case 'v2_chin':
+        return ChinField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          computeMetrics: false,
+          runtime: _chinRuntime,
+        ).field;
+      case 'v2_v_chin':
+        return VChinField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          tPhotoLeft: left,
+          tPhotoRight: right,
+          computeMetrics: false,
+          runtime: _vChinRuntime,
+        ).field;
+      case 'v2_v_shape':
+        return VShapeField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          tPhotoLeft: left,
+          tPhotoRight: right,
+          computeMetrics: false,
+          runtime: _vShapeRuntime,
+        ).field;
+      case 'v2_cheekbone':
+        return CheekbonesField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          tPhotoLeft: left,
+          tPhotoRight: right,
+          computeMetrics: false,
+          runtime: _cheekbonesRuntime,
+        ).field;
+      default:
+        throw StateError('face_warp_stage_desconhecida: $stage');
+    }
+  }
+
+  /// Advecção memoizada por etapa.
+  ///
+  /// Devolve o **mesmo objecto** enquanto a origem e os sliders das etapas
+  /// anteriores não mudarem, porque os Fields a jusante cacheiam o peso unitário
+  /// por `identical(face, ...)`: sem isto, mexer num slider recalcularia as
+  /// máscaras de todos os efeitos a jusante em cada frame.
+  FaceMeshResult _advectFace({
+    required int stage,
+    required FaceMeshResult from,
+    required DisplacementField field,
+    required Size imageSize,
+    required Map<String, double> parameters,
+  }) {
+    final key = StringBuffer('${field.width}x${field.height}');
+    for (var i = 0; i <= stage; i++) {
+      for (final name in faceWarpChainStages[i].parameters) {
+        key.write(';$name=${parameters[name] ?? 0}');
+      }
+    }
+    final signature = key.toString();
+
+    final cached = _advectionTo[stage];
+    if (cached != null &&
+        _advectionKey[stage] == signature &&
+        identical(_advectionFrom[stage], from)) {
+      return cached;
+    }
+
+    final advected = LandmarkAdvection.advance(
+      face: from,
+      field: field,
+      imageSize: imageSize,
+    );
+    _advectionKey[stage] = signature;
+    _advectionFrom[stage] = from;
+    _advectionTo[stage] = advected;
+    return advected;
+  }
+
   Future<TextureHandle> _renderTexture({
     required ImageSource source,
     required ProcessingPipeline pipeline,
@@ -1179,43 +1395,8 @@ class BeautyEngineController {
       return output;
     }
 
-    final jawRgba = applyJawWarp(
+    final cheekRgba = applyFaceWarpChain(
       sourceRgba: rgbaSource.bytes,
-      width: rgbaSource.width,
-      height: rgbaSource.height,
-      face: face,
-      parameters: params,
-    );
-    final jawAngleRgba = applyJawAngleWarp(
-      sourceRgba: jawRgba,
-      width: rgbaSource.width,
-      height: rgbaSource.height,
-      face: face,
-      parameters: params,
-    );
-    final faceRgba = applyChinWarp(
-      sourceRgba: jawAngleRgba,
-      width: rgbaSource.width,
-      height: rgbaSource.height,
-      face: face,
-      parameters: params,
-    );
-    final vChinRgba = applyVChinWarp(
-      sourceRgba: faceRgba,
-      width: rgbaSource.width,
-      height: rgbaSource.height,
-      face: face,
-      parameters: params,
-    );
-    final vShapeRgba = applyVShapeWarp(
-      sourceRgba: vChinRgba,
-      width: rgbaSource.width,
-      height: rgbaSource.height,
-      face: face,
-      parameters: params,
-    );
-    final cheekRgba = applyCheekbonesWarp(
-      sourceRgba: vShapeRgba,
       width: rgbaSource.width,
       height: rgbaSource.height,
       face: face,

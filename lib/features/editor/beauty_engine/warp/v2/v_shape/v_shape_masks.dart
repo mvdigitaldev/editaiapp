@@ -59,6 +59,7 @@ class VShapeMasks {
     required Set<int> chinTipLandmarks,
     required Set<int> innerPadLandmarks,
     required double hullPadFaceWidth,
+    Set<int> taperLandmarks = const {},
   }) {
     final width = imageSize.width.round();
     final height = imageSize.height.round();
@@ -75,7 +76,12 @@ class VShapeMasks {
     final chinTip = RegionMaskRaster.zeros(width, height);
     final innerPad = RegionMaskRaster.zeros(width, height);
 
-    RegionMaskRaster.fillConvexHull(chin, width, height, _points(px, hullLandmarks));
+    RegionMaskRaster.fillConvexHull(
+      chin,
+      width,
+      height,
+      _points(px, {...hullLandmarks, ...taperLandmarks}),
+    );
     final pad = math.max(6, (hullPadFaceWidth * faceWidth).round());
     RegionMaskRaster.dilate(chin, width, height, pad);
 
@@ -148,7 +154,12 @@ class VShapeMasks {
     RegionMaskRaster.orInto(protected, mouth);
     RegionMaskRaster.orInto(protected, faceCenter);
     RegionMaskRaster.orInto(protected, ears);
-    RegionMaskRaster.orInto(protected, jawDomain);
+    // `jawDomain` fica de fora do `protected`: continua a servir de régua nas
+    // métricas, mas já não corta o campo. Era um disco binário de
+    // `0.06 × faceWidth` em 132/361 que, com a rampa de bordo por cima,
+    // apagava o efeito em todo o gónio — o 58 ficava com 1,9 px contra os
+    // 11,6 px do 172, e daí vinha o bico na silhueta. Quem gradua a cauda
+    // nessa zona é agora o peso da crista, que é o controlo próprio para isso.
 
     final chinActive = RegionMaskRaster.zeros(width, height);
     for (var i = 0; i < chinActive.length; i++) {

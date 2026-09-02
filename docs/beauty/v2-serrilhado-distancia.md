@@ -176,6 +176,108 @@ diferença entre os lados. Rejeita o estado anterior por ambos os motivos (era
 
 ---
 
+## Passo 4 — o vinco na bochecha: a rampa herdava a medial axis
+
+Leonardo, com **Mandíbula** e **Formato V** ambos a 100% para a direita: «ele
+buga e fica tudo errado, olha a força dos cortes puxando apenas onde ele tem a
+maior área de atuação». Na foto, três setas paralelas apontando uma linha
+diagonal a meio da bochecha, paralela à silhueta.
+
+### Não era dobra
+
+`minDetJ` estava positivo (0,53) e a cadeia passava todos os testes. O que
+faltava era medir **vinco**: uma quebra de gradiente passa o crivo do `detJ` e
+ainda assim imprime uma linha na pele, porque o olho lê a derivada segunda. A
+métrica passou a ser a maior segunda diferença do campo.
+
+### Causa — o bico da transformada de distância
+
+A rampa `min(1, dist / falloff)` herda a crista da transformada de distância. Na
+**medial axis** do domínio a distância tem um máximo interior, com
+`|grad dist| = 1` de cada lado e sinais opostos, logo o gradiente da rampa salta
+`2 / falloff`. Medido no `v_shape` de p01, numa linha à altura do 397:
+
+| k (px do 397) | −24 | −16 | −12 | 0 | +12 | +24 |
+|---|---|---|---|---|---|---|
+| `dist` | 38.9 | **45.0** | 43.6 | 33.1 | 21.9 | 10.8 |
+| `boundary` | 0.644 | 0.746 | 0.722 | 0.548 | 0.363 | 0.178 |
+
+O máximo da distância cai a 45 px da fronteira, a meio da zona activa. Como
+`falloff` vale `0,16 × faceWidth` = 60 px e a medial axis está a 45, a rampa
+**nunca satura**: o bico fica no meio da bochecha com peso 0,72. Com a amplitude
+de 20,7 px isso dá 0,69 px/px de salto de gradiente — a linha das setas.
+
+O bico existia nos **seis** efeitos, com a rampa copiada em cinco Fields.
+Curvatura no núcleo do efeito, antes: `jaw_angle` 0,88, `cheekbone` 0,84,
+`v_chin` 0,69, `v_shape` 0,77, `jaw` 0,55, `chin` 0,49.
+
+### Correcção
+
+Novo módulo `warp/v2/boundary_feather.dart`: `BoundaryFeather`, que borra a
+rampa com três passagens de caixa (aproximação da gaussiana, `O(n)`), e assim
+arredonda tanto a medial axis como o joelho da saturação. `insideActive` e
+`awayFromInactive` cobrem as duas sementes já usadas pelos Fields.
+
+Dois detalhes que só a medição revelou, ambos travados por teste:
+
+1. **O borrão sozinho desfaz o zero na fronteira.** Espalha peso para cima da
+   borda, e o campo, que fora do domínio é nulo, passou a saltar 1,3 px na
+   fronteira do `v_shape` e a inverter (`minDetJ` −0,20). Perto da fronteira
+   volta-se por isso à rampa crua.
+2. **A troca tem de ser mistura, não porta multiplicativa.** Uma porta impõe a
+   sua própria escala; como o suporte do borrão é bem menor que `falloff`, sai
+   mais abrupta que a rampa e aperta-a pelo factor 1,5 do smoothstep. O `chin`,
+   que já vivia no limite (`dy` cai exactamente 1,00 px/px), inverteu
+   (`minDetJ` −0,007 a t=−1). Na mistura o único termo acrescentado ao gradiente
+   é `g' × (borrado − cru)`, desprezável porque a diferença é da ordem do
+   borrão.
+
+Também se limitou o desvio a `falloff / 3`: com o suporte acima do `falloff` a
+mistura fica aberta onde a rampa já saturou e devolve o cru em toda a transição,
+que era o caso da rampa da orelha do `cheekbone` (`earFalloff` 13 px contra
+24 px de suporte).
+
+Na mesma passagem migraram-se para a crista contínua (`RidgeWeight`) os três
+Fields que faltavam — `jaw`, `jaw_angle`, `v_shape` — e a interpolação do peso
+ao longo da crista passou a smoothstep. A crista do `v_shape` tem o pico num
+vértice interior (`58 → 172 → 136` com pesos `0,20 → 1,00 → 0,62`), e com
+interpolação linear o máximo do peso era um bico, não uma curva: o gradiente
+passava de +0,33 para −0,45 num ponto.
+
+### Resultado
+
+Curvatura no núcleo do efeito, onde o deslocamento vale ao menos um quarto do
+pico:
+
+| efeito | antes | agora |
+|---|---|---|
+| `jaw` | 0.55 | **0.14** |
+| `jaw_angle` | 0.88 | **0.15** |
+| `chin` | 0.49 | **0.16** |
+| `cheekbone` | 0.84 | **0.16** |
+| `v_shape` | 0.77 | **0.20** |
+| `v_chin` | 0.69 | 0.50 |
+
+`minDetJ` subiu em todos: `jaw` 0,34 → 0,62, `chin` 0,31 → 0,41, `cheekbone`
+0,49 → 0,58. Na cadeia que Leonardo reportou — Mandíbula 100% e Formato V 100%
+— a curvatura interior do campo total ficou em 0,00–0,07 com `minDetJ` 0,57–0,60
+nas cinco faces.
+
+### Pendência conhecida
+
+O `v_chin` continua acima dos restantes por causa do joelho do `midGate`, que
+vale `amplitude / midBlend`. Com os `0,080` de amplitude deste efeito esse
+gradiente é 0,73 e é também o que lhe segura o `minDetJ`, pelo que suavizar o
+joelho — a única correcção possível — exige baixar a amplitude. É decisão de
+calibração do V Chin e não desta correcção. O tecto do teste está em 0,55 para
+este efeito e 0,25 para os outros cinco.
+
+Fica igualmente por tratar o arranque da rampa na própria fronteira do domínio,
+onde o campo sai de zero com gradiente `amplitude / falloff`. É um joelho
+inerente à rampa linear e está fora do núcleo do efeito, logo longe do olho.
+
+---
+
 ## O que mudou no resultado visual
 
 Preencher os vãos aumenta a energia média ao longo da silhueta: o efeito fica

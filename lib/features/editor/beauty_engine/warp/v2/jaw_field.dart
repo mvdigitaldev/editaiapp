@@ -4,11 +4,12 @@ import 'dart:ui';
 
 import '../../models/face_landmark.dart';
 import '../../models/face_mesh_result.dart';
+import 'boundary_feather.dart';
 import 'displacement_field.dart';
-import 'distance_transform.dart';
 import 'field_metrics.dart';
 import 'region_catalog.dart';
 import 'region_masks.dart';
+import 'ridge_weight.dart';
 
 class JawFieldBuild {
   const JawFieldBuild({
@@ -59,6 +60,12 @@ abstract final class JawField {
   /// Raio transversal da crista, fracção da face.
   static const sigmaAcrossFaceWidth = 0.08;
 
+  /// Largura da troca de segmento na crista. Ver [RidgeWeight].
+  static const ridgeBlendFaceWidth = 0.012;
+
+  /// Borrão das rampas de fronteira. Ver [BoundaryFeather].
+  static const boundarySmoothFaceWidth = 0.022;
+
   static JawFieldBuild build({
     required FaceMeshResult face,
     required Size imageSize,
@@ -87,6 +94,11 @@ abstract final class JawField {
         falloff: math.max(12.0, falloffFaceWidth * geometry.faceWidth),
         earFalloff: math.max(6.0, earFalloffFaceWidth * geometry.faceWidth),
         sigmaAcross: math.max(8.0, sigmaAcrossFaceWidth * geometry.faceWidth),
+        ridgeBlend: math.max(1.5, ridgeBlendFaceWidth * geometry.faceWidth),
+        boundarySmooth: math.max(
+          1.0,
+          boundarySmoothFaceWidth * geometry.faceWidth,
+        ),
       );
     }
 
@@ -334,6 +346,8 @@ abstract final class JawField {
     required double falloff,
     required double earFalloff,
     required double sigmaAcross,
+    required double ridgeBlend,
+    required double boundarySmooth,
   }) {
     // A pina fica fora da rampa longa e ganha rampa própria: senão o disco da
     // orelha entra nos 0.12 e corta a cauda de um só lado.
@@ -348,15 +362,19 @@ abstract final class JawField {
         earSeed[i] = 255;
       }
     }
-    final dist = EuclideanDistanceTransform.toNonZeroOf(
-      inactive,
-      field.width,
-      field.height,
+    final boundaryRamp = BoundaryFeather.awayFromInactive(
+      mask: inactive,
+      width: field.width,
+      height: field.height,
+      falloffPx: falloff,
+      sigmaPx: boundarySmooth,
     );
-    final distEar = EuclideanDistanceTransform.toNonZeroOf(
-      earSeed,
-      field.width,
-      field.height,
+    final earRamp = BoundaryFeather.awayFromInactive(
+      mask: earSeed,
+      width: field.width,
+      height: field.height,
+      falloffPx: earFalloff,
+      sigmaPx: boundarySmooth,
     );
     final left = _curveRidge(px, curveLeft);
     final right = _curveRidge(px, curveRight);
@@ -369,11 +387,23 @@ abstract final class JawField {
       }
       final x = (i % field.width) + 0.5;
       final y = (i ~/ field.width) + 0.5;
-      final boundary = math.min(1.0, dist[i] / falloff);
-      final earBoundary = math.min(1.0, distEar[i] / earFalloff);
+      final boundary = boundaryRamp[i];
+      final earBoundary = earRamp[i];
       final ridge = math.max(
-        _ridgeWeight(left, x, y, sigmaAcross),
-        _ridgeWeight(right, x, y, sigmaAcross),
+        RidgeWeight.at(
+          nodes: left,
+          x: x,
+          y: y,
+          sigmaAcross: sigmaAcross,
+          blendPx: ridgeBlend,
+        ),
+        RidgeWeight.at(
+          nodes: right,
+          x: x,
+          y: y,
+          sigmaAcross: sigmaAcross,
+          blendPx: ridgeBlend,
+        ),
       );
       final weight = boundary * earBoundary * ridge;
       if (weight <= 1e-6) {
@@ -402,63 +432,7 @@ abstract final class JawField {
         anchors.add((p: p, weight: curveWeights[i]));
       }
     }
-    if (anchors.length < 2) {
-      return anchors;
-    }
-    final out = <({Offset p, double weight})>[];
-    for (var i = 0; i < anchors.length; i++) {
-      out.add(anchors[i]);
-      if (i + 1 < anchors.length) {
-        final a = anchors[i];
-        final b = anchors[i + 1];
-        out.add((
-          p: Offset((a.p.dx + b.p.dx) * 0.5, (a.p.dy + b.p.dy) * 0.5),
-          weight: (a.weight + b.weight) * 0.5,
-        ));
-      }
-    }
-    return out;
-  }
-
-  /// Gaussiana da distância à crista, com o peso interpolado ao longo dela.
-  static double _ridgeWeight(
-    List<({Offset p, double weight})> ridge,
-    double x,
-    double y,
-    double sigmaAcross,
-  ) {
-    if (sigmaAcross < 1e-6 || ridge.isEmpty) {
-      return 0;
-    }
-    final twoS2 = 2 * sigmaAcross * sigmaAcross;
-    if (ridge.length == 1) {
-      final ddx = x - ridge.first.p.dx;
-      final ddy = y - ridge.first.p.dy;
-      final g = ridge.first.weight * math.exp(-(ddx * ddx + ddy * ddy) / twoS2);
-      return g > 1.0 ? 1.0 : g;
-    }
-    var bestD2 = double.infinity;
-    var bestW = 0.0;
-    for (var i = 0; i < ridge.length - 1; i++) {
-      final a = ridge[i];
-      final b = ridge[i + 1];
-      final abx = b.p.dx - a.p.dx;
-      final aby = b.p.dy - a.p.dy;
-      final len2 = abx * abx + aby * aby;
-      var tSeg = 0.0;
-      if (len2 > 1e-12) {
-        tSeg = (((x - a.p.dx) * abx + (y - a.p.dy) * aby) / len2).clamp(0.0, 1.0);
-      }
-      final ddx = x - (a.p.dx + abx * tSeg);
-      final ddy = y - (a.p.dy + aby * tSeg);
-      final d2 = ddx * ddx + ddy * ddy;
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        bestW = a.weight + (b.weight - a.weight) * tSeg;
-      }
-    }
-    final g = bestW * math.exp(-bestD2 / twoS2);
-    return g > 1.0 ? 1.0 : g;
+    return RidgeWeight.densify(anchors);
   }
 
   static ({double before, double after}) _pairWidth(

@@ -3,9 +3,10 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import '../../../models/face_mesh_result.dart';
+import '../boundary_feather.dart';
 import '../displacement_field.dart';
-import '../distance_transform.dart';
 import '../region_catalog.dart';
+import '../ridge_weight.dart';
 import 'jaw_angle_masks.dart';
 import 'jaw_angle_metrics.dart';
 
@@ -74,6 +75,12 @@ abstract final class JawAngleField {
   static const sigmaAcrossFaceWidth = 0.14;
   static const midBlendFaceWidth = 0.045;
   static const tipNotchFaceWidth = 0.020;
+
+  /// Largura da troca de segmento na crista. Ver [RidgeWeight].
+  static const ridgeBlendFaceWidth = 0.012;
+
+  /// Borrão da rampa de fronteira. Ver [BoundaryFeather].
+  static const boundarySmoothFaceWidth = 0.022;
   static const tipBleed = 0.22;
 
   static JawAngleFieldBuild build({
@@ -235,14 +242,17 @@ abstract final class JawAngleField {
     final left = _curveRidge(px, curveLeft);
     final right = _curveRidge(px, curveRight);
     final sigmaAcross = math.max(6.0, sigmaAcrossFaceWidth * faceWidth);
+    final ridgeBlend = math.max(1.5, ridgeBlendFaceWidth * faceWidth);
     final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
     final midBlend = math.max(8.0, midBlendFaceWidth * faceWidth);
     final tipNotch = math.max(5.0, tipNotchFaceWidth * faceWidth);
     final tipPts = _points(px, chinTipLandmarks);
-    final dist = EuclideanDistanceTransform.toZeroOf(
-      masks.chinActive,
-      width,
-      height,
+    final boundaryRamp = BoundaryFeather.insideActive(
+      mask: masks.chinActive,
+      width: width,
+      height: height,
+      falloffPx: falloff,
+      sigmaPx: math.max(1.0, boundarySmoothFaceWidth * faceWidth),
     );
     final pixelCount = width * height;
     final active = <int>[];
@@ -254,12 +264,24 @@ abstract final class JawAngleField {
       }
       final x = (i % width) + 0.5;
       final y = (i ~/ width) + 0.5;
-      final wL = _ridgeWeight(left, x, y, sigmaAcross);
-      final wR = _ridgeWeight(right, x, y, sigmaAcross);
+      final wL = RidgeWeight.at(
+        nodes: left,
+        x: x,
+        y: y,
+        sigmaAcross: sigmaAcross,
+        blendPx: ridgeBlend,
+      );
+      final wR = RidgeWeight.at(
+        nodes: right,
+        x: x,
+        y: y,
+        sigmaAcross: sigmaAcross,
+        blendPx: ridgeBlend,
+      );
       final mpLeft = wL >= wR;
       final pad = mpLeft ? wL : wR;
       final toward = midlineX - x;
-      final boundary = math.min(1.0, dist[i] / falloff);
+      final boundary = boundaryRamp[i];
       final midGate = math.min(1.0, toward.abs() / midBlend);
       final tipGate =
           tipBleed + (1.0 - tipBleed) * _notchGate(tipPts, x, y, tipNotch);
@@ -306,22 +328,7 @@ abstract final class JawAngleField {
         anchors.add((p: p, weight: curveWeights[i]));
       }
     }
-    if (anchors.length < 2) {
-      return anchors;
-    }
-    final out = <({Offset p, double weight})>[];
-    for (var i = 0; i < anchors.length; i++) {
-      out.add(anchors[i]);
-      if (i + 1 < anchors.length) {
-        final a = anchors[i];
-        final b = anchors[i + 1];
-        out.add((
-          p: Offset((a.p.dx + b.p.dx) * 0.5, (a.p.dy + b.p.dy) * 0.5),
-          weight: (a.weight + b.weight) * 0.5,
-        ));
-      }
-    }
-    return out;
+    return RidgeWeight.densify(anchors);
   }
 
   static List<Offset> _points(List<Offset?> px, Set<int> ids) {
@@ -353,49 +360,6 @@ abstract final class JawAngleField {
       }
     }
     return gate;
-  }
-
-  static double _ridgeWeight(
-    List<({Offset p, double weight})> handles,
-    double x,
-    double y,
-    double sigmaAcross,
-  ) {
-    if (sigmaAcross < 1e-6 || handles.isEmpty) {
-      return 0;
-    }
-    if (handles.length == 1) {
-      final ddx = x - handles.first.p.dx;
-      final ddy = y - handles.first.p.dy;
-      final g = handles.first.weight *
-          math.exp(-(ddx * ddx + ddy * ddy) / (2 * sigmaAcross * sigmaAcross));
-      return g > 1.0 ? 1.0 : g;
-    }
-    var bestD2 = double.infinity;
-    var bestW = 0.0;
-    for (var i = 0; i < handles.length - 1; i++) {
-      final a = handles[i];
-      final b = handles[i + 1];
-      final abx = b.p.dx - a.p.dx;
-      final aby = b.p.dy - a.p.dy;
-      final len2 = abx * abx + aby * aby;
-      var tSeg = 0.0;
-      if (len2 > 1e-12) {
-        tSeg = ((x - a.p.dx) * abx + (y - a.p.dy) * aby) / len2;
-        tSeg = tSeg.clamp(0.0, 1.0);
-      }
-      final px = a.p.dx + abx * tSeg;
-      final py = a.p.dy + aby * tSeg;
-      final dx = x - px;
-      final dy = y - py;
-      final d2 = dx * dx + dy * dy;
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        bestW = a.weight + (b.weight - a.weight) * tSeg;
-      }
-    }
-    final g = bestW * math.exp(-bestD2 / (2 * sigmaAcross * sigmaAcross));
-    return g > 1.0 ? 1.0 : g;
   }
 
 }
