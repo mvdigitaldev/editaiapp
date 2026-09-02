@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import '../../../models/face_mesh_result.dart';
 import '../displacement_field.dart';
+import '../distance_transform.dart';
 import '../region_catalog.dart';
 import 'v_chin_masks.dart';
 import 'v_chin_metrics.dart';
@@ -237,7 +238,11 @@ abstract final class VChinField {
     final sigmaAcross = math.max(6.0, sigmaAcrossFaceWidth * faceWidth);
     final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
     final midBlend = math.max(8.0, midBlendFaceWidth * faceWidth);
-    final dist = _distanceToInactive(masks.chinActive, width, height);
+    final dist = EuclideanDistanceTransform.toZeroOf(
+      masks.chinActive,
+      width,
+      height,
+    );
     final pixelCount = width * height;
     final active = <int>[];
     final weights = <double>[];
@@ -366,34 +371,4 @@ abstract final class VChinField {
     return g > 1.0 ? 1.0 : g;
   }
 
-  static Float32List _distanceToInactive(Uint8List active, int width, int height) {
-    const inf = 1e8;
-    final dist = Float32List(width * height);
-    for (var i = 0; i < dist.length; i++) {
-      dist[i] = active[i] == 0 ? 0 : inf;
-    }
-    for (var y = 0; y < height; y++) {
-      for (var x = 0; x < width; x++) {
-        final i = y * width + x;
-        if (x > 0) {
-          dist[i] = math.min(dist[i], dist[i - 1] + 1);
-        }
-        if (y > 0) {
-          dist[i] = math.min(dist[i], dist[i - width] + 1);
-        }
-      }
-    }
-    for (var y = height - 1; y >= 0; y--) {
-      for (var x = width - 1; x >= 0; x--) {
-        final i = y * width + x;
-        if (x + 1 < width) {
-          dist[i] = math.min(dist[i], dist[i + 1] + 1);
-        }
-        if (y + 1 < height) {
-          dist[i] = math.min(dist[i], dist[i + width] + 1);
-        }
-      }
-    }
-    return dist;
-  }
 }

@@ -12,6 +12,27 @@ import '../../filters/skin/mvp_benchmark_faces.dart';
 const _ids = ['real-p01', 'real-p05', 'real-p12'];
 const _protectEps = 0.5;
 
+Offset? _landmarkPixel(FaceMeshResult face, int id, Size size) {
+  for (final lm in face.landmarks) {
+    if (lm.index == id) {
+      return Offset(lm.normalized.dx * size.width, lm.normalized.dy * size.height);
+    }
+  }
+  return null;
+}
+
+int _indexAt(JawFieldBuild built, Offset p) {
+  final x = p.dx.round().clamp(0, built.field.width - 1);
+  final y = p.dy.round().clamp(0, built.field.height - 1);
+  return built.field.indexOf(x, y);
+}
+
+bool _isActive(JawFieldBuild built, Offset p) =>
+    built.masks.jawActive[_indexAt(built, p)] != 0;
+
+double _absDx(JawFieldBuild built, Offset p) =>
+    built.field.dx[_indexAt(built, p)].abs();
+
 void main() {
   late List<({String id, String label, FaceMeshResult face, Size imageSize})>
       faces;
@@ -124,6 +145,98 @@ void main() {
       reports.add(json);
     }
     expect(reports.length, 3);
+  });
+
+  test('t=1 does not fold and keeps protections (slider vai a 99%)', () {
+    for (final f in faces) {
+      final built = JawField.build(face: f.face, imageSize: f.imageSize, t: 1);
+      final m = built.metrics;
+      expect(m.gonionNarrows, isTrue, reason: f.id);
+      expect(m.minDetJ, greaterThan(0), reason: '${f.id} detJ=${m.minDetJ}');
+      expect(m.outsideJawZoneP95, lessThanOrEqualTo(_protectEps), reason: f.id);
+      expect(m.eyes.p95Abs, lessThanOrEqualTo(_protectEps), reason: f.id);
+      expect(m.mouth.p95Abs, lessThanOrEqualTo(_protectEps), reason: f.id);
+      expect(m.ears.p95Abs, lessThanOrEqualTo(_protectEps), reason: f.id);
+      expect(m.beard.p95Abs, lessThanOrEqualTo(_protectEps), reason: f.id);
+    }
+  });
+
+  // Regressão do serrilhado: com `max` de gaussianas por landmark o peso caía
+  // no vão entre âncoras, o que ondulava a silhueta e fazia quina onde duas
+  // gaussianas empatavam. Na crista em polilinha o meio do segmento tem de
+  // seguir a interpolação, não colapsar.
+  test('crista não festona entre âncoras consecutivas', () {
+    for (final f in faces) {
+      final built = JawField.build(face: f.face, imageSize: f.imageSize, t: 1);
+      var checked = 0;
+      for (final chain in [JawField.curveLeft, JawField.curveRight]) {
+        for (var i = 0; i < chain.length - 1; i++) {
+          final a = _landmarkPixel(f.face, chain[i], f.imageSize);
+          final b = _landmarkPixel(f.face, chain[i + 1], f.imageSize);
+          if (a == null || b == null) {
+            continue;
+          }
+          final mid = Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
+          if (!_isActive(built, mid) ||
+              !_isActive(built, a) ||
+              !_isActive(built, b)) {
+            continue;
+          }
+          final absA = _absDx(built, a);
+          final absB = _absDx(built, b);
+          final absMid = _absDx(built, mid);
+          final floor = 0.8 * math.min(absA, absB);
+          expect(
+            absMid,
+            greaterThanOrEqualTo(floor),
+            reason: '${f.id} vão ${chain[i]}→${chain[i + 1]}: '
+                'meio=${absMid.toStringAsFixed(2)} '
+                'a=${absA.toStringAsFixed(2)} b=${absB.toStringAsFixed(2)}',
+          );
+          checked++;
+        }
+      }
+      expect(checked, greaterThanOrEqualTo(4), reason: '${f.id} vãos testados');
+    }
+  });
+
+  // A cauda existe para o estreitamento não acabar em ponta no 132/361: acima
+  // dele o pixel saía do domínio e o deslocamento caía de golpe para zero.
+  // Tem de ser leve (não é o Cheekbones) e igual dos dois lados — o disco da
+  // orelha na rampa longa deixava o lado direito a um terço do esquerdo.
+  test('cauda na lateral do rosto é leve e simétrica', () {
+    for (final f in faces) {
+      final built = JawField.build(face: f.face, imageSize: f.imageSize, t: 1);
+      final peak = built.metrics.influenceMax;
+      expect(peak, greaterThan(0), reason: f.id);
+
+      for (final pair in [(93, 323), (234, 454)]) {
+        final isRamp = pair.$1 == 93;
+        final lo = isRamp ? 0.02 : 0.005;
+        final hi = isRamp ? 0.35 : 0.15;
+        final values = <double>[];
+        for (final id in [pair.$1, pair.$2]) {
+          final p = _landmarkPixel(f.face, id, f.imageSize);
+          expect(p, isNotNull, reason: '${f.id} landmark $id');
+          final frac = _absDx(built, p!) / peak;
+          expect(
+            frac,
+            inInclusiveRange(lo, hi),
+            reason: '${f.id} id=$id fracção do pico = '
+                '${frac.toStringAsFixed(3)}, esperado $lo..$hi',
+          );
+          values.add(frac);
+        }
+        final ratio = math.max(values[0], values[1]) /
+            math.max(math.min(values[0], values[1]), 1e-9);
+        expect(
+          ratio,
+          lessThan(2.0),
+          reason: '${f.id} assimetria ${pair.$1}/${pair.$2} = '
+              '${ratio.toStringAsFixed(2)}×',
+        );
+      }
+    }
   });
 
   test('builder API has no image RGBA and does not import the renderer', () {

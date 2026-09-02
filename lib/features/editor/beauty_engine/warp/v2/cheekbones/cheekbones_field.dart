@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import '../../../models/face_mesh_result.dart';
 import '../displacement_field.dart';
+import '../distance_transform.dart';
 import '../region_catalog.dart';
 import 'cheekbones_masks.dart';
 import 'cheekbones_metrics.dart';
@@ -326,8 +327,9 @@ abstract final class CheekbonesField {
         earSeed[i] = 255;
       }
     }
-    final dist = _distanceToProtected(inactive, width, height);
-    final distEar = _distanceToProtected(earSeed, width, height);
+    final dist = EuclideanDistanceTransform.toNonZeroOf(inactive, width, height);
+    final distEar =
+        EuclideanDistanceTransform.toNonZeroOf(earSeed, width, height);
     final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
     final earFalloff = math.max(6.0, earFalloffFaceWidth * faceWidth);
     final active = <int>[];
@@ -382,38 +384,4 @@ abstract final class CheekbonesField {
     }
   }
 
-  static Float32List _distanceToProtected(
-    Uint8List protected,
-    int width,
-    int height,
-  ) {
-    const inf = 1e8;
-    final dist = Float32List(width * height);
-    for (var i = 0; i < dist.length; i++) {
-      dist[i] = protected[i] != 0 ? 0 : inf;
-    }
-    for (var y = 0; y < height; y++) {
-      for (var x = 0; x < width; x++) {
-        final i = y * width + x;
-        if (x > 0) {
-          dist[i] = math.min(dist[i], dist[i - 1] + 1);
-        }
-        if (y > 0) {
-          dist[i] = math.min(dist[i], dist[i - width] + 1);
-        }
-      }
-    }
-    for (var y = height - 1; y >= 0; y--) {
-      for (var x = width - 1; x >= 0; x--) {
-        final i = y * width + x;
-        if (x + 1 < width) {
-          dist[i] = math.min(dist[i], dist[i + 1] + 1);
-        }
-        if (y + 1 < height) {
-          dist[i] = math.min(dist[i], dist[i + width] + 1);
-        }
-      }
-    }
-    return dist;
-  }
 }

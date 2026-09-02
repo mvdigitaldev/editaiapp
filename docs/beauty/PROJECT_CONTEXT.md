@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-08-28 (Jaw Angle: cunha 58→172→136, amplitude `0.052`; Jaw, Chin, V Chin, V Shape e Cheekbones H intactos)
+Última actualização: 2026-09-02 (distância euclidiana partilhada nos seis Fields; geometria e calibrações intactas)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -35,7 +35,7 @@ A IA actua como **arquitecto** do Facial Warp V2.
 
 | Peça | Estado |
 |---|---|
-| **Jaw** | Aprovado. Vivo no produto (`jaw`). Encerrado. Não alterar. **Intacto** no Jaw Angle. |
+| **Jaw** | Aprovado. Vivo no produto (`jaw`). Reaberto 2026-09-02 **só** para a crista em polilinha (serrilhado); amplitude e gônios intactos. Pendente assinatura visual. Depois disso, encerrado outra vez. **Intacto** no Jaw Angle. |
 | **Jaw Angle** | Em inspecção. Key `jaw_angle` («Ângulo da mandíbula»). Sem C. Relatório [`v2-jaw-angle.md`](./v2-jaw-angle.md). |
 | **Chin** | Reaberto **só** para calibração bipolar Chin Length. Vivo (`chin`, «Tamanho do queixo»). Não assinado no editor. Relatório [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md). **Intacto** no Jaw Angle. |
 | **V Chin** | Aprovado. Vivo no produto (`v_chin`, «V do queixo»). Encerrado. Não alterar. Relatório [`v2-v-chin.md`](./v2-v-chin.md). **Intacto** no Jaw Angle. |
@@ -72,6 +72,7 @@ BackwardBilinearWarp
 - Nenhum Field importa outro Field V2.
 - Infra congelada: `DisplacementField`, `WarpRequest`, `WarpResult`, `BackwardBilinearWarp`.
 - Catálogo compartilhado é **append-only** relativamente a efeitos aprovados.
+- Distância é **euclidiana exacta** e vive num só sítio: `warp/v2/distance_transform.dart` (`EuclideanDistanceTransform`). Rampa de fronteira e `RegionMaskRaster.dilate` usam-na. Não reintroduzir chamfer L1 (4 vizinhos, custo 1): mede em Manhattan, dá isolinhas em losango a 45° e imprime escada nas silhuetas oblíquas. Ver [`v2-serrilhado-distancia.md`](./v2-serrilhado-distancia.md).
 
 ---
 
@@ -92,6 +93,14 @@ BackwardBilinearWarp
 - Promover Face Slim
 - Ligar preview/export antes da Sprint C aprovada
 - Corrigir um efeito “ajustando” outro
+
+**Excepção autorizada (2026-09-02).** Leonardo autorizou por escrito, em dois passos:
+
+1. Correcção transversal de **qualidade numérica** nos seis Fields, incluindo Jaw, V Chin e Cheekbones H: a distância passou de chamfer L1 para euclidiana exacta. Geometria, cristas, amplitudes, hard-zeros e valores de slider **não** mudaram.
+2. **Reabertura do `jaw`** para trocar `max(gaussianas)` por crista em polilinha. Amplitude `0.04`, Δx e energia nos gônios intactos.
+
+Nenhum efeito mudou de estado. Isto **não** revoga as proibições acima nem abre
+os outros efeitos. Ver [`v2-serrilhado-distancia.md`](./v2-serrilhado-distancia.md).
 
 ---
 
@@ -120,6 +129,10 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Amplitude: `t * 0.04 * faceWidth`.
 - Módulo: `warp/v2/jaw_field.dart`.
 - Papel de produto: estreitar mandíbula nos gônios. Não é o Jawline completo do Meitu (falta pescoço). Suficiente. Não reabrir.
+- Crista em polilinha **234→93→132→58→172→136** / **454→323→361→288→397→365**, pesos `0.05 → 0.20 → 0.85 → 1.00 → 0.90 → 0.65`, σ⊥ `0.08 × faceWidth`. `weight` = distância à crista, **não** `max(gaussianas)`: o máximo de gaussianas por landmark cavava ~30% do peso no vão 132→58 e serrilhava o ramo orelha→gónio. Ordem de cima para baixo; não inverter.
+- **Cauda leve** em 234/93 (e 454/323): peso baixo de propósito. `taperLandmarks` entram no hull, senão o peso não tem domínio onde actuar. Sem ela o campo caía de 8.5 px para 0 entre o 132 e o 93 e a silhueta ficava pontuda na lateral. Não é Cheekbones.
+- **323/454 não são pina**, são a lateral do rosto (espelho de 93/234). Pina travada deslocada `0.05 × faceWidth` para fora, raio `0.022`, com rampa própria `0.035` fora da rampa longa. Disco de `0.06` centrado nesses IDs comia a silhueta e cortava a cauda de um só lado. Mesmo padrão do Cheekbones.
+- Reaberto 2026-09-02 **só** para estas correcções de qualidade de campo, com autorização escrita. Amplitude `0.04`, Δx e energia nos gônios intactos. Pendente assinatura visual no editor. Não reabrir para mais nada. Ver [`v2-serrilhado-distancia.md`](./v2-serrilhado-distancia.md).
 
 ### Jaw Angle — em inspecção
 
@@ -195,6 +208,8 @@ Aprovação de C é escrita. Sem ela, D não existe.
 
 ## Roadmap de produto (aprovado)
 
+**Adenda 2026-09-02 (serrilhado da silhueta).** Leonardo viu serrilhado no `jaw` a 99%, no ramo orelha→gónio. Duas causas, ambas corrigidas com autorização escrita. **Dominante:** o peso da silhueta era `max` de gaussianas em 8 landmarks e cavava ~30% no vão 132→58 (medido em p01/p05/p12) — passou a crista em polilinha 132→58→172→136, pesos 0.85→1.00→0.90→0.65, amplitude `0.04` intacta. **Secundária:** a distância era L1 (chamfer 4 vizinhos), copiada sete vezes, com isolinhas em losango e degraus de ~⅓ px na rampa — passou a `EuclideanDistanceTransform` exacta e partilhada, nos seis Fields e no `dilate`. **Terceira, vista na foto a 100%:** a silhueta ficava pontuda na lateral do rosto porque acima do 132 o pixel saía do hull e o campo caía de 8.5 px para 0 — resolvido com cauda de peso baixo em 234/93 (Leonardo: «100% da mandíbula e 5% dessa área de fora»), hull estendido, e a pina 323/454 tirada da rampa longa, que deixava o lado direito a um terço do esquerdo. Nenhum outro efeito mudou de geometria; 419 testes passam, `minDetJ` 0.36–0.47 em `t=1`, orelhas intactas. Falta assinatura visual. Relatório [`v2-serrilhado-distancia.md`](./v2-serrilhado-distancia.md).
+
 **Adenda 2026-08-28 (Jaw Angle cunha).** Leonardo: o máximo inchava o gônio e havia **trava no queixo**. Riscas Meitu = cunha até aos lados do queixo, não ilha no 58. Calibração vigente: amplitude `0.052`, crista **58→172→136** (1.00→0.72→0.48), midline `0.045`, sangria no 152 (chão 0.22). Jaw e Chin Length intactos. C não assinada.
 
 **Adenda 2026-08-27 (Jaw Angle calibração).** No máximo à esquerda o ângulo não se via: o 58 estava na rampa (pad 0.08 / falloff 0.14 ⇒ peso ~0.57) e o disco 132/361 travava o ramo. Superado pela cunha 2026-08-28.
@@ -235,6 +250,10 @@ Face Rig (`v2-face-rig-migration-plan.md`): **congelado**. Não implementar.
 - [`FacialWarpV2-Development-Rules.md`](./FacialWarpV2-Development-Rules.md)
 - Relatório da sprint **aberta** do efeito actual
 - Roadmap / audit / spec só se este ficheiro os apontar como vigentes
+
+**Vigente para todos os Fields (infra)**
+
+- [`v2-serrilhado-distancia.md`](./v2-serrilhado-distancia.md) — distância euclidiana partilhada e crista do `jaw`; proíbe voltar ao chamfer L1 e ao `max(gaussianas)`
 
 **Vigente para Jaw Angle**
 

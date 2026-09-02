@@ -5,6 +5,7 @@ import 'dart:ui';
 import '../../models/face_landmark.dart';
 import '../../models/face_mesh_result.dart';
 import 'displacement_field.dart';
+import 'distance_transform.dart';
 import 'field_metrics.dart';
 import 'region_catalog.dart';
 import 'region_masks.dart';
@@ -31,11 +32,32 @@ abstract final class JawField {
   /// Largura da rampa na fronteira da máscara activa, fracção da face.
   static const falloffFaceWidth = 0.12;
 
+  /// Rampa curta na pina. A orelha não entra na rampa longa: a 0.12 ela puxava
+  /// a cauda do lado direito para um terço do lado esquerdo.
+  static const earFalloffFaceWidth = 0.035;
+
   /// Dilatação do hull para os gônios ficarem no planalto (não na rampa).
   static const silhouettePadFaceWidth = 0.08;
 
-  /// Raio do kernel dos handles da silhueta, fracção da face.
-  static const handleSigmaFaceWidth = 0.08;
+  /// Crista da silhueta, de cima para baixo: cauda na lateral do rosto →
+  /// ramo → gônio → curva → cauda para o mento. Não inverter a ordem: voltar
+  /// atrás corta a crista. O peso interpola ao longo da polilinha, com pico no
+  /// gônio. Substitui o `max` de gaussianas por landmark, que ondulava entre
+  /// âncoras e fazia quina onde duas empatavam — o serrilhado do ramo 132→58.
+  ///
+  /// 234/93 (e 454/323) levam peso baixo de propósito: sem essa cauda o
+  /// estreitamento acabava em ponta no 132, porque acima dele o pixel saía do
+  /// domínio e o deslocamento caía de golpe para zero.
+  static const curveLeft = [234, 93, 132, 58, 172, 136];
+  static const curveRight = [454, 323, 361, 288, 397, 365];
+  static const curveWeights = [0.05, 0.20, 0.85, 1.00, 0.90, 0.65];
+
+  /// Lateral do rosto acima do ramo mandibular. Entra no hull para a cauda de
+  /// peso baixo ter domínio onde actuar; sem isto o peso não tem efeito.
+  static const taperLandmarks = {234, 93, 454, 323};
+
+  /// Raio transversal da crista, fracção da face.
+  static const sigmaAcrossFaceWidth = 0.08;
 
   static JawFieldBuild build({
     required FaceMeshResult face,
@@ -63,7 +85,8 @@ abstract final class JawField {
         midlineX: geometry.midlineX,
         amplitude: amplitude,
         falloff: math.max(12.0, falloffFaceWidth * geometry.faceWidth),
-        handleSigma: math.max(8.0, handleSigmaFaceWidth * geometry.faceWidth),
+        earFalloff: math.max(6.0, earFalloffFaceWidth * geometry.faceWidth),
+        sigmaAcross: math.max(8.0, sigmaAcrossFaceWidth * geometry.faceWidth),
       );
     }
 
@@ -128,7 +151,7 @@ abstract final class JawField {
       jaw,
       width,
       height,
-      _points(px, V2RegionCatalog.jawLandmarks),
+      _points(px, {...V2RegionCatalog.jawLandmarks, ...taperLandmarks}),
     );
     final pad = math.max(8, (silhouettePadFaceWidth * _faceWidth(px)).round());
     RegionMaskRaster.dilate(jaw, width, height, pad);
@@ -157,12 +180,25 @@ abstract final class JawField {
       _points(px, V2RegionCatalog.lips),
     );
 
+    // 323/454 estão no oval, não na pina: são a lateral do rosto, espelho de
+    // 93/234. Disco centrado neles comia a silhueta do lado direito e travava
+    // a cauda, o que deixava os dois lados assimétricos. Mesma solução já
+    // validada no Cheekbones: trava a pina deslocada para fora do oval.
     final faceWidth = _faceWidth(px);
-    final earRadius = 0.06 * faceWidth;
+    final earRadius = 0.022 * faceWidth;
+    final pinnaOut = 0.05 * faceWidth;
+    final midlineX = _geometry(px).midlineX;
     for (final id in V2RegionCatalog.ears) {
       final p = id < px.length ? px[id] : null;
       if (p != null) {
-        RegionMaskRaster.fillDisk(ears, width, height, p, earRadius);
+        final away = p.dx >= midlineX ? 1.0 : -1.0;
+        RegionMaskRaster.fillDisk(
+          ears,
+          width,
+          height,
+          Offset(p.dx + away * pinnaOut, p.dy),
+          earRadius,
+        );
       }
     }
 
@@ -296,31 +332,50 @@ abstract final class JawField {
     required double midlineX,
     required double amplitude,
     required double falloff,
-    required double handleSigma,
+    required double earFalloff,
+    required double sigmaAcross,
   }) {
-    final dist = _distanceToInactive(masks.jawActive, field.width, field.height);
-    final handles = _silhouetteHandles(px);
-    if (handles.isEmpty) {
+    // A pina fica fora da rampa longa e ganha rampa própria: senão o disco da
+    // orelha entra nos 0.12 e corta a cauda de um só lado.
+    final pixelCount = field.pixelCount;
+    final inactive = Uint8List(pixelCount);
+    final earSeed = Uint8List(pixelCount);
+    for (var i = 0; i < pixelCount; i++) {
+      if (masks.jawActive[i] == 0 && masks.ears[i] == 0) {
+        inactive[i] = 255;
+      }
+      if (masks.ears[i] != 0) {
+        earSeed[i] = 255;
+      }
+    }
+    final dist = EuclideanDistanceTransform.toNonZeroOf(
+      inactive,
+      field.width,
+      field.height,
+    );
+    final distEar = EuclideanDistanceTransform.toNonZeroOf(
+      earSeed,
+      field.width,
+      field.height,
+    );
+    final left = _curveRidge(px, curveLeft);
+    final right = _curveRidge(px, curveRight);
+    if (left.isEmpty && right.isEmpty) {
       return;
     }
-    final twoS2 = 2 * handleSigma * handleSigma;
-    for (var i = 0; i < field.pixelCount; i++) {
+    for (var i = 0; i < pixelCount; i++) {
       if (masks.jawActive[i] == 0) {
         continue;
       }
       final x = (i % field.width) + 0.5;
       final y = (i ~/ field.width) + 0.5;
       final boundary = math.min(1.0, dist[i] / falloff);
-      var handleW = 0.0;
-      for (final h in handles) {
-        final ddx = x - h.p.dx;
-        final ddy = y - h.p.dy;
-        final g = h.weight * math.exp(-(ddx * ddx + ddy * ddy) / twoS2);
-        if (g > handleW) {
-          handleW = g;
-        }
-      }
-      final weight = boundary * handleW;
+      final earBoundary = math.min(1.0, distEar[i] / earFalloff);
+      final ridge = math.max(
+        _ridgeWeight(left, x, y, sigmaAcross),
+        _ridgeWeight(right, x, y, sigmaAcross),
+      );
+      final weight = boundary * earBoundary * ridge;
       if (weight <= 1e-6) {
         continue;
       }
@@ -333,51 +388,77 @@ abstract final class JawField {
     }
   }
 
-  static List<({Offset p, double weight})> _silhouetteHandles(List<Offset?> px) {
-    final out = <({Offset p, double weight})>[];
-    void add(Set<int> ids, double w) {
-      for (final id in ids) {
-        final p = id < px.length ? px[id] : null;
-        if (p != null) {
-          out.add((p: p, weight: w));
-        }
+  /// Polilinha da crista com um ponto médio entre âncoras consecutivas, para a
+  /// distância ao segmento não cortar em curvas fechadas.
+  static List<({Offset p, double weight})> _curveRidge(
+    List<Offset?> px,
+    List<int> ids,
+  ) {
+    final anchors = <({Offset p, double weight})>[];
+    for (var i = 0; i < ids.length; i++) {
+      final id = ids[i];
+      final p = id >= 0 && id < px.length ? px[id] : null;
+      if (p != null) {
+        anchors.add((p: p, weight: curveWeights[i]));
       }
     }
-
-    add(V2RegionCatalog.silhouettePrimary, 1.0);
-    add(V2RegionCatalog.silhouetteSecondary, 0.85);
+    if (anchors.length < 2) {
+      return anchors;
+    }
+    final out = <({Offset p, double weight})>[];
+    for (var i = 0; i < anchors.length; i++) {
+      out.add(anchors[i]);
+      if (i + 1 < anchors.length) {
+        final a = anchors[i];
+        final b = anchors[i + 1];
+        out.add((
+          p: Offset((a.p.dx + b.p.dx) * 0.5, (a.p.dy + b.p.dy) * 0.5),
+          weight: (a.weight + b.weight) * 0.5,
+        ));
+      }
+    }
     return out;
   }
 
-  static Float32List _distanceToInactive(Uint8List active, int width, int height) {
-    const inf = 1e8;
-    final dist = Float32List(width * height);
-    for (var i = 0; i < dist.length; i++) {
-      dist[i] = active[i] == 0 ? 0 : inf;
+  /// Gaussiana da distância à crista, com o peso interpolado ao longo dela.
+  static double _ridgeWeight(
+    List<({Offset p, double weight})> ridge,
+    double x,
+    double y,
+    double sigmaAcross,
+  ) {
+    if (sigmaAcross < 1e-6 || ridge.isEmpty) {
+      return 0;
     }
-    for (var y = 0; y < height; y++) {
-      for (var x = 0; x < width; x++) {
-        final i = y * width + x;
-        if (x > 0) {
-          dist[i] = math.min(dist[i], dist[i - 1] + 1);
-        }
-        if (y > 0) {
-          dist[i] = math.min(dist[i], dist[i - width] + 1);
-        }
+    final twoS2 = 2 * sigmaAcross * sigmaAcross;
+    if (ridge.length == 1) {
+      final ddx = x - ridge.first.p.dx;
+      final ddy = y - ridge.first.p.dy;
+      final g = ridge.first.weight * math.exp(-(ddx * ddx + ddy * ddy) / twoS2);
+      return g > 1.0 ? 1.0 : g;
+    }
+    var bestD2 = double.infinity;
+    var bestW = 0.0;
+    for (var i = 0; i < ridge.length - 1; i++) {
+      final a = ridge[i];
+      final b = ridge[i + 1];
+      final abx = b.p.dx - a.p.dx;
+      final aby = b.p.dy - a.p.dy;
+      final len2 = abx * abx + aby * aby;
+      var tSeg = 0.0;
+      if (len2 > 1e-12) {
+        tSeg = (((x - a.p.dx) * abx + (y - a.p.dy) * aby) / len2).clamp(0.0, 1.0);
+      }
+      final ddx = x - (a.p.dx + abx * tSeg);
+      final ddy = y - (a.p.dy + aby * tSeg);
+      final d2 = ddx * ddx + ddy * ddy;
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        bestW = a.weight + (b.weight - a.weight) * tSeg;
       }
     }
-    for (var y = height - 1; y >= 0; y--) {
-      for (var x = width - 1; x >= 0; x--) {
-        final i = y * width + x;
-        if (x + 1 < width) {
-          dist[i] = math.min(dist[i], dist[i + 1] + 1);
-        }
-        if (y + 1 < height) {
-          dist[i] = math.min(dist[i], dist[i + width] + 1);
-        }
-      }
-    }
-    return dist;
+    final g = bestW * math.exp(-bestD2 / twoS2);
+    return g > 1.0 ? 1.0 : g;
   }
 
   static ({double before, double after}) _pairWidth(

@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
+import 'distance_transform.dart';
+
 /// Máscaras 0/255 no grid do campo (não são RGBA de foto).
 class RegionMasks {
   RegionMasks({
@@ -109,38 +111,14 @@ abstract final class RegionMaskRaster {
     }
   }
 
-  /// Expande a máscara em [radius] pixéis (chamfer). Sem imagem.
+  /// Expande a máscara em [radius] pixéis. Disco euclidiano: o chamfer L1 que
+  /// isto substitui dilatava só `radius / √2` na diagonal e deixava o domínio
+  /// em losango, com quinas a 45° que a rampa do campo depois imprimia.
   static void dilate(Uint8List mask, int width, int height, int radius) {
     if (radius <= 0) {
       return;
     }
-    const inf = 1e8;
-    final dist = Float32List(width * height);
-    for (var i = 0; i < mask.length; i++) {
-      dist[i] = mask[i] != 0 ? 0 : inf;
-    }
-    for (var y = 0; y < height; y++) {
-      for (var x = 0; x < width; x++) {
-        final i = y * width + x;
-        if (x > 0) {
-          dist[i] = math.min(dist[i], dist[i - 1] + 1);
-        }
-        if (y > 0) {
-          dist[i] = math.min(dist[i], dist[i - width] + 1);
-        }
-      }
-    }
-    for (var y = height - 1; y >= 0; y--) {
-      for (var x = width - 1; x >= 0; x--) {
-        final i = y * width + x;
-        if (x + 1 < width) {
-          dist[i] = math.min(dist[i], dist[i + 1] + 1);
-        }
-        if (y + 1 < height) {
-          dist[i] = math.min(dist[i], dist[i + width] + 1);
-        }
-      }
-    }
+    final dist = EuclideanDistanceTransform.toNonZeroOf(mask, width, height);
     final r = radius.toDouble();
     for (var i = 0; i < mask.length; i++) {
       if (dist[i] <= r) {
