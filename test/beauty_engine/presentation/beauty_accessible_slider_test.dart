@@ -19,12 +19,39 @@ void main() {
     );
 
     expect(find.text('Face Slim'), findsOneWidget);
-    expect(find.text('50%'), findsOneWidget);
+    expect(find.text('50'), findsOneWidget);
+    expect(find.text('50%'), findsNothing);
     expect(find.byType(Slider), findsOneWidget);
+
+    final numberTop = tester.getTopLeft(find.text('50')).dy;
+    final sliderTop = tester.getTopLeft(find.byType(Slider)).dy;
+    expect(numberTop, lessThan(sliderTop));
 
     final labelSemantics = tester.getSemantics(find.text('Face Slim'));
     expect(labelSemantics.label, 'Face Slim');
     expect(labelSemantics.value, '50%');
+  });
+
+  testWidgets('BeautyAccessibleSlider bipolar mostra número com sinal acima', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BeautyAccessibleSlider(
+            label: 'Chin',
+            value: -0.4,
+            min: -1,
+            max: 1,
+            bipolar: true,
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('-40'), findsOneWidget);
+    expect(find.text('neutro'), findsNothing);
   });
 
   testWidgets('BeautyAccessibleSlider disabled when onChanged is null', (

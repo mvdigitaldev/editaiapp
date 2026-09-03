@@ -478,14 +478,16 @@ class _ToolNavItem extends StatelessWidget {
       color = theme.colorScheme.onSurface.withValues(alpha: 0.75);
     }
 
+    const labelHeight = 23.0; // 2 linhas a 10px / height 1.15
     return SizedBox(
       width: 72,
       child: InkWell(
         onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(8),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.start,
           children: [
+            const SizedBox(height: 4),
             BeautyToolIcon(
               key: Key('beauty-tool-icon-$toolKey'),
               toolKey: toolKey,
@@ -493,16 +495,22 @@ class _ToolNavItem extends StatelessWidget {
               size: 26,
             ),
             const SizedBox(height: 4),
-            Text(
-              label,
-              maxLines: 2,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10,
-                height: 1.15,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                color: color,
+            SizedBox(
+              height: labelHeight,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    height: 1.15,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    color: color,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 3),

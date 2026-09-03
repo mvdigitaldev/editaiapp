@@ -69,6 +69,10 @@ void main() {
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
       expect(find.byKey(Key('beauty-tool-icon-$key')), findsOneWidget);
     }
+    final iconTops = FaceFilterPipeline.faceWarpParameterKeys
+        .map((key) => tester.getTopLeft(find.byKey(Key('beauty-tool-icon-$key'))).dy)
+        .toSet();
+    expect(iconTops.length, 1, reason: 'ícones de Rosto na mesma linha');
     expect(find.byType(ChoiceChip), findsNothing);
 
     await tester.tap(find.text('V do queixo'));
