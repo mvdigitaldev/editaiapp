@@ -23,6 +23,36 @@ class JawFieldBuild {
   final FieldMetrics metrics;
 }
 
+/// Cache do peso unitário, que não depende de `t`. O slider só escala `dx`.
+///
+/// Sem isto, arrastar a Mandíbula reconstruía por frame as máscaras, as duas
+/// transformadas de distância e o peso de crista de cada pixel: 200 ms a
+/// 695×1024, contra 0,4 ms para reescalar. Era o efeito da cadeia que ainda não
+/// tinha esta separação, e é o primeiro, portanto o mais arrastado.
+class JawFieldRuntime {
+  FaceMeshResult? face;
+  int width = 0;
+  int height = 0;
+  double faceWidth = 1;
+  double midlineX = 0;
+  Float32List? unitWeight;
+  List<int>? active;
+  DisplacementField? field;
+  RegionMasks? masks;
+  List<Offset?>? px;
+
+  bool matches(FaceMeshResult face, int width, int height) {
+    return identical(this.face, face) &&
+        this.width == width &&
+        this.height == height &&
+        unitWeight != null &&
+        active != null &&
+        field != null &&
+        masks != null &&
+        px != null;
+  }
+}
+
 /// Constrói o domínio geométrico e o campo jaw (só Δx). Sem RGBA, sem render.
 abstract final class JawField {
   JawField._();
@@ -70,6 +100,8 @@ abstract final class JawField {
     required FaceMeshResult face,
     required Size imageSize,
     required double t,
+    bool computeMetrics = true,
+    JawFieldRuntime? runtime,
   }) {
     final width = imageSize.width.round();
     final height = imageSize.height.round();
@@ -77,20 +109,44 @@ abstract final class JawField {
       throw ArgumentError('jaw_field_invalid_size: ${width}x$height');
     }
 
+    final intensity = t.clamp(0.0, 1.0);
+
+    if (runtime != null && runtime.matches(face, width, height)) {
+      final amplitude = intensity * amplitudeFaceWidth * runtime.faceWidth;
+      _scaleActive(
+        field: runtime.field!,
+        unitWeight: runtime.unitWeight!,
+        active: runtime.active!,
+        amplitude: amplitude,
+      );
+      return JawFieldBuild(
+        field: runtime.field!,
+        masks: runtime.masks!,
+        metrics: _metrics(
+          compute: computeMetrics,
+          px: runtime.px!,
+          field: runtime.field!,
+          masks: runtime.masks!,
+          faceWidth: runtime.faceWidth,
+          amplitude: amplitude,
+        ),
+      );
+    }
+
     final px = _landmarkPixels(face, imageSize);
     final masks = _buildMasks(px, width, height);
     final geometry = _geometry(px);
-    final intensity = t.clamp(0.0, 1.0);
     final amplitude = intensity * amplitudeFaceWidth * geometry.faceWidth;
 
     final field = DisplacementField.zeros(width: width, height: height);
-    if (intensity > 0 && amplitude > 0 && masks.count(masks.jawActive) > 0) {
-      _applyNarrowing(
+    var unitWeight = Float32List(0);
+    var active = const <int>[];
+    if (masks.count(masks.jawActive) > 0) {
+      final packed = _packUnitWeights(
         field: field,
         masks: masks,
         px: px,
         midlineX: geometry.midlineX,
-        amplitude: amplitude,
         falloff: math.max(12.0, falloffFaceWidth * geometry.faceWidth),
         earFalloff: math.max(6.0, earFalloffFaceWidth * geometry.faceWidth),
         sigmaAcross: math.max(8.0, sigmaAcrossFaceWidth * geometry.faceWidth),
@@ -100,14 +156,63 @@ abstract final class JawField {
           boundarySmoothFaceWidth * geometry.faceWidth,
         ),
       );
+      unitWeight = packed.weights;
+      active = packed.active;
+      if (intensity > 0 && amplitude > 0) {
+        _scaleActive(
+          field: field,
+          unitWeight: unitWeight,
+          active: active,
+          amplitude: amplitude,
+        );
+      }
     }
 
-    final extrema = _pairWidth(px, field, V2RegionCatalog.jawLandmarks);
-    final gonions = _gonionWidth(px, field);
-    final metrics = FieldMetrics.compute(
+    if (runtime != null) {
+      runtime
+        ..face = face
+        ..width = width
+        ..height = height
+        ..faceWidth = geometry.faceWidth
+        ..midlineX = geometry.midlineX
+        ..unitWeight = unitWeight
+        ..active = active
+        ..field = field
+        ..masks = masks
+        ..px = px;
+    }
+
+    return JawFieldBuild(
       field: field,
       masks: masks,
-      faceWidth: geometry.faceWidth,
+      metrics: _metrics(
+        compute: computeMetrics,
+        px: px,
+        field: field,
+        masks: masks,
+        faceWidth: geometry.faceWidth,
+        amplitude: amplitude,
+      ),
+    );
+  }
+
+  static FieldMetrics _metrics({
+    required bool compute,
+    required List<Offset?> px,
+    required DisplacementField field,
+    required RegionMasks masks,
+    required double faceWidth,
+    required double amplitude,
+  }) {
+    if (!compute) {
+      return FieldMetrics.skipped;
+    }
+    final extrema = _pairWidth(px, field, V2RegionCatalog.jawLandmarks);
+    final gonions = _gonionWidth(px, field);
+    return FieldMetrics.compute(
+      field: field,
+      masks: masks,
+      faceWidth: faceWidth,
       jawAmplitude: amplitude,
       jawWidthBefore: extrema.before,
       jawWidthAfter: extrema.after,
@@ -116,7 +221,17 @@ abstract final class JawField {
       dxAtGonionLeft: gonions.dxLeft,
       dxAtGonionRight: gonions.dxRight,
     );
-    return JawFieldBuild(field: field, masks: masks, metrics: metrics);
+  }
+
+  static void _scaleActive({
+    required DisplacementField field,
+    required Float32List unitWeight,
+    required List<int> active,
+    required double amplitude,
+  }) {
+    for (var k = 0; k < active.length; k++) {
+      field.dx[active[k]] = amplitude * unitWeight[k];
+    }
   }
 
   static List<Offset?> _landmarkPixels(FaceMeshResult face, Size imageSize) {
@@ -337,12 +452,11 @@ abstract final class JawField {
     );
   }
 
-  static void _applyNarrowing({
+  static ({Float32List weights, List<int> active}) _packUnitWeights({
     required DisplacementField field,
     required RegionMasks masks,
     required List<Offset?> px,
     required double midlineX,
-    required double amplitude,
     required double falloff,
     required double earFalloff,
     required double sigmaAcross,
@@ -376,46 +490,46 @@ abstract final class JawField {
       falloffPx: earFalloff,
       sigmaPx: boundarySmooth,
     );
-    final left = _curveRidge(px, curveLeft);
-    final right = _curveRidge(px, curveRight);
+    final left = Ridge.of(_curveRidge(px, curveLeft));
+    final right = Ridge.of(_curveRidge(px, curveRight));
+    final weights = <double>[];
+    final active = <int>[];
     if (left.isEmpty && right.isEmpty) {
-      return;
+      return (weights: Float32List(0), active: active);
     }
     for (var i = 0; i < pixelCount; i++) {
       if (masks.jawActive[i] == 0) {
         continue;
       }
-      final x = (i % field.width) + 0.5;
-      final y = (i ~/ field.width) + 0.5;
-      final boundary = boundaryRamp[i];
-      final earBoundary = earRamp[i];
-      final ridge = math.max(
-        RidgeWeight.at(
-          nodes: left,
-          x: x,
-          y: y,
-          sigmaAcross: sigmaAcross,
-          blendPx: ridgeBlend,
-        ),
-        RidgeWeight.at(
-          nodes: right,
-          x: x,
-          y: y,
-          sigmaAcross: sigmaAcross,
-          blendPx: ridgeBlend,
-        ),
-      );
-      final weight = boundary * earBoundary * ridge;
-      if (weight <= 1e-6) {
+      // As rampas custam uma leitura e a crista custa vinte projecções com
+      // exponencial: testar primeiro o produto barato poupa a crista em todos
+      // os pixels onde a fronteira já a anula.
+      final boundary = boundaryRamp[i] * earRamp[i];
+      if (boundary <= 1e-6) {
         continue;
       }
+      final x = (i % field.width) + 0.5;
       final toward = midlineX - x;
       if (toward.abs() < 1e-6) {
         continue;
       }
-      field.dx[i] = toward.sign * amplitude * weight;
-      field.dy[i] = 0;
+      final y = (i ~/ field.width) + 0.5;
+      final ridge = RidgeWeight.stronger(
+        a: left,
+        b: right,
+        x: x,
+        y: y,
+        sigmaAcross: sigmaAcross,
+        blendPx: ridgeBlend,
+      ).weight;
+      final weight = boundary * ridge;
+      if (weight <= 1e-6) {
+        continue;
+      }
+      active.add(i);
+      weights.add(toward.sign * weight);
     }
+    return (weights: Float32List.fromList(weights), active: active);
   }
 
   /// Polilinha da crista com um ponto médio entre âncoras consecutivas, para a

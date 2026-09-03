@@ -1,14 +1,17 @@
+import 'package:editaiapp/features/editor/beauty_engine/filters/face/face_filter_pipeline.dart';
+import 'package:editaiapp/features/editor/beauty_engine/filters/face/skin_filter_pipeline.dart';
+import 'package:editaiapp/features/editor/beauty_engine/presentation/widgets/beauty_accessible_slider.dart';
 import 'package:editaiapp/features/editor/beauty_engine/presentation/widgets/beauty_adjustments_panel.dart';
+import 'package:editaiapp/features/editor/beauty_engine/presentation/widgets/beauty_tool_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('BeautyAdjustmentsPanel troca categoria e altera slider',
-      (tester) async {
-    final params = BeautyAdjustmentsPanel.initialParams();
-    var lastKey = '';
-    var lastValue = 0.0;
-
+  Future<void> pumpPanel(
+    WidgetTester tester, {
+    Map<String, double>? params,
+    void Function(String key, double value)? onParamChanged,
+  }) async {
     tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -18,17 +21,28 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: BeautyAdjustmentsPanel(
-            params: params,
+            params: params ?? BeautyAdjustmentsPanel.initialParams(),
             enabled: true,
             linkEyes: true,
-            onParamChanged: (key, value) {
-              lastKey = key;
-              lastValue = value;
-            },
+            onParamChanged: onParamChanged ?? (_, __) {},
             onLinkEyesChanged: (_) {},
           ),
         ),
       ),
+    );
+  }
+
+  testWidgets('BeautyAdjustmentsPanel troca categoria e altera slider',
+      (tester) async {
+    var lastKey = '';
+    var lastValue = 0.0;
+
+    await pumpPanel(
+      tester,
+      onParamChanged: (key, value) {
+        lastKey = key;
+        lastValue = value;
+      },
     );
 
     expect(find.text('Mandíbula'), findsWidgets);
@@ -42,6 +56,85 @@ void main() {
 
     expect(lastKey, 'jaw');
     expect(lastValue, greaterThan(0));
+  });
+
+  testWidgets('Rosto e Pele rendem BeautyToolIcon; Cor mantém ChoiceChip',
+      (tester) async {
+    await pumpPanel(tester);
+
+    expect(
+      find.byType(BeautyToolIcon),
+      findsNWidgets(FaceFilterPipeline.faceWarpParameterKeys.length),
+    );
+    for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
+      expect(find.byKey(Key('beauty-tool-icon-$key')), findsOneWidget);
+    }
+    expect(find.byType(ChoiceChip), findsNothing);
+
+    await tester.tap(find.text('V do queixo'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider)).label,
+      'V do queixo',
+    );
+
+    await tester.tap(find.text('Pele'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byType(BeautyToolIcon),
+      findsNWidgets(SkinFilterPipeline.skinParameterKeys.length),
+    );
+    expect(find.text('Suavizar pele'), findsWidgets);
+    expect(find.byType(ChoiceChip), findsNothing);
+
+    await tester.tap(find.text('Cor'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChoiceChip), findsWidgets);
+    expect(find.byType(BeautyToolIcon), findsNothing);
+  });
+
+  testWidgets('ponto aparece quando o valor deixa de ser zero', (tester) async {
+    final params = BeautyAdjustmentsPanel.initialParams()
+      ..['jaw'] = 0.4
+      ..['cheekbone_left'] = 0.3;
+
+    await pumpPanel(tester, params: params);
+
+    expect(find.byKey(const Key('beauty-tool-dot-jaw')), findsOneWidget);
+    expect(find.byKey(const Key('beauty-tool-dot-cheekbone')), findsOneWidget);
+    expect(find.byKey(const Key('beauty-tool-dot-chin')), findsNothing);
+  });
+
+  testWidgets('cada glifo de Rosto e Pele pinta sem erro', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Wrap(
+            children: [
+              for (final key in BeautyToolIcons.keys)
+                BeautyToolIcon(
+                  toolKey: key,
+                  color: Colors.black,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(BeautyToolIcon), findsNWidgets(BeautyToolIcons.keys.length));
+    expect(tester.takeException(), isNull);
+  });
+
+  test('hasGlyph cobre Rosto e Pele e ignora Cor', () {
+    for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
+      expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
+    }
+    for (final key in SkinFilterPipeline.skinParameterKeys) {
+      expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
+    }
+    expect(BeautyToolIcons.hasGlyph('brightness'), isFalse);
+    expect(BeautyToolIcons.hasGlyph('temperature'), isFalse);
   });
 
   test('initialParams inclui jaw, chin, corpo e pele', () {

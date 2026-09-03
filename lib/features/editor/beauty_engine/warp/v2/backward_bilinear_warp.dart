@@ -87,8 +87,24 @@ abstract final class BackwardBilinearWarp {
     final maxX = width - 1;
     final maxY = height - 1;
 
-    for (var y = 0; y < height; y++) {
-      for (var x = 0; x < width; x++) {
+    // Onde o campo e os seus oito vizinhos são nulos, a jacobiana é a
+    // identidade, o remap devolve `src = p` e a bilinear em posição inteira lê
+    // um só tap: o destino é o pixel de origem, que já está copiado. Esses
+    // pixels ficam cobertos e válidos sem se calcular nada. Um campo facial
+    // costuma ser nulo em mais de três quartos da imagem.
+    final support = _support(field, width, height);
+    if (support == null) {
+      coverage.fillRange(0, pixelCount, 255);
+      return WarpResult(
+        rgba: rgba,
+        coverage: coverage,
+        invalidSource: invalidSource,
+      );
+    }
+    coverage.fillRange(0, pixelCount, 255);
+
+    for (var y = support.top; y <= support.bottom; y++) {
+      for (var x = support.left; x <= support.right; x++) {
         final i = y * width + x;
         final srcX = x - field.dx[i];
         final srcY = y - field.dy[i];
@@ -122,6 +138,43 @@ abstract final class BackwardBilinearWarp {
       rgba: rgba,
       coverage: coverage,
       invalidSource: invalidSource,
+    );
+  }
+
+  /// Caixa que contém todo o deslocamento não nulo, dilatada de um pixel para
+  /// abranger os vizinhos que a jacobiana lê. `null` se o campo for nulo.
+  static ({int left, int top, int right, int bottom})? _support(
+    DisplacementField field,
+    int width,
+    int height,
+  ) {
+    final dx = field.dx;
+    final dy = field.dy;
+    var left = width;
+    var top = height;
+    var right = -1;
+    var bottom = -1;
+    for (var y = 0; y < height; y++) {
+      final row = y * width;
+      for (var x = 0; x < width; x++) {
+        final i = row + x;
+        if (dx[i] == 0 && dy[i] == 0) {
+          continue;
+        }
+        if (x < left) left = x;
+        if (x > right) right = x;
+        if (y < top) top = y;
+        bottom = y;
+      }
+    }
+    if (right < 0) {
+      return null;
+    }
+    return (
+      left: left > 0 ? left - 1 : 0,
+      top: top > 0 ? top - 1 : 0,
+      right: right < width - 1 ? right + 1 : width - 1,
+      bottom: bottom < height - 1 ? bottom + 1 : height - 1,
     );
   }
 

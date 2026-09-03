@@ -70,6 +70,52 @@ void main() {
     }
   });
 
+  test('runtime cache scales the same unit weights', () {
+    final f = faces.first;
+    final runtime = JawFieldRuntime();
+    // Arrastar o slider é reutilizar o cache com t sempre diferente: o campo
+    // reescalado tem de ficar igual ao construído de novo, em todos os t.
+    for (final t in [0.2, 1.0, 0.45, 0.7]) {
+      final cold = JawField.build(
+        face: f.face,
+        imageSize: f.imageSize,
+        t: t,
+        computeMetrics: false,
+      );
+      final warm = JawField.build(
+        face: f.face,
+        imageSize: f.imageSize,
+        t: t,
+        computeMetrics: false,
+        runtime: runtime,
+      );
+      var maxDiff = 0.0;
+      for (var i = 0; i < cold.field.pixelCount; i++) {
+        maxDiff = math.max(maxDiff, (cold.field.dx[i] - warm.field.dx[i]).abs());
+        maxDiff = math.max(maxDiff, (cold.field.dy[i] - warm.field.dy[i]).abs());
+      }
+      expect(maxDiff, lessThan(1e-4), reason: '${f.id} t=$t');
+    }
+    // O campo é reaproveitado em vez de realocado, e as métricas continuam
+    // disponíveis para quem as pedir.
+    final first = JawField.build(
+      face: f.face,
+      imageSize: f.imageSize,
+      t: 0.5,
+      computeMetrics: false,
+      runtime: runtime,
+    );
+    final second = JawField.build(
+      face: f.face,
+      imageSize: f.imageSize,
+      t: 0.5,
+      runtime: runtime,
+    );
+    expect(identical(second.field, first.field), isTrue);
+    expect(second.metrics.gonionNarrows, isTrue, reason: f.id);
+    expect(second.metrics.minDetJ, greaterThan(0), reason: f.id);
+  });
+
   test('t=0.5 narrows jaw, protects regions, no fold', () {
     final reports = <Map<String, Object>>[];
     for (final f in faces) {

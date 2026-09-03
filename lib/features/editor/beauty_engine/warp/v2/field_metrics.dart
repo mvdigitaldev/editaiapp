@@ -12,6 +12,13 @@ class RegionDisplacementStats {
     required this.p95Abs,
   });
 
+  static const zero = RegionDisplacementStats(
+    pixelCount: 0,
+    maxAbs: 0,
+    meanAbs: 0,
+    p95Abs: 0,
+  );
+
   final int pixelCount;
   final double maxAbs;
   final double meanAbs;
@@ -70,6 +77,32 @@ class FieldMetrics {
   final RegionDisplacementStats beard;
   final RegionDisplacementStats ears;
   final RegionDisplacementStats jawActive;
+
+  /// Marcador para quem constrói o campo só para o render e não lê métricas.
+  /// Percorrer a imagem inteira a medir regiões custa mais do que reescalar o
+  /// campo, e a cadeia de preview não usa nada disto.
+  static const skipped = FieldMetrics(
+    faceWidth: 0,
+    jawAmplitude: 0,
+    influenceMax: 0,
+    outsideJawZoneP95: 0,
+    minDetJ: 1,
+    maxNeighborJump: 0,
+    jawWidthBefore: 0,
+    jawWidthAfter: 0,
+    gonionWidthBefore: 0,
+    gonionWidthAfter: 0,
+    dxAtGonionLeft: 0,
+    dxAtGonionRight: 0,
+    eyes: RegionDisplacementStats.zero,
+    brows: RegionDisplacementStats.zero,
+    nose: RegionDisplacementStats.zero,
+    mouth: RegionDisplacementStats.zero,
+    faceCenter: RegionDisplacementStats.zero,
+    beard: RegionDisplacementStats.zero,
+    ears: RegionDisplacementStats.zero,
+    jawActive: RegionDisplacementStats.zero,
+  );
 
   bool get jawNarrows => jawWidthAfter < jawWidthBefore - 1e-6;
 

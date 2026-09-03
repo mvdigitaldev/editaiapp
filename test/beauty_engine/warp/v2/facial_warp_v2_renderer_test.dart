@@ -42,6 +42,53 @@ void main() {
     expect(result.invalidSource, everyElement(0));
   });
 
+  test('campo de suporte compacto não toca o resto da imagem', () {
+    const width = 32;
+    const height = 24;
+    final source = _rampX(width: width, height: height);
+    final field = DisplacementField.zeros(width: width, height: height);
+    // Suporte num bloco interior, com valor fraccionário para o remap ser
+    // interpolado e não uma translação inteira.
+    for (var y = 10; y <= 13; y++) {
+      for (var x = 12; x <= 17; x++) {
+        field.dx[y * width + x] = 1.4;
+        field.dy[y * width + x] = -0.7;
+      }
+    }
+    final result = BackwardBilinearWarp.apply(
+      WarpRequest(
+        sourceRgba: source,
+        width: width,
+        height: height,
+        field: field,
+      ),
+    );
+    // Fora do suporte dilatado de um pixel, o campo e os vizinhos que a
+    // jacobiana lê são nulos, logo o destino tem de sair byte a byte igual à
+    // fonte. É o que autoriza o remap a nem visitar esses pixels.
+    var touchedOutside = 0;
+    for (var y = 0; y < height; y++) {
+      for (var x = 0; x < width; x++) {
+        final inSupport = x >= 11 && x <= 18 && y >= 9 && y <= 14;
+        if (inSupport) {
+          continue;
+        }
+        final i = (y * width + x) * 4;
+        for (var c = 0; c < 4; c++) {
+          if (result.rgba[i + c] != source[i + c]) {
+            touchedOutside++;
+          }
+        }
+      }
+    }
+    expect(touchedOutside, 0);
+    expect(result.coverage, everyElement(255));
+    expect(result.invalidSource, everyElement(0));
+    // E dentro do suporte moveu-se de facto.
+    expect(_pixel(result.rgba, width, 15, 11),
+        isNot(_pixel(source, width, 15, 11)));
+  });
+
   test('integer translation uses src = dest - d in the interior', () {
     const width = 8;
     const height = 4;

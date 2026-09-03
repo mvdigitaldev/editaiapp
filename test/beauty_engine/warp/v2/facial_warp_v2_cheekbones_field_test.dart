@@ -34,6 +34,73 @@ void main() {
     }
   });
 
+  test('supportBox contém todo o envelope acima do limiar', () {
+    // A região da bochecha é marcada onde o envelope malar passa 0,04, e esse
+    // teste corre só dentro da caixa de suporte do pad. Se a caixa deixasse de
+    // fora um ponto acima do limiar, a máscara perdia área.
+    const threshold = 0.04;
+    final pad = CheekbonesMalarPad(
+      center: const Offset(200, 300),
+      rx: 80,
+      ry: 50,
+      innerFrac: 0.3,
+      leftSide: true,
+      handles: const [
+        (p: Offset(140, 240), weight: 0.5),
+        (p: Offset(200, 300), weight: 1.0),
+        (p: Offset(250, 380), weight: 0.7),
+      ],
+      sigma: 30,
+      sigmaAlong: 40,
+      sigmaAcross: 26,
+      axisX: 1,
+      axisY: 0,
+    );
+    final box = pad.supportBox(threshold);
+    expect(box, isNotNull);
+    var above = 0;
+    var outside = 0;
+    for (var y = -200.0; y <= 800; y += 2) {
+      for (var x = -200.0; x <= 700; x += 2) {
+        if (pad.weight(x, y) <= threshold) {
+          continue;
+        }
+        above++;
+        if (x < box!.left ||
+            x > box.right ||
+            y < box.top ||
+            y > box.bottom) {
+          outside++;
+        }
+      }
+    }
+    expect(above, greaterThan(0));
+    expect(outside, 0);
+    // E a caixa é mesmo um atalho, não a imagem toda.
+    expect(box!.right - box.left, lessThan(400));
+
+    // Sem peso acima do limiar não há nada a percorrer.
+    expect(
+      CheekbonesMalarPad(
+        center: Offset.zero,
+        rx: 1,
+        ry: 1,
+        innerFrac: 0,
+        leftSide: true,
+        handles: const [
+          (p: Offset(0, 0), weight: 0.01),
+          (p: Offset(10, 0), weight: 0.02),
+        ],
+        sigma: 10,
+        sigmaAlong: 10,
+        sigmaAcross: 10,
+        axisX: 1,
+        axisY: 0,
+      ).supportBox(threshold),
+      isNull,
+    );
+  });
+
   test('t=0 is a null field with identity metrics', () {
     for (final f in faces) {
       final built = CheekbonesField.build(

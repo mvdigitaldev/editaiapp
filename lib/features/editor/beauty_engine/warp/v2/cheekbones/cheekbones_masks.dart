@@ -75,6 +75,43 @@ class CheekbonesMalarPad {
     return g > 1.0 ? 1.0 : g;
   }
 
+  /// Caixa fora da qual [weight] não pode passar [threshold].
+  ///
+  /// O peso é o do ponto da crista mais próximo, amortecido por
+  /// `exp(−d² / 2σ²)`. Como esse peso nunca passa o maior dos handles, o valor
+  /// é limitado por `maxW · exp(−dCaixa² / 2σ²)`, e além do raio onde esse
+  /// limite cai abaixo do limiar não há nada a marcar. Avaliar o envelope na
+  /// imagem inteira para o descartar depois custava mais de 100 ms.
+  ({double left, double top, double right, double bottom})? supportBox(
+    double threshold,
+  ) {
+    if (handles.isEmpty || sigmaAcross < 1e-6 || threshold <= 0) {
+      return null;
+    }
+    var left = double.infinity;
+    var top = double.infinity;
+    var right = -double.infinity;
+    var bottom = -double.infinity;
+    var maxWeight = 0.0;
+    for (final h in handles) {
+      if (h.p.dx < left) left = h.p.dx;
+      if (h.p.dx > right) right = h.p.dx;
+      if (h.p.dy < top) top = h.p.dy;
+      if (h.p.dy > bottom) bottom = h.p.dy;
+      if (h.weight > maxWeight) maxWeight = h.weight;
+    }
+    if (maxWeight <= threshold) {
+      return null;
+    }
+    final radius = sigmaAcross * math.sqrt(2 * math.log(maxWeight / threshold));
+    return (
+      left: left - radius,
+      top: top - radius,
+      right: right + radius,
+      bottom: bottom + radius,
+    );
+  }
+
   Map<String, Object> toJson() => {
         'hypothesis': 'oval_ridge',
         'center': [center.dx, center.dy],
@@ -227,6 +264,9 @@ class CheekbonesMasks {
 
   int get pixelCount => width * height;
 
+  /// Envelope malar a partir do qual o pixel entra na região da bochecha.
+  static const _cheekThreshold = 0.04;
+
   int count(Uint8List mask) {
     var n = 0;
     for (final v in mask) {
@@ -265,15 +305,27 @@ class CheekbonesMasks {
       RegionMaskRaster.fillPolygon(oval, width, height, ovalRing);
     }
 
-    for (var i = 0; i < cheek.length; i++) {
-      final x = (i % width) + 0.5;
-      final y = (i ~/ width) + 0.5;
-      final w = math.max(
-        leftPad?.weight(x, y) ?? 0,
-        rightPad?.weight(x, y) ?? 0,
-      );
-      if (w > 0.04) {
-        cheek[i] = 255;
+    // `max(esquerdo, direito) > limiar` é o mesmo que marcar o que cada um
+    // passa, e cada um só o pode passar dentro da sua caixa de suporte.
+    for (final pad in [leftPad, rightPad]) {
+      final box = pad?.supportBox(_cheekThreshold);
+      if (pad == null || box == null) {
+        continue;
+      }
+      final x0 = box.left.floor().clamp(0, width - 1);
+      final y0 = box.top.floor().clamp(0, height - 1);
+      final x1 = box.right.ceil().clamp(0, width - 1);
+      final y1 = box.bottom.ceil().clamp(0, height - 1);
+      for (var y = y0; y <= y1; y++) {
+        final row = y * width;
+        for (var x = x0; x <= x1; x++) {
+          if (cheek[row + x] != 0) {
+            continue;
+          }
+          if (pad.weight(x + 0.5, y + 0.5) > _cheekThreshold) {
+            cheek[row + x] = 255;
+          }
+        }
       }
     }
 

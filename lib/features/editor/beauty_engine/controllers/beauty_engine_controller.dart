@@ -102,6 +102,7 @@ class BeautyEngineController {
 
   final RenderStageCache _renderStageCache = RenderStageCache();
   final MaskFactory maskFactory = MaskFactory();
+  final JawFieldRuntime _jawRuntime = JawFieldRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
   final JawAngleFieldRuntime _jawAngleRuntime = JawAngleFieldRuntime();
   final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
@@ -1248,7 +1249,13 @@ class BeautyEngineController {
         if (t <= 0) {
           return null;
         }
-        return JawField.build(face: face, imageSize: imageSize, t: t).field;
+        return JawField.build(
+          face: face,
+          imageSize: imageSize,
+          t: t,
+          computeMetrics: false,
+          runtime: _jawRuntime,
+        ).field;
       case 'v2_jaw_angle':
         return JawAngleField.build(
           face: face,

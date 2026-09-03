@@ -214,8 +214,8 @@ abstract final class ChinField {
     required List<Offset?> px,
     required double faceWidth,
   }) {
-    final left = _curveRidge(px, curveLeft);
-    final right = _curveRidge(px, curveRight);
+    final left = Ridge.of(_curveRidge(px, curveLeft));
+    final right = Ridge.of(_curveRidge(px, curveRight));
     final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
     final boundaryRamp = BoundaryFeather.insideActive(
       mask: masks.chinActive,
@@ -228,31 +228,28 @@ abstract final class ChinField {
     final ridgeBlend = math.max(1.5, ridgeBlendFaceWidth * faceWidth);
     final active = <int>[];
     final weights = <double>[];
-    if (left.length >= 2 || right.length >= 2) {
+    if (left.segments >= 1 || right.segments >= 1) {
       final pixelCount = width * height;
       for (var i = 0; i < pixelCount; i++) {
         if (masks.chinActive[i] == 0) {
           continue;
         }
+        // A crista custa vinte projecções com exponencial e a fronteira uma
+        // leitura: testar a barata primeiro poupa a cara onde já dá zero.
+        final boundary = boundaryRamp[i];
+        if (boundary <= 1e-6) {
+          continue;
+        }
         final x = (i % width) + 0.5;
         final y = (i ~/ width) + 0.5;
-        final boundary = boundaryRamp[i];
-        final ridge = math.max(
-          RidgeWeight.at(
-            nodes: left,
-            x: x,
-            y: y,
-            sigmaAcross: sigmaAcross,
-            blendPx: ridgeBlend,
-          ),
-          RidgeWeight.at(
-            nodes: right,
-            x: x,
-            y: y,
-            sigmaAcross: sigmaAcross,
-            blendPx: ridgeBlend,
-          ),
-        );
+        final ridge = RidgeWeight.stronger(
+          a: left,
+          b: right,
+          x: x,
+          y: y,
+          sigmaAcross: sigmaAcross,
+          blendPx: ridgeBlend,
+        ).weight;
         final weight = boundary * ridge;
         if (weight <= 1e-6) {
           continue;

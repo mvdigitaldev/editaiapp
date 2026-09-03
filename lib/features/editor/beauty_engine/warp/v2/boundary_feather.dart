@@ -51,12 +51,13 @@ abstract final class BoundaryFeather {
     required double falloffPx,
     required double sigmaPx,
   }) =>
-      _build(
-        dist: EuclideanDistanceTransform.toZeroOf(mask, width, height),
+      _windowed(
+        mask: mask,
         width: width,
         height: height,
         falloffPx: falloffPx,
         sigmaPx: sigmaPx,
+        seedOnZero: true,
       );
 
   /// Rampa medida a partir da zona protegida, onde [mask] é não nula. Mesma
@@ -68,13 +69,113 @@ abstract final class BoundaryFeather {
     required double falloffPx,
     required double sigmaPx,
   }) =>
-      _build(
-        dist: EuclideanDistanceTransform.toNonZeroOf(mask, width, height),
+      _windowed(
+        mask: mask,
+        width: width,
+        height: height,
+        falloffPx: falloffPx,
+        sigmaPx: sigmaPx,
+        seedOnZero: false,
+      );
+
+  /// Constrói a rampa só na janela que a pode ter diferente de zero.
+  ///
+  /// Fora da região de interesse — os pixels que não são semente — a distância
+  /// vale zero e a rampa com ela, portanto calcular a imagem inteira é
+  /// trabalho perdido: no `chin` a região activa ocupa 6% dos pixels e a
+  /// distância mais o borrão custavam 26 ms dos 90 ms do campo.
+  ///
+  /// O resultado é o mesmo, não uma aproximação. Todo o pixel fora da caixa da
+  /// região de interesse é semente, logo qualquer pixel de interesse tem a sua
+  /// semente mais próxima dentro dessa caixa dilatada de um: ou é uma semente
+  /// interior, ou é a moldura imediata. A janela leva ainda o suporte dos dois
+  /// borrões, para que a replicação de borda replique zeros — que é o que a
+  /// imagem inteira teria lá.
+  static Float32List _windowed({
+    required Uint8List mask,
+    required int width,
+    required int height,
+    required double falloffPx,
+    required double sigmaPx,
+    required bool seedOnZero,
+  }) {
+    final capped = math.min(sigmaPx, falloffPx * _sigmaOfFalloff);
+    final margin = 1 +
+        boxPasses * (boxRadiusFor(rasterSigmaPx) + boxRadiusFor(capped)) +
+        1;
+    final win = _interestWindow(mask, width, height, seedOnZero, margin);
+    if (win == null) {
+      return Float32List(width * height);
+    }
+    if (win.width == width && win.height == height) {
+      return _build(
+        dist: seedOnZero
+            ? EuclideanDistanceTransform.toZeroOf(mask, width, height)
+            : EuclideanDistanceTransform.toNonZeroOf(mask, width, height),
         width: width,
         height: height,
         falloffPx: falloffPx,
         sigmaPx: sigmaPx,
       );
+    }
+
+    final sub = Uint8List(win.width * win.height);
+    for (var y = 0; y < win.height; y++) {
+      final from = (win.top + y) * width + win.left;
+      sub.setRange(y * win.width, (y + 1) * win.width, mask, from);
+    }
+    final subRamp = _build(
+      dist: seedOnZero
+          ? EuclideanDistanceTransform.toZeroOf(sub, win.width, win.height)
+          : EuclideanDistanceTransform.toNonZeroOf(sub, win.width, win.height),
+      width: win.width,
+      height: win.height,
+      falloffPx: falloffPx,
+      sigmaPx: sigmaPx,
+    );
+    final out = Float32List(width * height);
+    for (var y = 0; y < win.height; y++) {
+      final to = (win.top + y) * width + win.left;
+      out.setRange(to, to + win.width, subRamp, y * win.width);
+    }
+    return out;
+  }
+
+  /// Caixa dos pixels que não são semente, dilatada de [margin] e recortada à
+  /// imagem. `null` se toda a máscara for semente.
+  static ({int left, int top, int width, int height})? _interestWindow(
+    Uint8List mask,
+    int width,
+    int height,
+    bool seedOnZero,
+    int margin,
+  ) {
+    var left = width;
+    var top = height;
+    var right = -1;
+    var bottom = -1;
+    for (var y = 0; y < height; y++) {
+      final row = y * width;
+      for (var x = 0; x < width; x++) {
+        final isSeed = seedOnZero ? mask[row + x] == 0 : mask[row + x] != 0;
+        if (isSeed) {
+          continue;
+        }
+        if (x < left) left = x;
+        if (x > right) right = x;
+        if (y < top) top = y;
+        bottom = y;
+      }
+    }
+    if (right < 0) {
+      return null;
+    }
+    final l = math.max(0, left - margin);
+    final t = math.max(0, top - margin);
+    final r = math.min(width - 1, right + margin);
+    final b = math.min(height - 1, bottom + margin);
+    return (left: l, top: t, width: r - l + 1, height: b - t + 1);
+  }
 
   static Float32List _build({
     required Float32List dist,

@@ -267,8 +267,8 @@ abstract final class VShapeField {
     required double midlineX,
     required double faceWidth,
   }) {
-    final left = _curveRidge(px, curveLeft);
-    final right = _curveRidge(px, curveRight);
+    final left = Ridge.of(_curveRidge(px, curveLeft));
+    final right = Ridge.of(_curveRidge(px, curveRight));
     final sigmaAcross = math.max(6.0, sigmaAcrossFaceWidth * faceWidth);
     final ridgeBlend = math.max(1.5, ridgeBlendFaceWidth * faceWidth);
     final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
@@ -295,27 +295,26 @@ abstract final class VShapeField {
       }
       final x = (i % width) + 0.5;
       final y = (i ~/ width) + 0.5;
-      final wL = RidgeWeight.at(
-        nodes: left,
-        x: x,
-        y: y,
-        sigmaAcross: sigmaAcross,
-        blendPx: ridgeBlend,
-      );
-      final wR = RidgeWeight.at(
-        nodes: right,
-        x: x,
-        y: y,
-        sigmaAcross: sigmaAcross,
-        blendPx: ridgeBlend,
-      );
-      final mpLeft = wL >= wR;
-      final pad = mpLeft ? wL : wR;
       final toward = midlineX - x;
       if (toward.abs() < 1e-6) {
         continue;
       }
+      // A crista é o passo caro do laço: só se avalia depois de a fronteira,
+      // que é uma leitura, mostrar que o pixel não sai já a zero.
       final boundary = boundaryRamp[i];
+      if (boundary <= 1e-6) {
+        continue;
+      }
+      final ridge = RidgeWeight.stronger(
+        a: left,
+        b: right,
+        x: x,
+        y: y,
+        sigmaAcross: sigmaAcross,
+        blendPx: ridgeBlend,
+      );
+      final mpLeft = ridge.aWins;
+      final pad = ridge.weight;
       final midGate = math.min(1.0, toward.abs() / midBlend);
       final innerGate = _notchGate(innerPts, x, y, innerNotch);
       final tipGate = _notchGate(tipPts, x, y, tipNotch);

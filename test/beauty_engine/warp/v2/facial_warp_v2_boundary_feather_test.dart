@@ -71,6 +71,51 @@ void main() {
       expect(ramp[row * width + from], lessThan(0.1));
     });
 
+    test('não depende do tamanho da moldura vazia em volta', () {
+      // A rampa é calculada só na janela que a pode ter diferente de zero.
+      // Alargar a imagem em volta do mesmo domínio não pode mudar um único
+      // valor: é isso que faz da janela um atalho exacto e não uma
+      // aproximação.
+      const block = 60;
+      const falloff = 12.0;
+      const sigma = 3.0;
+      Float32List rampIn(int w, int h) {
+        final mask = Uint8List(w * h);
+        // Domínio no mesmo sítio absoluto nas duas imagens, com um buraco
+        // interior para haver sementes dentro da caixa e não só na moldura.
+        for (var y = 30; y < 30 + block; y++) {
+          for (var x = 40; x < 40 + block; x++) {
+            mask[y * w + x] = 255;
+          }
+        }
+        mask[(30 + block ~/ 2) * w + 40 + block ~/ 2] = 0;
+        return BoundaryFeather.insideActive(
+          mask: mask,
+          width: w,
+          height: h,
+          falloffPx: falloff,
+          sigmaPx: sigma,
+        );
+      }
+
+      const narrowW = 120;
+      const narrowH = 100;
+      final narrow = rampIn(narrowW, narrowH);
+      final wide = rampIn(400, 320);
+      var worst = 0.0;
+      for (var y = 0; y < narrowH; y++) {
+        for (var x = 0; x < narrowW; x++) {
+          worst = math.max(
+            worst,
+            (narrow[y * narrowW + x] - wide[y * 400 + x]).abs(),
+          );
+        }
+      }
+      expect(worst, 0);
+      // E a rampa percorre mesmo todo o seu alcance, senão o teste era vazio.
+      expect(narrow.reduce(math.max), greaterThan(0.9));
+    });
+
     test('entra no domínio sem degrau, mesmo em fronteira oblíqua', () {
       // A rampa linear arrancava com derivada `1 / falloff`, portanto o
       // primeiro pixel activo valia logo um passo inteiro. Numa fronteira

@@ -10,6 +10,7 @@ import '../../tools/tool_gate_decision.dart';
 import '../../l10n/beauty_engine_labels.dart';
 import '../../l10n/body_reshape_labels.dart';
 import 'beauty_accessible_slider.dart';
+import 'beauty_tool_icon.dart';
 
 /// Categoria de ajuste manual no retoque beauty.
 enum BeautyAdjustmentCategory {
@@ -171,6 +172,22 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     return keys.first;
   }
 
+  bool get _usesToolIcons =>
+      _activeCategoryDef.parameterKeys.any(BeautyToolIcons.hasGlyph);
+
+  static const _sideWarpKeys = {'cheekbone', 'v_chin', 'v_shape', 'jaw_angle'};
+
+  bool _isChanged(String key) {
+    bool nonzero(String k) => (widget.params[k] ?? 0).abs() > 1e-6;
+    if (nonzero(key)) {
+      return true;
+    }
+    if (_sideWarpKeys.contains(key)) {
+      return nonzero('${key}_left') || nonzero('${key}_right');
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -250,12 +267,13 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                 ),
               ),
             SizedBox(
-              height: 40,
+              height: _usesToolIcons ? 78 : 40,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 itemCount: _activeCategoryDef.parameterKeys.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                separatorBuilder: (_, __) =>
+                    SizedBox(width: _usesToolIcons ? 2 : 6),
                 itemBuilder: (context, index) {
                   final key = _activeCategoryDef.parameterKeys[index];
                   final selected = key == activeKey;
@@ -263,6 +281,16 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                       widget.gatePlan?.decisionFor(key).isDisabled ?? false;
                   if (disabled) {
                     return const SizedBox.shrink();
+                  }
+                  if (BeautyToolIcons.hasGlyph(key)) {
+                    return _ToolNavItem(
+                      toolKey: key,
+                      label: BeautyEngineLabels.parameterLabel(key),
+                      selected: selected,
+                      enabled: widget.enabled,
+                      changed: _isChanged(key),
+                      onTap: () => setState(() => _selectedKey = key),
+                    );
                   }
                   return ChoiceChip(
                     label: Text(
@@ -419,6 +447,83 @@ class _SliderRange {
   final double max;
   final int? divisions;
   final bool bipolar;
+}
+
+class _ToolNavItem extends StatelessWidget {
+  const _ToolNavItem({
+    required this.toolKey,
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.changed,
+    required this.onTap,
+  });
+
+  final String toolKey;
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final bool changed;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final Color color;
+    if (!enabled) {
+      color = theme.colorScheme.onSurface.withValues(alpha: 0.3);
+    } else if (selected) {
+      color = AppColors.primary;
+    } else {
+      color = theme.colorScheme.onSurface.withValues(alpha: 0.75);
+    }
+
+    return SizedBox(
+      width: 72,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(8),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            BeautyToolIcon(
+              key: Key('beauty-tool-icon-$toolKey'),
+              toolKey: toolKey,
+              color: color,
+              size: 26,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                height: 1.15,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 3),
+            SizedBox(
+              width: 4,
+              height: 4,
+              child: changed
+                  ? DecoratedBox(
+                      key: Key('beauty-tool-dot-$toolKey'),
+                      decoration: BoxDecoration(
+                        color: selected ? AppColors.primary : color,
+                        shape: BoxShape.circle,
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _CategoryNavItem extends StatelessWidget {

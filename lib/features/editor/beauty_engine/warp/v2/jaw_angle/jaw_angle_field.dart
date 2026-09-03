@@ -239,8 +239,8 @@ abstract final class JawAngleField {
     required double midlineX,
     required double faceWidth,
   }) {
-    final left = _curveRidge(px, curveLeft);
-    final right = _curveRidge(px, curveRight);
+    final left = Ridge.of(_curveRidge(px, curveLeft));
+    final right = Ridge.of(_curveRidge(px, curveRight));
     final sigmaAcross = math.max(6.0, sigmaAcrossFaceWidth * faceWidth);
     final ridgeBlend = math.max(1.5, ridgeBlendFaceWidth * faceWidth);
     final falloff = math.max(12.0, falloffFaceWidth * faceWidth);
@@ -262,26 +262,25 @@ abstract final class JawAngleField {
       if (masks.chinActive[i] == 0) {
         continue;
       }
+      // A crista é o passo caro do laço: só se avalia depois de a fronteira,
+      // que é uma leitura, mostrar que o pixel não sai já a zero.
+      final boundary = boundaryRamp[i];
+      if (boundary <= 1e-6) {
+        continue;
+      }
       final x = (i % width) + 0.5;
       final y = (i ~/ width) + 0.5;
-      final wL = RidgeWeight.at(
-        nodes: left,
+      final ridge = RidgeWeight.stronger(
+        a: left,
+        b: right,
         x: x,
         y: y,
         sigmaAcross: sigmaAcross,
         blendPx: ridgeBlend,
       );
-      final wR = RidgeWeight.at(
-        nodes: right,
-        x: x,
-        y: y,
-        sigmaAcross: sigmaAcross,
-        blendPx: ridgeBlend,
-      );
-      final mpLeft = wL >= wR;
-      final pad = mpLeft ? wL : wR;
+      final mpLeft = ridge.aWins;
+      final pad = ridge.weight;
       final toward = midlineX - x;
-      final boundary = boundaryRamp[i];
       final midGate = math.min(1.0, toward.abs() / midBlend);
       final tipGate =
           tipBleed + (1.0 - tipBleed) * _notchGate(tipPts, x, y, tipNotch);

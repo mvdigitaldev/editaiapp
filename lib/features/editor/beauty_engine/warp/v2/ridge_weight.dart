@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 /// Nó de uma crista: posição em pixels e peso de influência.
@@ -24,8 +25,178 @@ typedef RidgeNode = ({Offset p, double weight});
 /// segmento mais próximo domina e o resultado é o de sempre; sobre ela a troca
 /// distribui-se por alguns pixels em vez de acontecer num só. O decaimento
 /// continua a usar a distância mínima, que já era contínua.
+/// Crista com os segmentos em vectores planos, preparada uma vez por efeito.
+///
+/// O peso é avaliado em cada pixel activo de cada efeito — dezenas de milhares
+/// por campo, seis campos por cadeia — e a versão que percorria a lista de nós
+/// pagava por pixel a indirecção de dois objectos `Offset` por segmento e uma
+/// divisão pelo comprimento. Aqui isso é feito uma vez.
+///
+/// A caixa e o peso máximo servem para descartar uma crista inteira sem a
+/// percorrer: a distância a qualquer ponto dela nunca é menor que a distância à
+/// sua caixa, e a média ponderada nunca passa o maior peso dos nós, logo
+/// `maxWeight · exp(−distCaixa² / 2σ²)` limita o peso por cima.
+class Ridge {
+  Ridge._({
+    required this.segments,
+    required this.maxWeight,
+    required Float64List ax,
+    required Float64List ay,
+    required Float64List abx,
+    required Float64List aby,
+    required Float64List len2,
+    required Float64List wa,
+    required Float64List wb,
+    required double left,
+    required double top,
+    required double right,
+    required double bottom,
+    required this.single,
+  })  : _ax = ax,
+        _ay = ay,
+        _abx = abx,
+        _aby = aby,
+        _len2 = len2,
+        _wa = wa,
+        _wb = wb,
+        _left = left,
+        _top = top,
+        _right = right,
+        _bottom = bottom;
+
+  factory Ridge.of(List<RidgeNode> nodes) {
+    if (nodes.isEmpty) {
+      return Ridge._empty;
+    }
+    var left = double.infinity;
+    var top = double.infinity;
+    var right = -double.infinity;
+    var bottom = -double.infinity;
+    var maxWeight = 0.0;
+    for (final n in nodes) {
+      if (n.p.dx < left) left = n.p.dx;
+      if (n.p.dx > right) right = n.p.dx;
+      if (n.p.dy < top) top = n.p.dy;
+      if (n.p.dy > bottom) bottom = n.p.dy;
+      if (n.weight > maxWeight) maxWeight = n.weight;
+    }
+    if (nodes.length == 1) {
+      return Ridge._(
+        segments: 0,
+        maxWeight: maxWeight,
+        ax: Float64List(0),
+        ay: Float64List(0),
+        abx: Float64List(0),
+        aby: Float64List(0),
+        len2: Float64List(0),
+        wa: Float64List(0),
+        wb: Float64List(0),
+        left: left,
+        top: top,
+        right: right,
+        bottom: bottom,
+        single: nodes.first,
+      );
+    }
+    final count = nodes.length - 1;
+    final ax = Float64List(count);
+    final ay = Float64List(count);
+    final abx = Float64List(count);
+    final aby = Float64List(count);
+    final len2 = Float64List(count);
+    final wa = Float64List(count);
+    final wb = Float64List(count);
+    for (var i = 0; i < count; i++) {
+      final a = nodes[i];
+      final b = nodes[i + 1];
+      ax[i] = a.p.dx;
+      ay[i] = a.p.dy;
+      final dx = b.p.dx - a.p.dx;
+      final dy = b.p.dy - a.p.dy;
+      abx[i] = dx;
+      aby[i] = dy;
+      len2[i] = dx * dx + dy * dy;
+      wa[i] = a.weight;
+      wb[i] = b.weight;
+    }
+    return Ridge._(
+      segments: count,
+      maxWeight: maxWeight,
+      ax: ax,
+      ay: ay,
+      abx: abx,
+      aby: aby,
+      len2: len2,
+      wa: wa,
+      wb: wb,
+      left: left,
+      top: top,
+      right: right,
+      bottom: bottom,
+      single: null,
+    );
+  }
+
+  static final Ridge _empty = Ridge._(
+    segments: 0,
+    maxWeight: 0,
+    ax: Float64List(0),
+    ay: Float64List(0),
+    abx: Float64List(0),
+    aby: Float64List(0),
+    len2: Float64List(0),
+    wa: Float64List(0),
+    wb: Float64List(0),
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    single: null,
+  );
+
+  final int segments;
+  final double maxWeight;
+  final Float64List _ax;
+  final Float64List _ay;
+  final Float64List _abx;
+  final Float64List _aby;
+  final Float64List _len2;
+  final Float64List _wa;
+  final Float64List _wb;
+  final double _left;
+  final double _top;
+  final double _right;
+  final double _bottom;
+
+  /// Crista de um só nó, que decai como uma gaussiana isotrópica.
+  final RidgeNode? single;
+
+  bool get isEmpty => segments == 0 && single == null;
+
+  /// Quadrado da distância do ponto à caixa da crista. Zero lá dentro.
+  double _boxDistance2(double x, double y) {
+    final dx = x < _left
+        ? _left - x
+        : x > _right
+            ? x - _right
+            : 0.0;
+    final dy = y < _top
+        ? _top - y
+        : y > _bottom
+            ? y - _bottom
+            : 0.0;
+    return dx * dx + dy * dy;
+  }
+}
+
 abstract final class RidgeWeight {
   RidgeWeight._();
+
+  /// Distâncias e parâmetros da projecção da chamada em curso. Crescem com a
+  /// crista mais longa vista e ficam; são lidos e escritos dentro de [at], sem
+  /// atravessar chamadas.
+  static Float64List _projected = Float64List(0);
+  static Float64List _alongSegment = Float64List(0);
 
   /// Densifica uma crista inserindo o ponto médio entre âncoras consecutivas.
   static List<RidgeNode> densify(List<RidgeNode> anchors) {
@@ -48,26 +219,50 @@ abstract final class RidgeWeight {
   }
 
   static double at({
-    required List<RidgeNode> nodes,
+    required Ridge ridge,
     required double x,
     required double y,
     required double sigmaAcross,
     required double blendPx,
   }) {
-    if (sigmaAcross < 1e-6 || nodes.isEmpty) {
+    if (sigmaAcross < 1e-6 || ridge.isEmpty) {
       return 0;
     }
-    if (nodes.length == 1) {
-      final ddx = x - nodes.first.p.dx;
-      final ddy = y - nodes.first.p.dy;
-      final g = nodes.first.weight *
+    final lone = ridge.single;
+    if (lone != null) {
+      final ddx = x - lone.p.dx;
+      final ddy = y - lone.p.dy;
+      final g = lone.weight *
           math.exp(-(ddx * ddx + ddy * ddy) / (2 * sigmaAcross * sigmaAcross));
       return g > 1 ? 1 : g;
     }
 
+    // A projecção de cada segmento serve duas vezes — para o mínimo e para a
+    // média — e é chamada por pixel activo de seis efeitos. Guardá-la poupa
+    // metade das projecções e a alocação de um registo por segmento.
+    final segments = ridge.segments;
+    if (_projected.length < segments) {
+      _projected = Float64List(segments);
+      _alongSegment = Float64List(segments);
+    }
     var minD2 = double.infinity;
-    for (var i = 0; i < nodes.length - 1; i++) {
-      final d2 = _distance2ToSegment(nodes[i].p, nodes[i + 1].p, x, y).d2;
+    for (var i = 0; i < segments; i++) {
+      final abx = ridge._abx[i];
+      final aby = ridge._aby[i];
+      final len2 = ridge._len2[i];
+      final ox = x - ridge._ax[i];
+      final oy = y - ridge._ay[i];
+      var t = 0.0;
+      if (len2 > 1e-12) {
+        t = ((ox * abx + oy * aby) / len2).clamp(0.0, 1.0);
+      }
+      // Mesma ordem de operações da versão que percorria os nós, para o
+      // resultado não mudar nem no último bit.
+      final px = x - (ridge._ax[i] + abx * t);
+      final py = y - (ridge._ay[i] + aby * t);
+      final d2 = px * px + py * py;
+      _projected[i] = d2;
+      _alongSegment[i] = t;
       if (d2 < minD2) {
         minD2 = d2;
       }
@@ -77,14 +272,13 @@ abstract final class RidgeWeight {
     final minD = math.sqrt(minD2);
     var numerator = 0.0;
     var denominator = 0.0;
-    for (var i = 0; i < nodes.length - 1; i++) {
-      final a = nodes[i];
-      final b = nodes[i + 1];
-      final hit = _distance2ToSegment(a.p, b.p, x, y);
-      final excess = (math.sqrt(hit.d2) - minD) / tau;
+    for (var i = 0; i < segments; i++) {
+      final t = _alongSegment[i];
+      final excess = (math.sqrt(_projected[i]) - minD) / tau;
       final k = math.exp(-0.5 * excess * excess);
-      final s = hit.t * hit.t * (3 - 2 * hit.t);
-      numerator += (a.weight + (b.weight - a.weight) * s) * k;
+      final s = t * t * (3 - 2 * t);
+      final wa = ridge._wa[i];
+      numerator += (wa + (ridge._wb[i] - wa) * s) * k;
       denominator += k;
     }
     if (denominator <= 0) {
@@ -96,23 +290,76 @@ abstract final class RidgeWeight {
     return g > 1 ? 1 : g;
   }
 
-  static ({double d2, double t}) _distance2ToSegment(
-    Offset a,
-    Offset b,
-    double x,
-    double y,
-  ) {
-    final abx = b.dx - a.dx;
-    final aby = b.dy - a.dy;
-    final len2 = abx * abx + aby * aby;
-    var t = 0.0;
-    if (len2 > 1e-12) {
-      t = (((x - a.dx) * abx + (y - a.dy) * aby) / len2).clamp(0.0, 1.0);
+  /// A mais forte de duas cristas, sem avaliar a que não pode ganhar.
+  ///
+  /// Os efeitos são bilaterais: tomam o maior peso entre o lado esquerdo e o
+  /// direito, e alguns precisam de saber qual venceu. Mas na bochecha esquerda
+  /// a crista direita está a meia cara de distância e o seu peso é
+  /// indistinguível de zero. O limite por caixa custa duas subtracções e uma
+  /// exponencial, e dispensa percorrer os segmentos desse lado.
+  ///
+  /// [aWins] segue a convenção `pesoA >= pesoB`, empate incluído. É por isso
+  /// que o corte de `b` admite igualdade e o de `a` não: descartar `a` por
+  /// empate poderia trocar o vencedor.
+  static ({double weight, bool aWins}) stronger({
+    required Ridge a,
+    required Ridge b,
+    required double x,
+    required double y,
+    required double sigmaAcross,
+    required double blendPx,
+  }) {
+    if (sigmaAcross < 1e-6) {
+      return (weight: 0, aWins: true);
     }
-    final qx = a.dx + abx * t;
-    final qy = a.dy + aby * t;
-    final dx = x - qx;
-    final dy = y - qy;
-    return (d2: dx * dx + dy * dy, t: t);
+    final twoSigma2 = 2 * sigmaAcross * sigmaAcross;
+    final boundA = a.isEmpty
+        ? 0.0
+        : a.maxWeight * math.exp(-a._boxDistance2(x, y) / twoSigma2);
+    final boundB = b.isEmpty
+        ? 0.0
+        : b.maxWeight * math.exp(-b._boxDistance2(x, y) / twoSigma2);
+
+    // Avaliar primeiro quem promete mais deixa o corte do outro mais apertado.
+    if (boundA >= boundB) {
+      final wA = at(
+        ridge: a,
+        x: x,
+        y: y,
+        sigmaAcross: sigmaAcross,
+        blendPx: blendPx,
+      );
+      if (boundB <= wA) {
+        return (weight: wA, aWins: true);
+      }
+      final wB = at(
+        ridge: b,
+        x: x,
+        y: y,
+        sigmaAcross: sigmaAcross,
+        blendPx: blendPx,
+      );
+      return wA >= wB ? (weight: wA, aWins: true) : (weight: wB, aWins: false);
+    }
+
+    final wB = at(
+      ridge: b,
+      x: x,
+      y: y,
+      sigmaAcross: sigmaAcross,
+      blendPx: blendPx,
+    );
+    if (boundA < wB) {
+      return (weight: wB, aWins: false);
+    }
+    final wA = at(
+      ridge: a,
+      x: x,
+      y: y,
+      sigmaAcross: sigmaAcross,
+      blendPx: blendPx,
+    );
+    return wA >= wB ? (weight: wA, aWins: true) : (weight: wB, aWins: false);
   }
+
 }

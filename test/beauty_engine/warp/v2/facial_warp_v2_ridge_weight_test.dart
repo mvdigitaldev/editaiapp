@@ -84,7 +84,7 @@ void main() {
         (p: const Offset(100, 0), weight: 0.5),
       ]);
       final onAnchor = RidgeWeight.at(
-        nodes: nodes,
+        ridge: Ridge.of(nodes),
         x: 0,
         y: 0,
         sigmaAcross: 30,
@@ -99,7 +99,7 @@ void main() {
         (p: const Offset(100, 0), weight: 1.0),
       ]);
       double at(double y) => RidgeWeight.at(
-            nodes: nodes,
+            ridge: Ridge.of(nodes),
             x: 50,
             y: y,
             sigmaAcross: 30,
@@ -113,7 +113,7 @@ void main() {
     test('crista vazia ou sigma nulo dá zero', () {
       expect(
         RidgeWeight.at(
-          nodes: const [],
+          ridge: Ridge.of(const []),
           x: 0,
           y: 0,
           sigmaAcross: 10,
@@ -123,7 +123,7 @@ void main() {
       );
       expect(
         RidgeWeight.at(
-          nodes: [(p: const Offset(0, 0), weight: 1.0)],
+          ridge: Ridge.of([(p: const Offset(0, 0), weight: 1.0)]),
           x: 0,
           y: 0,
           sigmaAcross: 0,
@@ -140,7 +140,7 @@ void main() {
       ]);
       expect(
         RidgeWeight.at(
-          nodes: nodes,
+          ridge: Ridge.of(nodes),
           x: 25,
           y: 0,
           sigmaAcross: 30,
@@ -164,7 +164,7 @@ void main() {
         for (var x = 160; x <= 240; x++) {
           final legacy = _nearestSegmentOnly(nodes, x + 0.5, y + 0.5, sigma);
           final now = RidgeWeight.at(
-            nodes: nodes,
+            ridge: Ridge.of(nodes),
             x: x + 0.5,
             y: y + 0.5,
             sigmaAcross: sigma,
@@ -206,7 +206,7 @@ void main() {
         for (var x = 120; x <= 320; x++) {
           final legacy = _nearestSegmentOnly(nodes, x + 0.5, y + 0.5, sigma);
           final now = RidgeWeight.at(
-            nodes: nodes,
+            ridge: Ridge.of(nodes),
             x: x + 0.5,
             y: y + 0.5,
             sigmaAcross: sigma,
@@ -226,6 +226,87 @@ void main() {
         lessThan(0.06),
         reason: 'a crista contínua alterou o aspecto além do degrau',
       );
+    });
+  });
+
+  group('RidgeWeight.stronger', () {
+    test('dá o mesmo que avaliar as duas cristas', () {
+      // Duas cristas afastadas, como os dois lados da cara: o corte por caixa
+      // dispensa avaliar a distante, e o resultado tem de ser o mesmo — valor
+      // e vencedor — em toda a parte, inclusive onde as duas se aproximam.
+      final left = Ridge.of(RidgeWeight.densify([
+        (p: const Offset(60, 100), weight: 0.4),
+        (p: const Offset(100, 200), weight: 1.0),
+        (p: const Offset(180, 260), weight: 0.7),
+      ]));
+      final right = Ridge.of(RidgeWeight.densify([
+        (p: const Offset(420, 100), weight: 0.5),
+        (p: const Offset(380, 200), weight: 0.9),
+        (p: const Offset(300, 260), weight: 0.8),
+      ]));
+      const sigma = 45.0;
+      const blend = 6.0;
+      var worst = 0.0;
+      var mismatches = 0;
+      var cut = 0;
+      for (var y = 0; y <= 360; y += 3) {
+        for (var x = 0; x <= 480; x += 3) {
+          final xc = x + 0.5;
+          final yc = y + 0.5;
+          final wL = RidgeWeight.at(
+            ridge: left,
+            x: xc,
+            y: yc,
+            sigmaAcross: sigma,
+            blendPx: blend,
+          );
+          final wR = RidgeWeight.at(
+            ridge: right,
+            x: xc,
+            y: yc,
+            sigmaAcross: sigma,
+            blendPx: blend,
+          );
+          final got = RidgeWeight.stronger(
+            a: left,
+            b: right,
+            x: xc,
+            y: yc,
+            sigmaAcross: sigma,
+            blendPx: blend,
+          );
+          worst = math.max(worst, (got.weight - math.max(wL, wR)).abs());
+          if (got.aWins != (wL >= wR)) {
+            mismatches++;
+          }
+          if (wL < 1e-12 || wR < 1e-12) {
+            cut++;
+          }
+        }
+      }
+      expect(worst, 0);
+      expect(mismatches, 0);
+      // E há mesmo zonas onde um dos lados é irrelevante, senão o corte nunca
+      // era exercido.
+      expect(cut, greaterThan(0));
+    });
+
+    test('crista vazia de um lado não impede o outro', () {
+      final only = Ridge.of(RidgeWeight.densify([
+        (p: const Offset(0, 0), weight: 1.0),
+        (p: const Offset(100, 0), weight: 1.0),
+      ]));
+      final empty = Ridge.of(const []);
+      final got = RidgeWeight.stronger(
+        a: empty,
+        b: only,
+        x: 50,
+        y: 0,
+        sigmaAcross: 30,
+        blendPx: 4,
+      );
+      expect(got.weight, closeTo(1.0, 1e-9));
+      expect(got.aWins, isFalse);
     });
   });
 }
