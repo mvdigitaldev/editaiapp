@@ -7,7 +7,7 @@ Preview no editor. Sem alterar o Field. Sem fill. Sem makeup `eyebrows`. Sem Wid
 
 ```
 applyEyebrowHeightWarp → EyebrowHeightField.build + BackwardBilinearWarp
-applyFaceWarpChain: head → hairline → eyebrow_height → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone
+applyFaceWarpChain: head → hairline → eyebrow_height → eyebrow_width → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone
 ```
 
 ## O que foi feito

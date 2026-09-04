@@ -103,7 +103,7 @@ L/R: `useLeft` = mais perto do centróide MP esquerdo do que do direito.
 Cadeia (D):
 
 ```
-head → hairline → eyebrow_height → jaw → …
+head → hairline → eyebrow_height → eyebrow_width → jaw → …
 ```
 
 Hairline continua a pôr brows em hard-zero **no campo dele** — correcto. Este Field é que as mexe. Sem importar Hairline.

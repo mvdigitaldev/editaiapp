@@ -1,5 +1,6 @@
-/// Catálogo facial do produto: Head (Proporção) + Eyebrow Height (Sobrancelha) +
-/// Hairline + Jaw + Jaw Angle + Chin Length + V Chin + V Shape + Cheekbones.
+/// Catálogo facial do produto: Head (Proporção) + Eyebrow Height/Width
+/// (Sobrancelha) + Hairline + Jaw + Jaw Angle + Chin Length + V Chin +
+/// V Shape + Cheekbones.
 class FaceFilterPipeline {
   const FaceFilterPipeline();
 
@@ -11,6 +12,7 @@ class FaceFilterPipeline {
   /// Tab Sobrancelha. Não entra no tab Rosto. Não é makeup `eyebrows`.
   static const eyebrowParameterKeys = [
     'eyebrow_height',
+    'eyebrow_width',
   ];
 
   static const faceWarpParameterKeys = [
@@ -43,10 +45,16 @@ class FaceFilterPipeline {
     final brow = parameters['eyebrow_height'] ?? 0;
     final browL = parameters['eyebrow_height_left'] ?? 0;
     final browR = parameters['eyebrow_height_right'] ?? 0;
+    final browW = parameters['eyebrow_width'] ?? 0;
+    final browWL = parameters['eyebrow_width_left'] ?? 0;
+    final browWR = parameters['eyebrow_width_right'] ?? 0;
     return head.abs() > 1e-6 ||
         brow.abs() > 1e-6 ||
         browL.abs() > 1e-6 ||
         browR.abs() > 1e-6 ||
+        browW.abs() > 1e-6 ||
+        browWL.abs() > 1e-6 ||
+        browWR.abs() > 1e-6 ||
         hairline.abs() > 1e-6 ||
         jaw > 0 ||
         jawAngle.abs() > 1e-6 ||

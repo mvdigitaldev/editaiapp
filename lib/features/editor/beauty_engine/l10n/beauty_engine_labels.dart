@@ -19,6 +19,7 @@ abstract final class BeautyEngineLabels {
     'double_eyelid': 'Pálpebra dupla',
     'head': 'Cabeça',
     'eyebrow_height': 'Altura',
+    'eyebrow_width': 'Largura',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',

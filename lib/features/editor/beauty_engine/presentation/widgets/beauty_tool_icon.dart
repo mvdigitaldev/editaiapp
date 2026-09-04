@@ -9,6 +9,7 @@ abstract final class BeautyToolIcons {
   static const keys = <String>{
     'head',
     'eyebrow_height',
+    'eyebrow_width',
     'hairline',
     'jaw',
     'jaw_angle',
@@ -86,6 +87,8 @@ class _BeautyToolIconPainter extends CustomPainter {
         _paintHead(canvas, paint);
       case 'eyebrow_height':
         _paintEyebrowHeight(canvas, paint);
+      case 'eyebrow_width':
+        _paintEyebrowWidth(canvas, paint);
       case 'hairline':
         _paintHairline(canvas, paint);
       case 'jaw':
@@ -229,6 +232,33 @@ class _BeautyToolIconPainter extends CustomPainter {
     _arrow(canvas, paint, const Offset(12, 17.8), const Offset(12, 22.6));
     _arrow(canvas, paint, const Offset(6.4, 11.2), const Offset(1.8, 11.2));
     _arrow(canvas, paint, const Offset(17.6, 11.2), const Offset(22.2, 11.2));
+  }
+
+  void _paintEyebrowWidth(Canvas canvas, Paint paint) {
+    _paintFace(canvas, paint);
+    final left = Path()
+      ..moveTo(5.0, 9.6)
+      ..cubicTo(7.0, 7.4, 9.4, 7.2, 10.8, 8.9);
+    final right = Path()
+      ..moveTo(19.0, 9.6)
+      ..cubicTo(17.0, 7.4, 14.6, 7.2, 13.2, 8.9);
+    final thick = Paint()
+      ..color = paint.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.55
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+    canvas.drawPath(left, thick);
+    canvas.drawPath(right, thick);
+    final leftDash = Path()
+      ..moveTo(4.6, 8.5)
+      ..cubicTo(7.0, 6.1, 9.6, 5.9, 11.2, 7.9);
+    final rightDash = Path()
+      ..moveTo(19.4, 8.5)
+      ..cubicTo(17.0, 6.1, 14.4, 5.9, 12.8, 7.9);
+    _strokeDashed(canvas, leftDash, paint);
+    _strokeDashed(canvas, rightDash, paint);
   }
 
   void _paintEyebrowHeight(Canvas canvas, Paint paint) {

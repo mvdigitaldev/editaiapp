@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-09-04 (Eyebrow Height Sprint D)
+Última actualização: 2026-09-04 (Eyebrow Width Sprint D)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -45,7 +45,8 @@ A IA actua como **arquitecto** do Facial Warp V2.
 | **Cheekbones** | Em desenvolvimento. Hipótese H vigente (crista oval). Inspecção no editor. Sem C. Relatório [`v2-cheekbones-h-report.md`](./v2-cheekbones-h-report.md). **Intacto** no Jaw Angle. |
 | **Hairline** | Aprovado. Vivo (`hairline`, «Linha do cabelo»). C assinada 2026-09-03. A–E fechadas. B Δy-only rejeitada. Spec [`v2-hairline.md`](./v2-hairline.md). **Não** é `forehead`. **Não** é Temple. |
 | **Head** | D no editor. Key `head` («Cabeça»). Tab Proporção. Sem E escrita. Spec [`v2-head.md`](./v2-head.md). D [`v2-head-d-report.md`](./v2-head-d-report.md). **Não** é `head_size`. **Não** é zoom de câmara. |
-| **Eyebrow Height** | D no editor. Key `eyebrow_height` («Altura»). Tab Sobrancelha. **Não** é makeup `eyebrows`. Sem E escrita. Spec [`v2-eyebrow-height.md`](./v2-eyebrow-height.md). D [`v2-eyebrow-height-d-report.md`](./v2-eyebrow-height-d-report.md). |
+| **Eyebrow Height** | D no editor. Key `eyebrow_height` («Altura»). Tab Sobrancelha. **Não** é makeup `eyebrows`. Sem E escrita. Spec [`v2-eyebrow-height.md`](./v2-eyebrow-height.md). D [`v2-eyebrow-height-d-report.md`](./v2-eyebrow-height-d-report.md). **Intacto** no Width. |
+| **Eyebrow Width** | D no editor. Key `eyebrow_width` («Largura»). Tab Sobrancelha. **Não** é makeup `eyebrows`. **Não** é Altura. Sem E escrita. Spec [`v2-eyebrow-width.md`](./v2-eyebrow-width.md). D [`v2-eyebrow-width-d-report.md`](./v2-eyebrow-width-d-report.md). |
 
 Pipeline viva no produto:
 
@@ -53,11 +54,11 @@ Pipeline viva no produto:
 RGBA → applyFaceWarpChain → Body → Skin → Color
 ```
 
-`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
+`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
 
 Entre etapas os landmarks são **advectados** para a geometria já deformada (`warp/v2/landmark_advection.dart`). Sem isso o efeito a jusante recebia o RGBA deformado mas media a geometria da origem, e a crista caía 6–10 px fora da silhueta. Ver [`v2-composicao-cadeia.md`](./v2-composicao-cadeia.md).
 
-Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline e Eyebrow Height estão na mesma cadeia, **aprovados**. V Shape e Jaw Angle estão na cadeia como inspecção.
+Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline, Eyebrow Height e Eyebrow Width estão na mesma cadeia, **aprovados**. V Shape e Jaw Angle estão na cadeia como inspecção.
 
 ---
 
@@ -256,8 +257,20 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Runtime: `unitWeight` + `leftFrac`; o slider só escala `dy`.
 - Lab B: 21 `v2Raw` refeitos após a dobra. `invalidCount = 0`. Pior `minDetJ` 0,333 (p05 t=−1). Relatório [`v2-eyebrow-height-b-report.md`](./v2-eyebrow-height-b-report.md).
 - Módulo: `warp/v2/eyebrow_height/`. Não importa Jaw/Chin/V Chin/V Shape/Cheekbones/Jaw Angle/Hairline/Head.
-- Cadeia: depois do Hairline (`head → hairline → eyebrow_height → jaw → …`). Tab **Sobrancelha**, ícone Altura. Preview e export partilham `applyFaceWarpChain`.
+- Cadeia: depois do Hairline (`head → hairline → eyebrow_height → eyebrow_width → jaw → …`). Tab **Sobrancelha**, ícone Altura. Preview e export partilham `applyFaceWarpChain`.
 - Spec: [`v2-eyebrow-height.md`](./v2-eyebrow-height.md). Plano: [`v2-eyebrow-height-plan.md`](./v2-eyebrow-height-plan.md). C: [`v2-eyebrow-height-c-report.md`](./v2-eyebrow-height-c-report.md). D: [`v2-eyebrow-height-d-report.md`](./v2-eyebrow-height-d-report.md).
+
+### Eyebrow Width — Sprint D
+
+- Key: `eyebrow_width` («Largura»). **Não** é `eyebrows`. **Não** é `eyebrow_height`.
+- Sprint D (2026-09-04). C assinada. Tab **Sobrancelha**, ícone Largura à direita de Altura. Slider bipolar com L/R da foto. Sem E escrita. Os Fields vivos, incluindo Altura, intactos.
+- Campo: só Δy. `dx = 0`. `dy = t_lado · 0.008 · faceWidth · w · s`. `s = tanh((y − y_eixo) / halfBand)`. `y_eixo` interpolado em X e misturado L/R com `leftFrac` (sem argmin de segmento). Engrossa a abrir: arco sobe, base desce. Amplitude leve (Leonardo: sem cara de edição). Mesmo `lidGate` da Altura (cópia, sem importar o Field). Sem `RidgeWeight`. Sem `PersonMask`.
+- Convenção: **esquerda afina** (`t < 0`); **direita engrossa** (`t > 0`). L/R da foto. Foto esquerda = MP direita (105/52); foto direita = MP esquerda (334/282).
+- Runtime: `unitWeight` = `w · s`; o slider só escala `dy`.
+- Lab B: 21 `v2Raw`. `invalidCount = 0`. Pior `minDetJ` 0,594 (p12 t=−1). Pico ~2,1–2,8 px. Relatório [`v2-eyebrow-width-b-report.md`](./v2-eyebrow-width-b-report.md).
+- Módulo: `warp/v2/eyebrow_width/`. Não importa Altura nem os outros Fields.
+- Cadeia: depois da Altura (`head → hairline → eyebrow_height → eyebrow_width → jaw → …`). Tab **Sobrancelha**, ícone Largura. Preview e export partilham `applyFaceWarpChain`.
+- Spec: [`v2-eyebrow-width.md`](./v2-eyebrow-width.md). Plano: [`v2-eyebrow-width-plan.md`](./v2-eyebrow-width-plan.md). C: [`v2-eyebrow-width-c-report.md`](./v2-eyebrow-width-c-report.md). D: [`v2-eyebrow-width-d-report.md`](./v2-eyebrow-width-d-report.md).
 
 ---
 
@@ -290,6 +303,14 @@ Aprovação de C é escrita. Sem ela, D não existe.
 **Adenda 2026-08-26 (V Chin encerrado).** Leonardo fechou o V Chin no editor. Aprovado. Vivo (`v_chin`). Não alterar. Documento [`v2-v-chin.md`](./v2-v-chin.md).
 
 **Adenda 2026-08-26 (V Chin aberto).** Leonardo abriu o menu V Chin (`v_chin`, «V do queixo»): forma da ponta, Δx, L/R da foto. Superado pelo fecho no mesmo dia.
+
+**Adenda 2026-09-04 (Eyebrow Width D).** Leonardo: «implemente a proxima», com `p01/0/original.png` do lab aberto. C assinada. Tab Sobrancelha, key `eyebrow_width`, cadeia depois da Altura. Sem E escrita. Relatório [`v2-eyebrow-width-d-report.md`](./v2-eyebrow-width-d-report.md).
+
+**Adenda 2026-09-04 (Eyebrow Width C).** Leonardo avançou depois do lab B. C assinada das 21 `v2Raw`. Field intacto. Relatório [`v2-eyebrow-width-c-report.md`](./v2-eyebrow-width-c-report.md).
+
+**Adenda 2026-09-04 (Eyebrow Width B).** Leonardo: «implemente a proxima entao». Lab `v2Raw` 21 runs (Geral ±1/±0,5/0 + L100/R100) em p01/p05/p12. `invalidCount = 0`. Sem fill. Sem UI. Field intacto. Relatório [`v2-eyebrow-width-b-report.md`](./v2-eyebrow-width-b-report.md).
+
+**Adenda 2026-09-04 (Eyebrow Width A).** Leonardo, depois da Altura no editor, com o ícone Meitu Width: «agora precisamos de outra que é a largura da sobrancelha… mesma estrutura da altura, mas deixar ela minimamente mais larga… bem pouca coisa para ficar bem real… uma leve engrossada». Sprint A (`eyebrow_width`). **Não** é planalto da Altura (isso só traduz). Campo assinado a partir do eixo: arco sobe, base desce. Amplitude `0.008 × faceWidth`. Sem makeup `eyebrows`. Sem Length/End/Front/Angle/Shape. Sem cadeia. Sem slider. Altura e os Fields vivos intactos. Spec [`v2-eyebrow-width.md`](./v2-eyebrow-width.md).
 
 **Adenda 2026-09-04 (Eyebrow Height D).** Leonardo: «implemente a sprint proxima». Tab Sobrancelha, key `eyebrow_height`, cadeia depois do Hairline. Sem E escrita. Relatório [`v2-eyebrow-height-d-report.md`](./v2-eyebrow-height-d-report.md).
 
@@ -374,11 +395,21 @@ Face Rig (`v2-face-rig-migration-plan.md`): **congelado**. Não implementar.
 
 - [`v2-v-chin.md`](./v2-v-chin.md) — **aprovado e encerrado** (Field e UI no disco)
 
+**Vigente para Eyebrow Width**
+
+- [`v2-eyebrow-width.md`](./v2-eyebrow-width.md) — D no editor (Field + UI)
+- [`v2-eyebrow-width-plan.md`](./v2-eyebrow-width-plan.md) — plano A–E (A–D feitas)
+- [`v2-eyebrow-width-b-report.md`](./v2-eyebrow-width-b-report.md) — lab vigente
+- [`v2-eyebrow-width-c-report.md`](./v2-eyebrow-width-c-report.md) — C assinada 2026-09-04
+- [`v2-eyebrow-width-d-report.md`](./v2-eyebrow-width-d-report.md) — D no editor
+
 **Vigente para Eyebrow Height**
 
-- [`v2-eyebrow-height.md`](./v2-eyebrow-height.md) — Sprint B (Field no disco; sem UI)
-- [`v2-eyebrow-height-plan.md`](./v2-eyebrow-height-plan.md) — plano A–E (A–B feitas)
+- [`v2-eyebrow-height.md`](./v2-eyebrow-height.md) — D no editor (Field + UI)
+- [`v2-eyebrow-height-plan.md`](./v2-eyebrow-height-plan.md) — plano A–E (A–D feitas)
 - [`v2-eyebrow-height-b-report.md`](./v2-eyebrow-height-b-report.md) — lab vigente
+- [`v2-eyebrow-height-c-report.md`](./v2-eyebrow-height-c-report.md) — C assinada 2026-09-04
+- [`v2-eyebrow-height-d-report.md`](./v2-eyebrow-height-d-report.md) — D no editor
 
 **Vigente para Head**
 

@@ -55,7 +55,10 @@ void main() {
     expect(find.text('Formato V'), findsWidgets);
     expect(FaceFilterPipeline.faceWarpParameterKeys.last, 'hairline');
     expect(FaceFilterPipeline.proportionParameterKeys, ['head']);
-    expect(FaceFilterPipeline.eyebrowParameterKeys, ['eyebrow_height']);
+    expect(
+      FaceFilterPipeline.eyebrowParameterKeys,
+      ['eyebrow_height', 'eyebrow_width'],
+    );
     expect(
       BeautyAdjustmentsPanel.categories.map((def) => def.category).toList(),
       [
@@ -124,6 +127,10 @@ void main() {
       find.byKey(const Key('beauty-tool-icon-eyebrow_height')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const Key('beauty-tool-icon-eyebrow_width')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('beauty-tool-icon-eyebrows')), findsNothing);
     expect(
       tester
@@ -138,6 +145,21 @@ void main() {
       isTrue,
     );
     expect(find.text('Geral'), findsWidgets);
+
+    await tester.tap(find.text('Largura'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Largura',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
 
     await tester.tap(find.text('Pele'));
     await tester.pumpAndSettle();
@@ -218,6 +240,10 @@ void main() {
     expect(params.containsKey('eyebrow_height_left'), isTrue);
     expect(params.containsKey('eyebrow_height_right'), isTrue);
     expect(params.containsKey('eyebrow_height_side'), isTrue);
+    expect(params.containsKey('eyebrow_width'), isTrue);
+    expect(params.containsKey('eyebrow_width_left'), isTrue);
+    expect(params.containsKey('eyebrow_width_right'), isTrue);
+    expect(params.containsKey('eyebrow_width_side'), isTrue);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);

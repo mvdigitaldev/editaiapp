@@ -632,6 +632,11 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         (_params['eyebrow_height_right'] ?? 0).abs() > 0.001) {
       return 'eyebrow_height';
     }
+    if ((_params['eyebrow_width'] ?? 0).abs() > 0.001 ||
+        (_params['eyebrow_width_left'] ?? 0).abs() > 0.001 ||
+        (_params['eyebrow_width_right'] ?? 0).abs() > 0.001) {
+      return 'eyebrow_width';
+    }
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
       if ((_params[key] ?? 0).abs() > 0.001) {
         return key;
@@ -660,6 +665,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     const faceAndSkinKeys = {
       'head',
       'eyebrow_height',
+      'eyebrow_width',
       'hairline',
       'jaw',
       'jaw_angle',
@@ -699,6 +705,14 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         if ((params[key] ?? 0).abs() > 0 ||
             (params['eyebrow_height_left'] ?? 0).abs() > 0 ||
             (params['eyebrow_height_right'] ?? 0).abs() > 0) {
+          return true;
+        }
+        continue;
+      }
+      if (key == 'eyebrow_width') {
+        if ((params[key] ?? 0).abs() > 0 ||
+            (params['eyebrow_width_left'] ?? 0).abs() > 0 ||
+            (params['eyebrow_width_right'] ?? 0).abs() > 0) {
           return true;
         }
         continue;
