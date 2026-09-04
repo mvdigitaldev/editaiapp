@@ -6,6 +6,7 @@ import 'tool_descriptor.dart';
 /// Registry central de ferramentas (cap. 12) — deriva keys dos pipelines.
 abstract final class BeautyToolRegistry {
   static final List<ToolDescriptor> all = [
+    ..._proportion,
     ..._face,
     ..._skin,
     ..._color,
@@ -15,7 +16,17 @@ abstract final class BeautyToolRegistry {
     for (final d in all) d.key: d,
   };
 
-  static List<String> get allKeys => all.map((d) => d.key).toList(growable: false);
+  static List<String> get allKeys =>
+      all.map((d) => d.key).toList(growable: false);
+
+  static const _proportion = [
+    ToolDescriptor(
+      key: 'head',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
+  ];
 
   static const _face = [
     ToolDescriptor(
@@ -83,6 +94,8 @@ abstract final class BeautyToolRegistry {
   ];
 
   /// Keys faciais conhecidas (warp) — espelha [FaceFilterPipeline].
-  static List<String> get faceWarpKeys =>
-      FaceFilterPipeline.faceWarpParameterKeys;
+  static List<String> get faceWarpKeys => [
+        ...FaceFilterPipeline.proportionParameterKeys,
+        ...FaceFilterPipeline.faceWarpParameterKeys,
+      ];
 }

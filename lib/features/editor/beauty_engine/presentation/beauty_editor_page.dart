@@ -127,8 +127,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   }
 
   Future<void> _resolveDeviceCapability() async {
-    final profile =
-        await ref.read(deviceCapabilityManagerProvider).resolve();
+    final profile = await ref.read(deviceCapabilityManagerProvider).resolve();
     if (!mounted) {
       return;
     }
@@ -207,7 +206,8 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     await _applyLoadedBytes(data.buffer.asUint8List(), path: asset);
   }
 
-  Future<void> _applyLoadedBytes(Uint8List bytes, {required String path}) async {
+  Future<void> _applyLoadedBytes(Uint8List bytes,
+      {required String path}) async {
     // Normaliza EXIF/orientação e aplica o teto de resolução de entrada em
     // isolate — garante que UI, pipeline e detecção vejam os mesmos pixels.
     final source = await BeautyImageLoader.load(bytes);
@@ -523,8 +523,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       final gated = _gatedParams(controller);
       final frame = await controller.renderPreview(
         source: _previewSource!,
-        pipeline:
-            ProcessingPipeline(overrides: Map<String, double>.of(gated)),
+        pipeline: ProcessingPipeline(overrides: Map<String, double>.of(gated)),
         face: _cachedFace,
         pose: _cachedPose,
         personMask: _cachedPersonMask,
@@ -625,6 +624,9 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   }
 
   String? _firstActiveFaceWarpKey() {
+    if ((_params['head'] ?? 0).abs() > 0.001) {
+      return 'head';
+    }
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
       if ((_params[key] ?? 0).abs() > 0.001) {
         return key;
@@ -651,6 +653,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   bool _paramsNeedFaceOrSkin(Map<String, double> params) {
     const faceAndSkinKeys = {
+      'head',
       'hairline',
       'jaw',
       'jaw_angle',
@@ -672,7 +675,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'iris_enhance',
     };
     for (final key in faceAndSkinKeys) {
-      if (key == 'chin' || key == 'hairline') {
+      if (key == 'chin' || key == 'hairline' || key == 'head') {
         if ((params[key] ?? 0).abs() > 0) {
           return true;
         }
@@ -1005,10 +1008,12 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                                           preview != null)
                                         WarpDebugOverlay(
                                           field: ref
-                                              .watch(beautyEngineControllerProvider)
+                                              .watch(
+                                                  beautyEngineControllerProvider)
                                               .lastFaceWarpField,
                                           vertexStats: ref
-                                              .watch(beautyEngineControllerProvider)
+                                              .watch(
+                                                  beautyEngineControllerProvider)
                                               .lastFaceWarpDebugStats,
                                           boxSize: fitted,
                                         ),
@@ -1078,9 +1083,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                   ),
                 if (kDebugMode)
                   Positioned(
-                    top: widget.labMode &&
-                            _imageBytes != null &&
-                            !_showOriginal
+                    top: widget.labMode && _imageBytes != null && !_showOriginal
                         ? 168
                         : 12,
                     left: 12,
@@ -1094,7 +1097,9 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                       milliseconds: _lastApplyMs!,
                       budgetMs: _deviceProfile?.sliderToFrameBudgetMs ?? 250,
                       tier: _deviceProfile?.tier,
-                      p50Ms: ref.read(beautyBenchmarkProvider).percentile('total', 50),
+                      p50Ms: ref
+                          .read(beautyBenchmarkProvider)
+                          .percentile('total', 50),
                       showBaseline: _warpDebugAvailable,
                       warpBackend: _warpDebugAvailable
                           ? ref
@@ -1174,7 +1179,11 @@ class _BrushToolbar extends StatelessWidget {
                       (WarpBrushMode.push, 'Empurrar', Icons.swipe_rounded),
                       (WarpBrushMode.pinch, 'Afinar', Icons.compress_rounded),
                       (WarpBrushMode.expand, 'Expandir', Icons.expand_rounded),
-                      (WarpBrushMode.restore, 'Restaurar', Icons.history_rounded),
+                      (
+                        WarpBrushMode.restore,
+                        'Restaurar',
+                        Icons.history_rounded
+                      ),
                     ])
                       Padding(
                         padding: const EdgeInsets.only(right: 8),

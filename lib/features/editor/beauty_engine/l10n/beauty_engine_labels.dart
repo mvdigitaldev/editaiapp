@@ -17,6 +17,7 @@ abstract final class BeautyEngineLabels {
     'eye_height': 'Altura dos olhos',
     'eye_rotation': 'Rotação dos olhos',
     'double_eyelid': 'Pálpebra dupla',
+    'head': 'Cabeça',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',
@@ -63,9 +64,7 @@ abstract final class BeautyEngineLabels {
   };
 
   static String parameterLabel(String key) =>
-      parameterLabelPt[key] ??
-      BodyReshapeLabels.parameterLabelPt[key] ??
-      key;
+      parameterLabelPt[key] ?? BodyReshapeLabels.parameterLabelPt[key] ?? key;
 
   static const lutOptionsPt = {
     'Nenhum': null,
@@ -78,6 +77,7 @@ abstract final class BeautyEngineLabels {
   static const sectionColor = 'Cor';
   static const sectionEffect = 'Efeito';
   static const sectionTune = 'Cor / Ajustes';
+  static const sectionProportion = 'Proporção';
   static const sectionFace = 'Rosto';
   static const sectionSkin = 'Pele';
   static const sectionBody = 'Corpo';
@@ -112,23 +112,27 @@ abstract final class BeautyEngineLabels {
     'gate_no_face': 'Rosto não detectado — ferramenta indisponível',
     'gate_face_small': 'Rosto pequeno na foto — intensidade limitada',
     'gate_face_too_small_acne': 'Rosto muito pequeno para remover manchas',
-    'gate_blur_high': 'Foto borrada — suavização limitada para evitar efeito plástico',
+    'gate_blur_high':
+        'Foto borrada — suavização limitada para evitar efeito plástico',
     'gate_noise_high': 'Ruído alto — efeito reduzido',
     'gate_yaw_high': 'Rosto em perfil — ajuste limitado',
-    'gate_pose_limited': 'Pose ou enquadramento — intensidade levemente reduzida',
+    'gate_pose_limited':
+        'Pose ou enquadramento — intensidade levemente reduzida',
     'gate_hard_shadow': 'Luz lateral forte — olheiras parcialmente corrigíveis',
     'gate_low_light': 'Pouca luz — resultado parcial',
     'gate_skin_unavailable': 'Máscara de pele indisponível',
-    'gate_partial_occlusion': 'Rosto parcialmente coberto — resultado pode ficar desigual',
-    'gate_exposure_blown': 'Exposição estourada — brilho parcialmente recuperável',
-    'gate_compression_high': 'Foto muito comprimida — manchas difíceis de distinguir',
+    'gate_partial_occlusion':
+        'Rosto parcialmente coberto — resultado pode ficar desigual',
+    'gate_exposure_blown':
+        'Exposição estourada — brilho parcialmente recuperável',
+    'gate_compression_high':
+        'Foto muito comprimida — manchas difíceis de distinguir',
     'gate_eyes_occluded': 'Olhos cobertos — ferramenta indisponível',
     'gate_mouth_occluded': 'Boca coberta — dentes indisponível',
     'gate_mouth_closed': 'Boca fechada — clarear dentes indisponível',
   };
 
-  static String? gateHint(String? key) =>
-      key == null ? null : gateHintPt[key];
+  static String? gateHint(String? key) => key == null ? null : gateHintPt[key];
 
   static const adaptivePresetsSection = 'Presets adaptativos';
 

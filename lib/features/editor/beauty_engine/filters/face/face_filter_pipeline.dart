@@ -1,6 +1,11 @@
-/// Catálogo facial do produto: Hairline + Jaw + Jaw Angle + Chin Length + V Chin + V Shape + Cheekbones (Facial Warp V2).
+/// Catálogo facial do produto: Head (Proporção) + Hairline + Jaw + Jaw Angle + Chin Length + V Chin + V Shape + Cheekbones (Facial Warp V2).
 class FaceFilterPipeline {
   const FaceFilterPipeline();
+
+  /// Tab Proporção. Não entra no tab Rosto.
+  static const proportionParameterKeys = [
+    'head',
+  ];
 
   static const faceWarpParameterKeys = [
     'jaw',
@@ -13,6 +18,7 @@ class FaceFilterPipeline {
   ];
 
   bool hasActiveWarp(Map<String, double> parameters) {
+    final head = parameters['head'] ?? 0;
     final hairline = parameters['hairline'] ?? 0;
     final jaw = parameters['jaw'] ?? parameters['Jaw'] ?? 0;
     final jawAngle = parameters['jaw_angle'] ?? 0;
@@ -28,7 +34,8 @@ class FaceFilterPipeline {
     final cheek = parameters['cheekbone'] ?? parameters['Cheekbone'] ?? 0;
     final cheekL = parameters['cheekbone_left'] ?? 0;
     final cheekR = parameters['cheekbone_right'] ?? 0;
-    return hairline.abs() > 1e-6 ||
+    return head.abs() > 1e-6 ||
+        hairline.abs() > 1e-6 ||
         jaw > 0 ||
         jawAngle.abs() > 1e-6 ||
         jawAngleL.abs() > 1e-6 ||

@@ -355,7 +355,8 @@ void main() {
             continue;
           }
           // Antes: a silhueta escorrega |D(p)| sob o landmark, que ficava parado.
-          worstBefore = math.max(worstBefore, _sampleField(jaw, origin).distance);
+          worstBefore =
+              math.max(worstBefore, _sampleField(jaw, origin).distance);
           // Depois: o landmark satisfaz o remap backward `q − D(q) = p`.
           final d = _sampleField(jaw, moved);
           worstAfter = math.max(
@@ -677,6 +678,7 @@ void main() {
     });
 
     for (final effect in [
+      ('head', -1.0),
       ('hairline', -1.0),
       ('jaw', 1.0),
       ('jaw_angle', -1.0),
@@ -702,6 +704,7 @@ void main() {
         );
 
         final isolated = switch (effect.$1) {
+          'head' => controller.applyHeadWarp,
           'hairline' => controller.applyHairlineWarp,
           'jaw' => controller.applyJawWarp,
           'jaw_angle' => controller.applyJawAngleWarp,

@@ -14,6 +14,7 @@ import 'beauty_tool_icon.dart';
 
 /// Categoria de ajuste manual no retoque beauty.
 enum BeautyAdjustmentCategory {
+  proporcao,
   rosto,
   nariz,
   olhos,
@@ -67,6 +68,12 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
 
   static const categories = <BeautyAdjustmentCategoryDef>[
     BeautyAdjustmentCategoryDef(
+      category: BeautyAdjustmentCategory.proporcao,
+      icon: Icons.zoom_out_map_outlined,
+      label: BeautyEngineLabels.sectionProportion,
+      parameterKeys: FaceFilterPipeline.proportionParameterKeys,
+    ),
+    BeautyAdjustmentCategoryDef(
       category: BeautyAdjustmentCategory.rosto,
       icon: Icons.face_outlined,
       label: BeautyEngineLabels.sectionFace,
@@ -95,6 +102,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
   /// Inicializa mapa de parâmetros com zeros para todas as keys conhecidas.
   static Map<String, double> initialParams({bool linkEyes = true}) {
     final params = <String, double>{
+      for (final key in FaceFilterPipeline.proportionParameterKeys) key: 0,
       for (final key in FaceFilterPipeline.faceWarpParameterKeys) key: 0,
       for (final key in BodyFilterPipeline.bodyWarpParameterKeys) key: 0,
       for (final key in SkinFilterPipeline.skinParameterKeys) key: 0,
@@ -203,8 +211,7 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     final isBody = _category == BeautyAdjustmentCategory.corpo;
     final sliderRange = _sliderRangeForKey(activeKey);
     final gate = widget.gatePlan?.decisionFor(activeKey);
-    final paramEnabled =
-        widget.enabled && (gate == null || !gate.isDisabled);
+    final paramEnabled = widget.enabled && (gate == null || !gate.isDisabled);
     final gateHint = BeautyEngineLabels.gateHint(gate?.hintKey);
     final limitationHint = isBody
         ? BodyReshapeLabels.limitationHint(
@@ -241,9 +248,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                 divisions: sliderRange.divisions,
                 bipolar: sliderRange.bipolar,
                 enabled: paramEnabled,
-                trailing: isSideWarp
-                    ? _sideMenu(activeKey, paramEnabled)
-                    : null,
+                trailing:
+                    isSideWarp ? _sideMenu(activeKey, paramEnabled) : null,
                 onChanged: paramEnabled
                     ? (value) => isSideWarp
                         ? _onSideSliderChanged(activeKey, value)
@@ -423,7 +429,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'v_chin' ||
         key == 'v_shape' ||
         key == 'jaw_angle' ||
-        key == 'hairline') {
+        key == 'hairline' ||
+        key == 'head') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

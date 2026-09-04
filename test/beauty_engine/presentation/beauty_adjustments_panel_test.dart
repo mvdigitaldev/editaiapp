@@ -45,6 +45,7 @@ void main() {
       },
     );
 
+    expect(find.text('Proporção'), findsWidgets);
     expect(find.text('Linha do cabelo'), findsWidgets);
     expect(find.text('Mandíbula'), findsWidgets);
     expect(find.text('Ângulo da mandíbula'), findsWidgets);
@@ -52,6 +53,7 @@ void main() {
     expect(find.text('V do queixo'), findsWidgets);
     expect(find.text('Formato V'), findsWidgets);
     expect(FaceFilterPipeline.faceWarpParameterKeys.last, 'hairline');
+    expect(FaceFilterPipeline.proportionParameterKeys, ['head']);
 
     await tester.drag(find.byType(Slider), const Offset(80, 0));
     await tester.pumpAndSettle();
@@ -72,7 +74,8 @@ void main() {
       expect(find.byKey(Key('beauty-tool-icon-$key')), findsOneWidget);
     }
     final iconTops = FaceFilterPipeline.faceWarpParameterKeys
-        .map((key) => tester.getTopLeft(find.byKey(Key('beauty-tool-icon-$key'))).dy)
+        .map((key) =>
+            tester.getTopLeft(find.byKey(Key('beauty-tool-icon-$key'))).dy)
         .toSet();
     expect(iconTops.length, 1, reason: 'ícones de Rosto na mesma linha');
     expect(find.byType(ChoiceChip), findsNothing);
@@ -80,8 +83,26 @@ void main() {
     await tester.tap(find.text('V do queixo'));
     await tester.pumpAndSettle();
     expect(
-      tester.widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider)).label,
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
       'V do queixo',
+    );
+
+    await tester.tap(find.text('Proporção'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('beauty-tool-icon-head')), findsOneWidget);
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Cabeça',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
     );
 
     await tester.tap(find.text('Pele'));
@@ -128,12 +149,16 @@ void main() {
       ),
     );
 
-    expect(find.byType(BeautyToolIcon), findsNWidgets(BeautyToolIcons.keys.length));
+    expect(find.byType(BeautyToolIcon),
+        findsNWidgets(BeautyToolIcons.keys.length));
     expect(tester.takeException(), isNull);
   });
 
   test('hasGlyph cobre Rosto e Pele e ignora Cor', () {
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
+      expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
+    }
+    for (final key in FaceFilterPipeline.proportionParameterKeys) {
       expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
     }
     for (final key in SkinFilterPipeline.skinParameterKeys) {
@@ -150,6 +175,7 @@ void main() {
     expect(params.containsKey('jaw_angle_left'), isTrue);
     expect(params.containsKey('jaw_angle_right'), isTrue);
     expect(params.containsKey('jaw_angle_side'), isTrue);
+    expect(params.containsKey('head'), isTrue);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);

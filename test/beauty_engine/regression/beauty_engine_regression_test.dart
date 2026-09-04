@@ -35,7 +35,9 @@ void main() {
   group('Regression — face filters', () {
     const pipeline = FaceFilterPipeline();
 
-    test('hairline, jaw, jaw_angle, chin, v_chin, v_shape and cheekbone are the facial warp keys and activate the pipeline', () {
+    test(
+        'hairline, jaw, jaw_angle, chin, v_chin, v_shape and cheekbone are the facial warp keys and activate the pipeline',
+        () {
       expect(
         FaceFilterPipeline.faceWarpParameterKeys,
         [
@@ -48,6 +50,9 @@ void main() {
           'hairline',
         ],
       );
+      expect(pipeline.hasActiveWarp({'head': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'head': -0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'head': 0}), isFalse);
       expect(pipeline.hasActiveWarp({'hairline': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'hairline': -0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'hairline': 0}), isFalse);
@@ -192,18 +197,21 @@ void main() {
     });
 
     test('4MP photo uses 1080p max edge', () {
-      final source = ImageSource(bytes: Uint8List(0), width: 2560, height: 1600);
+      final source =
+          ImageSource(bytes: Uint8List(0), width: 2560, height: 1600);
       expect(AdaptivePreviewPolicy.maxEdgeForSource(source), 1080);
     });
 
     test('12MP triggers tiled export', () {
-      final source = ImageSource(bytes: Uint8List(0), width: 4000, height: 3000);
+      final source =
+          ImageSource(bytes: Uint8List(0), width: 4000, height: 3000);
       expect(AdaptivePreviewPolicy.shouldUseTiledExport(source), isTrue);
       expect(TiledExportEngine().shouldUseTiledExport(source), isTrue);
     });
 
     test('1080p does not trigger tiled export', () {
-      final source = ImageSource(bytes: Uint8List(0), width: 1920, height: 1080);
+      final source =
+          ImageSource(bytes: Uint8List(0), width: 1920, height: 1080);
       expect(AdaptivePreviewPolicy.shouldUseTiledExport(source), isFalse);
     });
   });

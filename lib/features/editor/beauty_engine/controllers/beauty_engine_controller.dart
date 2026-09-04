@@ -55,6 +55,7 @@ import '../warp/warp_engine.dart';
 import '../warp/v2/backward_bilinear_warp.dart' as v2;
 import '../warp/v2/chin/chin_field.dart';
 import '../warp/v2/hairline/hairline_field.dart';
+import '../warp/v2/head/head_field.dart';
 import '../warp/v2/jaw_field.dart';
 import '../warp/v2/jaw_angle/jaw_angle_field.dart';
 import '../warp/v2/cheekbones/cheekbones_field.dart';
@@ -104,6 +105,7 @@ class BeautyEngineController {
   final RenderStageCache _renderStageCache = RenderStageCache();
   final MaskFactory maskFactory = MaskFactory();
   final JawFieldRuntime _jawRuntime = JawFieldRuntime();
+  final HeadFieldRuntime _headRuntime = HeadFieldRuntime();
   final HairlineFieldRuntime _hairlineRuntime = HairlineFieldRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
   final JawAngleFieldRuntime _jawAngleRuntime = JawAngleFieldRuntime();
@@ -166,8 +168,7 @@ class BeautyEngineController {
     LandmarkThrottle<PoseResult?>? poseLandmarkThrottle,
     LandmarkThrottle<PersonMask?>? personMaskThrottle,
     TiledExportEngine? tiledExportEngine,
-  })  : adaptivePresetEngine =
-            adaptivePresetEngine ?? AdaptivePresetEngine(),
+  })  : adaptivePresetEngine = adaptivePresetEngine ?? AdaptivePresetEngine(),
         profiler = profiler ?? BeautyProfiler(),
         faceLandmarkThrottle =
             faceLandmarkThrottle ?? LandmarkThrottle<FaceMeshResult?>(),
@@ -190,10 +191,10 @@ class BeautyEngineController {
     final personMask = _shouldDetectPersonMask(pipeline.effectiveParameters)
         ? await detectPersonMask(source)
         : null;
-    final faceParts = face != null &&
-            _shouldDetectFaceParts(pipeline.effectiveParameters)
-        ? await detectFaceParts(source)
-        : null;
+    final faceParts =
+        face != null && _shouldDetectFaceParts(pipeline.effectiveParameters)
+            ? await detectFaceParts(source)
+            : null;
     final faceParsing = face != null &&
             skinFilterPipeline.hasActiveSkin(pipeline.effectiveParameters)
         ? await detectFaceParsing(
@@ -354,8 +355,7 @@ class BeautyEngineController {
             ? await detectFaceParts(source)
             : null);
     final resolvedFaceParsing = faceParsing ??
-        (resolvedFace != null &&
-                skinFilterPipeline.needsSemanticParsing(params)
+        (resolvedFace != null && skinFilterPipeline.needsSemanticParsing(params)
             ? await detectFaceParsing(
                 source,
                 face: resolvedFace,
@@ -409,7 +409,6 @@ class BeautyEngineController {
   bool _shouldDetectFaceParts(Map<String, double> parameters) {
     return skinFilterPipeline.hasActiveSkin(parameters);
   }
-
 
   /// Segmentação semântica de partes para a máscara de pele. Falha volta
   /// `null` e a pele usa o fallback geométrico dos landmarks.
@@ -516,9 +515,8 @@ class BeautyEngineController {
       imageSize: imageSize,
       parameters: parameters,
       interactive: interactive,
-      capabilities: capabilities ??
-          assets?.capabilities ??
-          bodyVisionCapabilities,
+      capabilities:
+          capabilities ?? assets?.capabilities ?? bodyVisionCapabilities,
     );
     if (assets != null) {
       plan = occlusionEngine.applyToPlan(plan: plan, assets: assets);
@@ -651,7 +649,9 @@ class BeautyEngineController {
         antiFolding: true,
         edgeRefinement: hasUsableMatte,
       );
-    } else if (config.bodyMeshWarp && hasUsableMatte && !config.edgeRefinement) {
+    } else if (config.bodyMeshWarp &&
+        hasUsableMatte &&
+        !config.edgeRefinement) {
       config = config.copyWith(edgeRefinement: true);
     }
 
@@ -815,7 +815,6 @@ class BeautyEngineController {
     return result?.field;
   }
 
-
   Future<Uint8List> renderPostWarpRgba({
     required Uint8List rgba,
     required int width,
@@ -908,6 +907,41 @@ class BeautyEngineController {
   /// Aplica caps de gating aos parâmetros do slider.
   Map<String, double> applyToolGating(Map<String, double> raw) {
     return lastToolGatePlan?.applyToParameters(raw) ?? raw;
+  }
+
+  /// HeadField + remap bilinear. Independente dos sete Fields vivos.
+  /// t=0 não chama o renderer.
+  Uint8List applyHeadWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['head'] ?? 0).clamp(-1.0, 1.0);
+    if (face == null ||
+        t.abs() <= 1e-6 ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = HeadField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      computeMetrics: false,
+      runtime: _headRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_head';
+    lastFaceWarpField = null;
+    return warped.rgba;
   }
 
   /// HairlineField + remap bilinear. Independente dos seis Fields vivos.
@@ -1024,7 +1058,9 @@ class BeautyEngineController {
     required Map<String, double> parameters,
   }) {
     final t = (parameters['chin'] ?? 0).clamp(-1.0, 1.0);
-    if (face == null || t.abs() <= 1e-6 || sourceRgba.length != width * height * 4) {
+    if (face == null ||
+        t.abs() <= 1e-6 ||
+        sourceRgba.length != width * height * 4) {
       return sourceRgba;
     }
     final built = ChinField.build(
@@ -1134,10 +1170,8 @@ class BeautyEngineController {
     required Map<String, double> parameters,
   }) {
     final t = (parameters['cheekbone'] ?? 0).clamp(-1.0, 1.0);
-    final tPhotoLeft =
-        (parameters['cheekbone_left'] ?? t).clamp(-1.0, 1.0);
-    final tPhotoRight =
-        (parameters['cheekbone_right'] ?? t).clamp(-1.0, 1.0);
+    final tPhotoLeft = (parameters['cheekbone_left'] ?? t).clamp(-1.0, 1.0);
+    final tPhotoRight = (parameters['cheekbone_right'] ?? t).clamp(-1.0, 1.0);
     if (face == null ||
         (tPhotoLeft.abs() <= 1e-6 && tPhotoRight.abs() <= 1e-6) ||
         sourceRgba.length != width * height * 4) {
@@ -1169,6 +1203,7 @@ class BeautyEngineController {
   /// do cache de advecção.
   static const List<({String backend, List<String> parameters})>
       faceWarpChainStages = [
+    (backend: 'v2_head', parameters: ['head']),
     (backend: 'v2_hairline', parameters: ['hairline']),
     (backend: 'v2_jaw', parameters: ['jaw']),
     (
@@ -1282,6 +1317,14 @@ class BeautyEngineController {
     }
 
     switch (faceWarpChainStages[stage].backend) {
+      case 'v2_head':
+        return HeadField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          computeMetrics: false,
+          runtime: _headRuntime,
+        ).field;
       case 'v2_hairline':
         return HairlineField.build(
           face: face,
@@ -1422,8 +1465,7 @@ class BeautyEngineController {
       params: params,
       lutAssetPath: pipeline.preset?.lutAssetPath,
       face: face,
-      hasManualBrush:
-          manualBrushField != null && !manualBrushField!.isIdentity,
+      hasManualBrush: manualBrushField != null && !manualBrushField!.isIdentity,
     );
 
     if (interactivePreview &&

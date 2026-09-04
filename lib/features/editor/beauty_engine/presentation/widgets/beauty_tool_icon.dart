@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 /// Desenhados em 24×24, tingíveis. Sem assets. Sem SVG.
 abstract final class BeautyToolIcons {
   static const keys = <String>{
+    'head',
     'hairline',
     'jaw',
     'jaw_angle',
@@ -80,6 +81,8 @@ class _BeautyToolIconPainter extends CustomPainter {
 
   void _paintGlyph(Canvas canvas, Paint paint) {
     switch (toolKey) {
+      case 'head':
+        _paintHead(canvas, paint);
       case 'hairline':
         _paintHairline(canvas, paint);
       case 'jaw':
@@ -186,8 +189,10 @@ class _BeautyToolIconPainter extends CustomPainter {
     canvas.drawLine(Offset(c.dx, c.dy - r), Offset(c.dx, c.dy + r), paint);
     canvas.drawLine(Offset(c.dx - r, c.dy), Offset(c.dx + r, c.dy), paint);
     final d = r * 0.58;
-    canvas.drawLine(Offset(c.dx - d, c.dy - d), Offset(c.dx + d, c.dy + d), paint);
-    canvas.drawLine(Offset(c.dx + d, c.dy - d), Offset(c.dx - d, c.dy + d), paint);
+    canvas.drawLine(
+        Offset(c.dx - d, c.dy - d), Offset(c.dx + d, c.dy + d), paint);
+    canvas.drawLine(
+        Offset(c.dx + d, c.dy - d), Offset(c.dx - d, c.dy + d), paint);
   }
 
   Path _eye({required Offset center, double w = 5.4, double h = 2.45}) {
@@ -214,6 +219,14 @@ class _BeautyToolIconPainter extends CustomPainter {
   }
 
   // --- Rosto ---------------------------------------------------------------
+
+  void _paintHead(Canvas canvas, Paint paint) {
+    _paintFace(canvas, paint);
+    _arrow(canvas, paint, const Offset(12, 6.2), const Offset(12, 1.5));
+    _arrow(canvas, paint, const Offset(12, 17.8), const Offset(12, 22.6));
+    _arrow(canvas, paint, const Offset(6.4, 11.2), const Offset(1.8, 11.2));
+    _arrow(canvas, paint, const Offset(17.6, 11.2), const Offset(22.2, 11.2));
+  }
 
   void _paintHairline(Canvas canvas, Paint paint) {
     _paintFace(canvas, paint);
@@ -358,7 +371,8 @@ class _BeautyToolIconPainter extends CustomPainter {
       paint,
     );
     canvas.drawOval(
-      Rect.fromCenter(center: const Offset(16.2, 13.2), width: 3.6, height: 2.2),
+      Rect.fromCenter(
+          center: const Offset(16.2, 13.2), width: 3.6, height: 2.2),
       paint,
     );
   }

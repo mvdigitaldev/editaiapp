@@ -20,7 +20,8 @@ class FaceFiltersDemoPage extends ConsumerStatefulWidget {
   const FaceFiltersDemoPage({super.key});
 
   @override
-  ConsumerState<FaceFiltersDemoPage> createState() => _FaceFiltersDemoPageState();
+  ConsumerState<FaceFiltersDemoPage> createState() =>
+      _FaceFiltersDemoPageState();
 }
 
 class _FaceFiltersDemoPageState extends ConsumerState<FaceFiltersDemoPage> {
@@ -30,6 +31,7 @@ class _FaceFiltersDemoPageState extends ConsumerState<FaceFiltersDemoPage> {
   bool _linkEyes = true;
 
   final _params = <String, double>{
+    for (final key in FaceFilterPipeline.proportionParameterKeys) key: 0,
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) key: 0,
     for (final key in BodyFilterPipeline.bodyWarpParameterKeys) key: 0,
     for (final key in SkinFilterPipeline.skinParameterKeys) key: 0,
@@ -37,6 +39,7 @@ class _FaceFiltersDemoPageState extends ConsumerState<FaceFiltersDemoPage> {
   };
 
   Iterable<String> get _allKeys => [
+        ...FaceFilterPipeline.proportionParameterKeys,
         ...FaceFilterPipeline.faceWarpParameterKeys,
         ...BodyFilterPipeline.bodyWarpParameterKeys,
         ...SkinFilterPipeline.skinParameterKeys,
@@ -148,7 +151,8 @@ class _FaceFiltersDemoPageState extends ConsumerState<FaceFiltersDemoPage> {
             ),
           ),
           if (_processing)
-            const LinearProgressIndicator(minHeight: 2, color: AppColors.primary),
+            const LinearProgressIndicator(
+                minHeight: 2, color: AppColors.primary),
           Expanded(
             flex: 0,
             child: SizedBox(
