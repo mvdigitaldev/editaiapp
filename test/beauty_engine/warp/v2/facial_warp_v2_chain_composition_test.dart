@@ -677,6 +677,7 @@ void main() {
     });
 
     for (final effect in [
+      ('hairline', -1.0),
       ('jaw', 1.0),
       ('jaw_angle', -1.0),
       ('chin', 1.0),
@@ -701,6 +702,7 @@ void main() {
         );
 
         final isolated = switch (effect.$1) {
+          'hairline' => controller.applyHairlineWarp,
           'jaw' => controller.applyJawWarp,
           'jaw_angle' => controller.applyJawAngleWarp,
           'chin' => controller.applyChinWarp,

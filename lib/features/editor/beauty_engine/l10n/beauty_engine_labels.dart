@@ -17,6 +17,7 @@ abstract final class BeautyEngineLabels {
     'eye_height': 'Altura dos olhos',
     'eye_rotation': 'Rotação dos olhos',
     'double_eyelid': 'Pálpebra dupla',
+    'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',
     'chin': 'Tamanho do queixo',

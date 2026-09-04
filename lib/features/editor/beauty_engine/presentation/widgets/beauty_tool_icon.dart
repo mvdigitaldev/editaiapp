@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 /// Desenhados em 24×24, tingíveis. Sem assets. Sem SVG.
 abstract final class BeautyToolIcons {
   static const keys = <String>{
+    'hairline',
     'jaw',
     'jaw_angle',
     'chin',
@@ -79,6 +80,8 @@ class _BeautyToolIconPainter extends CustomPainter {
 
   void _paintGlyph(Canvas canvas, Paint paint) {
     switch (toolKey) {
+      case 'hairline':
+        _paintHairline(canvas, paint);
       case 'jaw':
         _paintJaw(canvas, paint);
       case 'jaw_angle':
@@ -211,6 +214,20 @@ class _BeautyToolIconPainter extends CustomPainter {
   }
 
   // --- Rosto ---------------------------------------------------------------
+
+  void _paintHairline(Canvas canvas, Paint paint) {
+    _paintFace(canvas, paint);
+    final cap = Path()
+      ..moveTo(6.2, 6.4)
+      ..quadraticBezierTo(12, 2.0, 17.8, 6.4);
+    canvas.drawPath(cap, paint);
+    _doubleArrow(
+      canvas,
+      paint,
+      const Offset(12, 4.6),
+      const Offset(12, 1.4),
+    );
+  }
 
   void _paintJaw(Canvas canvas, Paint paint) {
     _paintFace(canvas, paint);

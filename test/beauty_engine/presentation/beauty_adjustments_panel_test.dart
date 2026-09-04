@@ -45,11 +45,13 @@ void main() {
       },
     );
 
+    expect(find.text('Linha do cabelo'), findsWidgets);
     expect(find.text('Mandíbula'), findsWidgets);
     expect(find.text('Ângulo da mandíbula'), findsWidgets);
     expect(find.text('Tamanho do queixo'), findsWidgets);
     expect(find.text('V do queixo'), findsWidgets);
     expect(find.text('Formato V'), findsWidgets);
+    expect(FaceFilterPipeline.faceWarpParameterKeys.last, 'hairline');
 
     await tester.drag(find.byType(Slider), const Offset(80, 0));
     await tester.pumpAndSettle();
@@ -148,6 +150,7 @@ void main() {
     expect(params.containsKey('jaw_angle_left'), isTrue);
     expect(params.containsKey('jaw_angle_right'), isTrue);
     expect(params.containsKey('jaw_angle_side'), isTrue);
+    expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);
     expect(params.containsKey('cheekbone_left'), isTrue);

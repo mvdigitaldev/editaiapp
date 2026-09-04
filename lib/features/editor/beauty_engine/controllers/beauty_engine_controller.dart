@@ -54,6 +54,7 @@ import '../warp/anatomy/face_warp_debug_stats.dart';
 import '../warp/warp_engine.dart';
 import '../warp/v2/backward_bilinear_warp.dart' as v2;
 import '../warp/v2/chin/chin_field.dart';
+import '../warp/v2/hairline/hairline_field.dart';
 import '../warp/v2/jaw_field.dart';
 import '../warp/v2/jaw_angle/jaw_angle_field.dart';
 import '../warp/v2/cheekbones/cheekbones_field.dart';
@@ -103,6 +104,7 @@ class BeautyEngineController {
   final RenderStageCache _renderStageCache = RenderStageCache();
   final MaskFactory maskFactory = MaskFactory();
   final JawFieldRuntime _jawRuntime = JawFieldRuntime();
+  final HairlineFieldRuntime _hairlineRuntime = HairlineFieldRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
   final JawAngleFieldRuntime _jawAngleRuntime = JawAngleFieldRuntime();
   final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
@@ -908,6 +910,41 @@ class BeautyEngineController {
     return lastToolGatePlan?.applyToParameters(raw) ?? raw;
   }
 
+  /// HairlineField + remap bilinear. Independente dos seis Fields vivos.
+  /// t=0 não chama o renderer.
+  Uint8List applyHairlineWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['hairline'] ?? 0).clamp(-1.0, 1.0);
+    if (face == null ||
+        t.abs() <= 1e-6 ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = HairlineField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      computeMetrics: false,
+      runtime: _hairlineRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_hairline';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
   /// Única pipeline facial: JawField + remap bilinear. Sem ROI/Mesh/MLS.
   Uint8List applyJawWarp({
     required Uint8List sourceRgba,
@@ -1132,6 +1169,7 @@ class BeautyEngineController {
   /// do cache de advecção.
   static const List<({String backend, List<String> parameters})>
       faceWarpChainStages = [
+    (backend: 'v2_hairline', parameters: ['hairline']),
     (backend: 'v2_jaw', parameters: ['jaw']),
     (
       backend: 'v2_jaw_angle',
@@ -1244,6 +1282,14 @@ class BeautyEngineController {
     }
 
     switch (faceWarpChainStages[stage].backend) {
+      case 'v2_hairline':
+        return HairlineField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          computeMetrics: false,
+          runtime: _hairlineRuntime,
+        ).field;
       case 'v2_jaw':
         final t = general.clamp(0.0, 1.0);
         if (t <= 0) {

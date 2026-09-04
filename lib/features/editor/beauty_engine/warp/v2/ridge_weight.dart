@@ -193,10 +193,12 @@ abstract final class RidgeWeight {
   RidgeWeight._();
 
   /// Distâncias e parâmetros da projecção da chamada em curso. Crescem com a
-  /// crista mais longa vista e ficam; são lidos e escritos dentro de [at], sem
-  /// atravessar chamadas.
+  /// crista mais longa vista e ficam; são lidos e escritos dentro de [at] e
+  /// [project], sem atravessar chamadas.
   static Float64List _projected = Float64List(0);
   static Float64List _alongSegment = Float64List(0);
+  static Float64List _projX = Float64List(0);
+  static Float64List _projY = Float64List(0);
 
   /// Densifica uma crista inserindo o ponto médio entre âncoras consecutivas.
   static List<RidgeNode> densify(List<RidgeNode> anchors) {
@@ -288,6 +290,92 @@ abstract final class RidgeWeight {
     final g = (numerator / denominator) *
         math.exp(-minD2 / (2 * sigmaAcross * sigmaAcross));
     return g > 1 ? 1 : g;
+  }
+
+  /// Projecção contínua na polilinha: ponto mais perto (média na medial axis)
+  /// e peso ao longo da crista. **Sem** decaimento transversal — quem precisa
+  /// de sopro chama [at].
+  static ({double qx, double qy, double alongWeight, double dist2}) project({
+    required Ridge ridge,
+    required double x,
+    required double y,
+    required double blendPx,
+  }) {
+    if (ridge.isEmpty) {
+      return (qx: x, qy: y, alongWeight: 0, dist2: 0);
+    }
+    final lone = ridge.single;
+    if (lone != null) {
+      final dx = x - lone.p.dx;
+      final dy = y - lone.p.dy;
+      return (
+        qx: lone.p.dx,
+        qy: lone.p.dy,
+        alongWeight: lone.weight,
+        dist2: dx * dx + dy * dy,
+      );
+    }
+
+    final segments = ridge.segments;
+    if (_projected.length < segments) {
+      _projected = Float64List(segments);
+      _alongSegment = Float64List(segments);
+    }
+    if (_projX.length < segments) {
+      _projX = Float64List(segments);
+      _projY = Float64List(segments);
+    }
+    var minD2 = double.infinity;
+    for (var i = 0; i < segments; i++) {
+      final abx = ridge._abx[i];
+      final aby = ridge._aby[i];
+      final len2 = ridge._len2[i];
+      final ox = x - ridge._ax[i];
+      final oy = y - ridge._ay[i];
+      var t = 0.0;
+      if (len2 > 1e-12) {
+        t = ((ox * abx + oy * aby) / len2).clamp(0.0, 1.0);
+      }
+      final qx = ridge._ax[i] + abx * t;
+      final qy = ridge._ay[i] + aby * t;
+      final px = x - qx;
+      final py = y - qy;
+      final d2 = px * px + py * py;
+      _projected[i] = d2;
+      _alongSegment[i] = t;
+      _projX[i] = qx;
+      _projY[i] = qy;
+      if (d2 < minD2) {
+        minD2 = d2;
+      }
+    }
+
+    final tau = math.max(blendPx, 1e-3);
+    final minD = math.sqrt(minD2);
+    var numX = 0.0;
+    var numY = 0.0;
+    var numW = 0.0;
+    var denominator = 0.0;
+    for (var i = 0; i < segments; i++) {
+      final t = _alongSegment[i];
+      final excess = (math.sqrt(_projected[i]) - minD) / tau;
+      final k = math.exp(-0.5 * excess * excess);
+      final s = t * t * (3 - 2 * t);
+      final wa = ridge._wa[i];
+      numX += _projX[i] * k;
+      numY += _projY[i] * k;
+      numW += (wa + (ridge._wb[i] - wa) * s) * k;
+      denominator += k;
+    }
+    if (denominator <= 0) {
+      return (qx: x, qy: y, alongWeight: 0, dist2: minD2);
+    }
+    return (
+      qx: numX / denominator,
+      qy: numY / denominator,
+      alongWeight: numW / denominator,
+      dist2: minD2,
+    );
   }
 
   /// A mais forte de duas cristas, sem avaliar a que não pode ganhar.

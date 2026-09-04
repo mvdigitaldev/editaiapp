@@ -651,6 +651,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   bool _paramsNeedFaceOrSkin(Map<String, double> params) {
     const faceAndSkinKeys = {
+      'hairline',
       'jaw',
       'jaw_angle',
       'chin',
@@ -671,7 +672,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'iris_enhance',
     };
     for (final key in faceAndSkinKeys) {
-      if (key == 'chin') {
+      if (key == 'chin' || key == 'hairline') {
         if ((params[key] ?? 0).abs() > 0) {
           return true;
         }

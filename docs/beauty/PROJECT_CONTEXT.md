@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-09-02 (distância euclidiana partilhada nos seis Fields; geometria e calibrações intactas)
+Última actualização: 2026-09-03 (Hairline: linha parada, cabelo cresce a partir dela)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -43,6 +43,7 @@ A IA actua como **arquitecto** do Facial Warp V2.
 | **Face Slim** | Arquivado. Lab A/B no disco. Sem C/D/E. Sem slider. Não promover. Não renomear para Cheekbones. |
 | **Roadmap de produto** | Aprovado. Adenda: V Shape em inspecção. Face Rig congelado. |
 | **Cheekbones** | Em desenvolvimento. Hipótese H vigente (crista oval). Inspecção no editor. Sem C. Relatório [`v2-cheekbones-h-report.md`](./v2-cheekbones-h-report.md). **Intacto** no Jaw Angle. |
+| **Hairline** | Aprovado. Vivo (`hairline`, «Linha do cabelo»). C assinada 2026-09-03. A–E fechadas. B Δy-only rejeitada. Spec [`v2-hairline.md`](./v2-hairline.md). **Não** é `forehead`. **Não** é Temple. |
 
 Pipeline viva no produto:
 
@@ -50,11 +51,11 @@ Pipeline viva no produto:
 RGBA → applyFaceWarpChain → Body → Skin → Color
 ```
 
-`applyFaceWarpChain` percorre, nesta ordem, `jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As seis `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
+`applyFaceWarpChain` percorre, nesta ordem, `hairline → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
 
 Entre etapas os landmarks são **advectados** para a geometria já deformada (`warp/v2/landmark_advection.dart`). Sem isso o efeito a jusante recebia o RGBA deformado mas media a geometria da origem, e a crista caía 6–10 px fora da silhueta. Ver [`v2-composicao-cadeia.md`](./v2-composicao-cadeia.md).
 
-Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin está na mesma cadeia, **aprovado**. V Shape e Jaw Angle estão na cadeia como inspecção.
+Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin e Hairline estão na mesma cadeia, **aprovados**. V Shape e Jaw Angle estão na cadeia como inspecção.
 
 ---
 
@@ -98,6 +99,7 @@ BackwardBilinearWarp
 - Slider composto
 - Alterar Jaw
 - Alterar V Chin
+- Alterar Hairline
 - Alterar Chin **fora** da calibração bipolar de Chin Length
 - Alterar Cheekbones H
 - Alterar o renderer / `DisplacementField` / `WarpRequest` / `WarpResult`
@@ -216,6 +218,19 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - **Próximo passo (Cheekbones):** Sprint C quando Leonardo assinar as fotos lab. H **não** se altera. V Chin encerrado. V Shape e Jaw Angle não pisam H.
 - Chin Length e V Chin são sliders distintos. Não “ajustar” um para compensar o outro.
 
+### Hairline — encerrado
+
+- Key: `hairline` («Linha do cabelo»). **Não** é `forehead`. **Não** é Temple nem Lift.
+- Aprovado no editor (2026-09-03). Vivo em preview/export. Não reabrir salvo calibração pedida por escrito.
+- Campo a partir da **linha** L (`21→103→67→109→10→338→297→332→251`): `D = −sign(t) · |t| · 0.10 · w · (p − q)`, `q` = projecção em L. Em L, `D = 0`. Só o lado do cabelo (para lá de L, visto do 9). O 9 **não** é origem.
+- Peso ao longo de L: `0.15→0.55→0.75→0.92→1.00` e espelho. Sem decaimento transversal (isso matava o cap). Sem crista no cume. 21/251 são cauda, **não** Temple.
+- Slider bipolar, sem L/R. **Esquerda = infla** (`t < 0`, cresce a partir da linha); direita = desincha (volta até à linha).
+- Escala `0.10`. Rampa `0.16`. Hull pad `0.10`. Banda = arco L + arco levantado (`crownExtend` `0.70`).
+- Runtime cacheia `unitDx`/`unitDy` (`w · (p − q)`); o slider só reescala.
+- Módulo: `warp/v2/hairline/`. Não importa Jaw/Chin/V Chin/V Shape/Cheekbones/Jaw Angle.
+- Cadeia: **primeiro** (`hairline → jaw → …`). Painel Rosto: **último** ícone. Preview e export partilham `applyFaceWarpChain`.
+- A primeira (Δy-only) **rejeitada**. C assinada. Reaberto 2026-09-03 **só** para esta equação (Leonardo: a linha tracejada não mexe; o cabelo cresce ou encolhe a partir dela, no arco todo, em todas as fotos). Spec: [`v2-hairline.md`](./v2-hairline.md).
+
 ---
 
 ## Roadmap de produto (aprovado)
@@ -248,17 +263,34 @@ Aprovação de C é escrita. Sem ela, D não existe.
 
 **Adenda 2026-08-26 (V Chin aberto).** Leonardo abriu o menu V Chin (`v_chin`, «V do queixo»): forma da ponta, Δx, L/R da foto. Superado pelo fecho no mesmo dia.
 
+**Adenda 2026-09-03 (Hairline a partir da linha).** Leonardo: a linha tracejada (arco pele/cabelo, têmpora a têmpora) **não mexe**; o cabelo cresce ou diminui a partir dela, no arco todo, em todas as fotos. O Field radial `D ∝ w · (p − 9)` com crista no cume estava errado: a linha mexia e só o topo do cap tinha energia. Equação vigente: `D ∝ w · (p − q)`, `q ∈ L`, testa e linha a zero, sem decaimento transversal. Sem Temple.
+
+**Adenda 2026-09-03 (Hairline flancos do cap).** Leonardo, ainda só o topo a subir: «precisa subir também um pouco os lados…». Superada no mesmo dia pela equação a partir da linha.
+
+**Adenda 2026-09-03 (Hairline linha+têmporas).** Leonardo, com o cap já a subir: «precisa fazer isso… a linha em si começa no final da testa, e puxa levemente até as têmporas, mas não tanto, apenas para não dar os cortes secos». Crista passa a testa→cap numa só polilinha; origem do leque no 9; cauda 0,08 no 21/251. Sem disco. Sem Temple. Superada no mesmo dia pelos flancos do cap.
+
+**Adenda 2026-09-03 (Hairline C).** Leonardo: «implemente a sprint c». C assinada do Field radial + crista no cap. A–E fechadas. Vivo (`hairline`). Relatório [`v2-hairline-c-report.md`](./v2-hairline-c-report.md). Não alterar salvo calibração pedida por escrito.
+
+**Adenda 2026-09-03 (Hairline D).** Leonardo: «implemente a proxima sprint quero ver como ficou no aparelho». Key no painel, cadeia, ícone. Superada no mesmo dia pela C.
+
+**Adenda 2026-09-03 (Hairline radial).** Leonardo, depois da B Δy-only: «não vi diferença nenhuma… o movimento é da parte de dentro da cabeça/testa pra fora, e quando diminuir de fora pra dentro». A primeira A/B (só Δy no 10) fica rejeitada. A reabre com escala radial `D ∝ w · (p − 151)`, crista levantada ao cap, factor `0.10`. O unitário `A · w · n` invertia (`minDetJ` −5); `0.16` no cap também (`−0,24`). Sem C. Sem cadeia.
+
+**Adenda 2026-09-03 (Hairline B).** Leonardo autorizou a Sprint B do Field Δy-only. Lab `v2Raw` 15 runs. **Superada** no mesmo dia pela rejeição visual: o contorno do cabelo não mexia. Relatório antigo [`v2-hairline-b-report.md`](./v2-hairline-b-report.md) descreve o Field morto.
+
+**Adenda 2026-09-03 (Hairline aberto).** Leonardo pediu o Hairline: infla / desincha o topo, sem picos, só em cima. Abre-se Sprint A (`hairline`), sem ligar cadeia nem slider. Temple não se abre. Os seis Fields vivos intactos. Spec [`v2-hairline.md`](./v2-hairline.md).
+
 **Adenda 2026-08-26 (Chin Length bipolar).** Leonardo reabriu o Chin **só** para slider bipolar (alongar + encurtar, rótulo «Tamanho do queixo»). Calibração vigente: amplitude `0.07 × faceWidth`, crista no oval até 172/397 (cauda 0.08, só Δy; gônios fora da crista). Preview de rosto sem debounce (coalesce). Documento [`v2-chin-length-bipolar.md`](./v2-chin-length-bipolar.md). Cheekbones H intacto.
 
 Ordem seguinte **depois** de Cheekbones (C → D → E):
 
 1. Temple
-2. Hairline
+2. Hairline — **feito** (aprovado 2026-09-03)
 3. Width — baixa prioridade (o Jaw já cobre o essencial em Δx)
 4. Lift
 5. Double Chin — bloqueado (falta pescoço)
 
 V Chin: **feito** (aprovado 2026-08-26).  
+Hairline: **feito** (aprovado 2026-09-03).  
 V Shape: **em inspecção** (silhueta externa; não o arco maçã).  
 Jaw Angle: **em inspecção** (inclinação Δy; não o Jaw).
 
@@ -293,6 +325,13 @@ Face Rig (`v2-face-rig-migration-plan.md`): **congelado**. Não implementar.
 **Vigente para V Chin**
 
 - [`v2-v-chin.md`](./v2-v-chin.md) — **aprovado e encerrado** (Field e UI no disco)
+
+**Vigente para Hairline**
+
+- [`v2-hairline.md`](./v2-hairline.md) — **aprovado e encerrado** (Field e UI no disco)
+- [`v2-hairline-plan.md`](./v2-hairline-plan.md) — plano A–E (fechado)
+- [`v2-hairline-b-report.md`](./v2-hairline-b-report.md) — lab vigente (radial)
+- [`v2-hairline-c-report.md`](./v2-hairline-c-report.md) — C assinada 2026-09-03
 
 **Vigente para Chin Length bipolar**
 

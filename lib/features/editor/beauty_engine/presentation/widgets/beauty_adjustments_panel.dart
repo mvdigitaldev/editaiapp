@@ -422,7 +422,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'chin' ||
         key == 'v_chin' ||
         key == 'v_shape' ||
-        key == 'jaw_angle') {
+        key == 'jaw_angle' ||
+        key == 'hairline') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {
