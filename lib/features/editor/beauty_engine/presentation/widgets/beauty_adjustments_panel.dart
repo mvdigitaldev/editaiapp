@@ -134,6 +134,9 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       'eyebrow_width_left': 0,
       'eyebrow_width_right': 0,
       'eyebrow_width_side': 0,
+      'eyebrow_end_left': 0,
+      'eyebrow_end_right': 0,
+      'eyebrow_end_side': 0,
     };
     return params;
   }
@@ -204,6 +207,7 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     'jaw_angle',
     'eyebrow_height',
     'eyebrow_width',
+    'eyebrow_end',
   };
 
   bool _isChanged(String key) {
@@ -450,7 +454,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'hairline' ||
         key == 'head' ||
         key == 'eyebrow_height' ||
-        key == 'eyebrow_width') {
+        key == 'eyebrow_width' ||
+        key == 'eyebrow_end') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

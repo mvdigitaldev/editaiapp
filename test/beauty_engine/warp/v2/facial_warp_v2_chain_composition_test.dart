@@ -648,7 +648,7 @@ void main() {
   });
 
   group('applyFaceWarpChain', () {
-    test('eyebrow_width entra depois da altura e antes do jaw', () {
+    test('eyebrow_end entra depois da largura e antes do jaw', () {
       expect(
         BeautyEngineController.faceWarpChainStages
             .map((stage) => stage.backend)
@@ -658,6 +658,7 @@ void main() {
           'v2_hairline',
           'v2_eyebrow_height',
           'v2_eyebrow_width',
+          'v2_eyebrow_end',
           'v2_jaw',
           'v2_jaw_angle',
           'v2_chin',
@@ -702,6 +703,7 @@ void main() {
       ('hairline', -1.0),
       ('eyebrow_height', 1.0),
       ('eyebrow_width', 1.0),
+      ('eyebrow_end', 1.0),
       ('jaw', 1.0),
       ('jaw_angle', -1.0),
       ('chin', 1.0),
@@ -730,6 +732,7 @@ void main() {
           'hairline' => controller.applyHairlineWarp,
           'eyebrow_height' => controller.applyEyebrowHeightWarp,
           'eyebrow_width' => controller.applyEyebrowWidthWarp,
+          'eyebrow_end' => controller.applyEyebrowEndWarp,
           'jaw' => controller.applyJawWarp,
           'jaw_angle' => controller.applyJawAngleWarp,
           'chin' => controller.applyChinWarp,

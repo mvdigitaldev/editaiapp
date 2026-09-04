@@ -20,6 +20,7 @@ abstract final class BeautyEngineLabels {
     'head': 'Cabeça',
     'eyebrow_height': 'Altura',
     'eyebrow_width': 'Largura',
+    'eyebrow_end': 'Ponta',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',

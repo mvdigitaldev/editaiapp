@@ -57,7 +57,7 @@ void main() {
     expect(FaceFilterPipeline.proportionParameterKeys, ['head']);
     expect(
       FaceFilterPipeline.eyebrowParameterKeys,
-      ['eyebrow_height', 'eyebrow_width'],
+      ['eyebrow_height', 'eyebrow_width', 'eyebrow_end'],
     );
     expect(
       BeautyAdjustmentsPanel.categories.map((def) => def.category).toList(),
@@ -131,6 +131,10 @@ void main() {
       find.byKey(const Key('beauty-tool-icon-eyebrow_width')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const Key('beauty-tool-icon-eyebrow_end')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('beauty-tool-icon-eyebrows')), findsNothing);
     expect(
       tester
@@ -153,6 +157,21 @@ void main() {
           .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
           .label,
       'Largura',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+
+    await tester.tap(find.text('Ponta'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Ponta',
     );
     expect(
       tester
@@ -244,6 +263,10 @@ void main() {
     expect(params.containsKey('eyebrow_width_left'), isTrue);
     expect(params.containsKey('eyebrow_width_right'), isTrue);
     expect(params.containsKey('eyebrow_width_side'), isTrue);
+    expect(params.containsKey('eyebrow_end'), isTrue);
+    expect(params.containsKey('eyebrow_end_left'), isTrue);
+    expect(params.containsKey('eyebrow_end_right'), isTrue);
+    expect(params.containsKey('eyebrow_end_side'), isTrue);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);
