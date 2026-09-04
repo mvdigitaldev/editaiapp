@@ -18,6 +18,7 @@ abstract final class BeautyEngineLabels {
     'eye_rotation': 'Rotação dos olhos',
     'double_eyelid': 'Pálpebra dupla',
     'head': 'Cabeça',
+    'eyebrow_height': 'Altura',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',
@@ -79,6 +80,7 @@ abstract final class BeautyEngineLabels {
   static const sectionTune = 'Cor / Ajustes';
   static const sectionProportion = 'Proporção';
   static const sectionFace = 'Rosto';
+  static const sectionSobrancelha = 'Sobrancelha';
   static const sectionSkin = 'Pele';
   static const sectionBody = 'Corpo';
 

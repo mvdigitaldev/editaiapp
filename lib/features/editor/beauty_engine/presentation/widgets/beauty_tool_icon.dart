@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 abstract final class BeautyToolIcons {
   static const keys = <String>{
     'head',
+    'eyebrow_height',
     'hairline',
     'jaw',
     'jaw_angle',
@@ -83,6 +84,8 @@ class _BeautyToolIconPainter extends CustomPainter {
     switch (toolKey) {
       case 'head':
         _paintHead(canvas, paint);
+      case 'eyebrow_height':
+        _paintEyebrowHeight(canvas, paint);
       case 'hairline':
         _paintHairline(canvas, paint);
       case 'jaw':
@@ -226,6 +229,30 @@ class _BeautyToolIconPainter extends CustomPainter {
     _arrow(canvas, paint, const Offset(12, 17.8), const Offset(12, 22.6));
     _arrow(canvas, paint, const Offset(6.4, 11.2), const Offset(1.8, 11.2));
     _arrow(canvas, paint, const Offset(17.6, 11.2), const Offset(22.2, 11.2));
+  }
+
+  void _paintEyebrowHeight(Canvas canvas, Paint paint) {
+    _paintFace(canvas, paint);
+    final left = Path()
+      ..moveTo(5.2, 9.4)
+      ..cubicTo(7.0, 7.6, 9.2, 7.4, 10.6, 8.8);
+    final right = Path()
+      ..moveTo(18.8, 9.4)
+      ..cubicTo(17.0, 7.6, 14.8, 7.4, 13.4, 8.8);
+    canvas.drawPath(left, paint);
+    canvas.drawPath(right, paint);
+    _doubleArrow(
+      canvas,
+      paint,
+      const Offset(8.0, 6.6),
+      const Offset(8.0, 3.2),
+    );
+    _doubleArrow(
+      canvas,
+      paint,
+      const Offset(16.0, 6.6),
+      const Offset(16.0, 3.2),
+    );
   }
 
   void _paintHairline(Canvas canvas, Paint paint) {

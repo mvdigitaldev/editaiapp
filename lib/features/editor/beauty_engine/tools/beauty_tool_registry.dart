@@ -7,6 +7,7 @@ import 'tool_descriptor.dart';
 abstract final class BeautyToolRegistry {
   static final List<ToolDescriptor> all = [
     ..._proportion,
+    ..._eyebrow,
     ..._face,
     ..._skin,
     ..._color,
@@ -22,6 +23,15 @@ abstract final class BeautyToolRegistry {
   static const _proportion = [
     ToolDescriptor(
       key: 'head',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
+  ];
+
+  static const _eyebrow = [
+    ToolDescriptor(
+      key: 'eyebrow_height',
       category: ToolCategory.face,
       pipelineStage: ToolPipelineStage.warp,
       requiresFace: true,
@@ -96,6 +106,7 @@ abstract final class BeautyToolRegistry {
   /// Keys faciais conhecidas (warp) — espelha [FaceFilterPipeline].
   static List<String> get faceWarpKeys => [
         ...FaceFilterPipeline.proportionParameterKeys,
+        ...FaceFilterPipeline.eyebrowParameterKeys,
         ...FaceFilterPipeline.faceWarpParameterKeys,
       ];
 }

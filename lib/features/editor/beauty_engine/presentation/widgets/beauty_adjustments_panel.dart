@@ -16,6 +16,7 @@ import 'beauty_tool_icon.dart';
 enum BeautyAdjustmentCategory {
   proporcao,
   rosto,
+  sobrancelha,
   nariz,
   olhos,
   boca,
@@ -80,6 +81,12 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       parameterKeys: FaceFilterPipeline.faceWarpParameterKeys,
     ),
     BeautyAdjustmentCategoryDef(
+      category: BeautyAdjustmentCategory.sobrancelha,
+      icon: Icons.visibility_outlined,
+      label: BeautyEngineLabels.sectionSobrancelha,
+      parameterKeys: FaceFilterPipeline.eyebrowParameterKeys,
+    ),
+    BeautyAdjustmentCategoryDef(
       category: BeautyAdjustmentCategory.corpo,
       icon: Icons.accessibility_new_outlined,
       label: BeautyEngineLabels.sectionBody,
@@ -103,6 +110,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
   static Map<String, double> initialParams({bool linkEyes = true}) {
     final params = <String, double>{
       for (final key in FaceFilterPipeline.proportionParameterKeys) key: 0,
+      for (final key in FaceFilterPipeline.eyebrowParameterKeys) key: 0,
       for (final key in FaceFilterPipeline.faceWarpParameterKeys) key: 0,
       for (final key in BodyFilterPipeline.bodyWarpParameterKeys) key: 0,
       for (final key in SkinFilterPipeline.skinParameterKeys) key: 0,
@@ -120,6 +128,9 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       'jaw_angle_left': 0,
       'jaw_angle_right': 0,
       'jaw_angle_side': 0,
+      'eyebrow_height_left': 0,
+      'eyebrow_height_right': 0,
+      'eyebrow_height_side': 0,
     };
     return params;
   }
@@ -183,7 +194,13 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
   bool get _usesToolIcons =>
       _activeCategoryDef.parameterKeys.any(BeautyToolIcons.hasGlyph);
 
-  static const _sideWarpKeys = {'cheekbone', 'v_chin', 'v_shape', 'jaw_angle'};
+  static const _sideWarpKeys = {
+    'cheekbone',
+    'v_chin',
+    'v_shape',
+    'jaw_angle',
+    'eyebrow_height',
+  };
 
   bool _isChanged(String key) {
     bool nonzero(String k) => (widget.params[k] ?? 0).abs() > 1e-6;
@@ -201,10 +218,7 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final activeKey = _activeParamKey;
-    final isSideWarp = activeKey == 'cheekbone' ||
-        activeKey == 'v_chin' ||
-        activeKey == 'v_shape' ||
-        activeKey == 'jaw_angle';
+    final isSideWarp = _sideWarpKeys.contains(activeKey);
     final activeValue = isSideWarp
         ? _sideSliderValue(activeKey)
         : (widget.params[activeKey] ?? 0);
@@ -430,7 +444,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'v_shape' ||
         key == 'jaw_angle' ||
         key == 'hairline' ||
-        key == 'head') {
+        key == 'head' ||
+        key == 'eyebrow_height') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

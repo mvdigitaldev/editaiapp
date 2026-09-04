@@ -46,6 +46,7 @@ void main() {
     );
 
     expect(find.text('Proporção'), findsWidgets);
+    expect(find.text('Sobrancelha'), findsWidgets);
     expect(find.text('Linha do cabelo'), findsWidgets);
     expect(find.text('Mandíbula'), findsWidgets);
     expect(find.text('Ângulo da mandíbula'), findsWidgets);
@@ -54,6 +55,18 @@ void main() {
     expect(find.text('Formato V'), findsWidgets);
     expect(FaceFilterPipeline.faceWarpParameterKeys.last, 'hairline');
     expect(FaceFilterPipeline.proportionParameterKeys, ['head']);
+    expect(FaceFilterPipeline.eyebrowParameterKeys, ['eyebrow_height']);
+    expect(
+      BeautyAdjustmentsPanel.categories.map((def) => def.category).toList(),
+      [
+        BeautyAdjustmentCategory.proporcao,
+        BeautyAdjustmentCategory.rosto,
+        BeautyAdjustmentCategory.sobrancelha,
+        BeautyAdjustmentCategory.corpo,
+        BeautyAdjustmentCategory.pele,
+        BeautyAdjustmentCategory.cor,
+      ],
+    );
 
     await tester.drag(find.byType(Slider), const Offset(80, 0));
     await tester.pumpAndSettle();
@@ -104,6 +117,27 @@ void main() {
           .bipolar,
       isTrue,
     );
+
+    await tester.tap(find.text('Sobrancelha'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-eyebrow_height')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('beauty-tool-icon-eyebrows')), findsNothing);
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Altura',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+    expect(find.text('Geral'), findsWidgets);
 
     await tester.tap(find.text('Pele'));
     await tester.pumpAndSettle();
@@ -161,6 +195,10 @@ void main() {
     for (final key in FaceFilterPipeline.proportionParameterKeys) {
       expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
     }
+    for (final key in FaceFilterPipeline.eyebrowParameterKeys) {
+      expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
+    }
+    expect(BeautyToolIcons.hasGlyph('eyebrows'), isTrue);
     for (final key in SkinFilterPipeline.skinParameterKeys) {
       expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
     }
@@ -176,6 +214,10 @@ void main() {
     expect(params.containsKey('jaw_angle_right'), isTrue);
     expect(params.containsKey('jaw_angle_side'), isTrue);
     expect(params.containsKey('head'), isTrue);
+    expect(params.containsKey('eyebrow_height'), isTrue);
+    expect(params.containsKey('eyebrow_height_left'), isTrue);
+    expect(params.containsKey('eyebrow_height_right'), isTrue);
+    expect(params.containsKey('eyebrow_height_side'), isTrue);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);

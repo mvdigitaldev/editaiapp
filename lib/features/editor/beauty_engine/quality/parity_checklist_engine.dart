@@ -123,8 +123,7 @@ abstract final class ParityChecklistEngine {
       }
 
       final goldenHint = golden?.detail;
-      final backendHint =
-          warpBackend != null ? 'backend: $warpBackend' : null;
+      final backendHint = warpBackend != null ? 'backend: $warpBackend' : null;
       items.add(
         ParityChecklistItem(
           id: group.id,
@@ -135,9 +134,11 @@ abstract final class ParityChecklistEngine {
       );
     }
 
-    final activeCount = FaceFilterPipeline.faceWarpParameterKeys
-        .where((k) => (params[k] ?? 0) > 1e-6)
-        .length;
+    final activeCount = [
+      ...FaceFilterPipeline.proportionParameterKeys,
+      ...FaceFilterPipeline.eyebrowParameterKeys,
+      ...FaceFilterPipeline.faceWarpParameterKeys,
+    ].where((k) => (params[k] ?? 0).abs() > 1e-6).length;
     if (activeCount > 0 && (warpStats?.vertexMaxPx ?? 0) <= 0.05) {
       items.add(
         const ParityChecklistItem(

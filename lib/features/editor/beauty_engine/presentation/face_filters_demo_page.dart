@@ -32,6 +32,7 @@ class _FaceFiltersDemoPageState extends ConsumerState<FaceFiltersDemoPage> {
 
   final _params = <String, double>{
     for (final key in FaceFilterPipeline.proportionParameterKeys) key: 0,
+    for (final key in FaceFilterPipeline.eyebrowParameterKeys) key: 0,
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) key: 0,
     for (final key in BodyFilterPipeline.bodyWarpParameterKeys) key: 0,
     for (final key in SkinFilterPipeline.skinParameterKeys) key: 0,
@@ -40,6 +41,7 @@ class _FaceFiltersDemoPageState extends ConsumerState<FaceFiltersDemoPage> {
 
   Iterable<String> get _allKeys => [
         ...FaceFilterPipeline.proportionParameterKeys,
+        ...FaceFilterPipeline.eyebrowParameterKeys,
         ...FaceFilterPipeline.faceWarpParameterKeys,
         ...BodyFilterPipeline.bodyWarpParameterKeys,
         ...SkinFilterPipeline.skinParameterKeys,
