@@ -185,6 +185,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     'p01': 'test/beauty_engine/warp/fixtures/phase12/p01-man-5021469.png',
     'p05': 'test/beauty_engine/warp/fixtures/phase12/p05-young-woman.png',
     'p12': 'test/beauty_engine/warp/fixtures/phase12/p12.jpg',
+    'p15': 'test/beauty_engine/warp/fixtures/phase12/p15-office-blazer.png',
   };
 
   Future<void> _pickImage() async {
@@ -642,6 +643,11 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         (_params['eyebrow_end_right'] ?? 0).abs() > 0.001) {
       return 'eyebrow_end';
     }
+    if ((_params['eye_size'] ?? 0).abs() > 0.001 ||
+        (_params['eye_size_left'] ?? 0).abs() > 0.001 ||
+        (_params['eye_size_right'] ?? 0).abs() > 0.001) {
+      return 'eye_size';
+    }
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
       if ((_params[key] ?? 0).abs() > 0.001) {
         return key;
@@ -672,6 +678,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'eyebrow_height',
       'eyebrow_width',
       'eyebrow_end',
+      'eye_size',
       'hairline',
       'jaw',
       'jaw_angle',
@@ -727,6 +734,14 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         if ((params[key] ?? 0).abs() > 0 ||
             (params['eyebrow_end_left'] ?? 0).abs() > 0 ||
             (params['eyebrow_end_right'] ?? 0).abs() > 0) {
+          return true;
+        }
+        continue;
+      }
+      if (key == 'eye_size') {
+        if ((params[key] ?? 0).abs() > 0 ||
+            (params['eye_size_left'] ?? 0).abs() > 0 ||
+            (params['eye_size_right'] ?? 0).abs() > 0) {
           return true;
         }
         continue;

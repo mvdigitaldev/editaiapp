@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-09-04 (Eyebrow End amplitude 0.030)
+Última actualização: 2026-09-29 (Eye Size no editor)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -48,6 +48,7 @@ A IA actua como **arquitecto** do Facial Warp V2.
 | **Eyebrow Height** | D no editor. Key `eyebrow_height` («Altura»). Tab Sobrancelha. **Não** é makeup `eyebrows`. Sem E escrita. Spec [`v2-eyebrow-height.md`](./v2-eyebrow-height.md). D [`v2-eyebrow-height-d-report.md`](./v2-eyebrow-height-d-report.md). **Intacto** no Width. |
 | **Eyebrow Width** | D no editor. Key `eyebrow_width` («Largura»). Tab Sobrancelha. **Não** é makeup `eyebrows`. **Não** é Altura. Sem E escrita. Spec [`v2-eyebrow-width.md`](./v2-eyebrow-width.md). D [`v2-eyebrow-width-d-report.md`](./v2-eyebrow-width-d-report.md). **Intacto** no End. |
 | **Eyebrow End** | D no editor. Key `eyebrow_end` («Ponta»; Meitu End = ponta interna / glabela). Tab Sobrancelha. **Não** é makeup `eyebrows`. **Não** é Altura nem Largura. Sem E escrita. Spec [`v2-eyebrow-end.md`](./v2-eyebrow-end.md). D [`v2-eyebrow-end-d-report.md`](./v2-eyebrow-end-d-report.md). |
+| **Eye Size** | No editor para aprovação visual. Key `eye_size` («Tamanho»). Tab Olhos. **Não** é `eye_scale`. **Não** é Height / Width / Length / Distance / Puffy. **Não** é makeup. Sem B/C/E. Spec [`v2-eye-size.md`](./v2-eye-size.md). |
 
 Pipeline viva no produto:
 
@@ -55,11 +56,11 @@ Pipeline viva no produto:
 RGBA → applyFaceWarpChain → Body → Skin → Color
 ```
 
-`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
+`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
 
 Entre etapas os landmarks são **advectados** para a geometria já deformada (`warp/v2/landmark_advection.dart`). Sem isso o efeito a jusante recebia o RGBA deformado mas media a geometria da origem, e a crista caía 6–10 px fora da silhueta. Ver [`v2-composicao-cadeia.md`](./v2-composicao-cadeia.md).
 
-Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline, Eyebrow Height, Eyebrow Width e Eyebrow End estão na mesma cadeia, **aprovados**. V Shape e Jaw Angle estão na cadeia como inspecção.
+Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline, Eyebrow Height, Eyebrow Width e Eyebrow End estão na mesma cadeia, **aprovados**. V Shape, Jaw Angle e Eye Size estão na cadeia como inspecção. Eye Size espera a assinatura visual do menu Tamanho.
 
 ---
 
@@ -273,6 +274,16 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Cadeia: depois da Altura (`head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → jaw → …`). Tab **Sobrancelha**, ícone Largura. Preview e export partilham `applyFaceWarpChain`.
 - Spec: [`v2-eyebrow-width.md`](./v2-eyebrow-width.md). Plano: [`v2-eyebrow-width-plan.md`](./v2-eyebrow-width-plan.md). C: [`v2-eyebrow-width-c-report.md`](./v2-eyebrow-width-c-report.md). D: [`v2-eyebrow-width-d-report.md`](./v2-eyebrow-width-d-report.md).
 
+### Eye Size — inspecção no editor
+
+- Key: `eye_size` («Tamanho»). **Não** é `eye_scale`. **Não** é Height / Width / Length / Distance / Puffy eyes. **Não** é makeup `eyelashes` nem `iris_enhance`.
+- No editor (2026-09-29) para o Leonardo aprovar o menu antes do próximo ícone de Olhos. Sem B escrita. Sem C assinada. Sem E. Sobrancelhas e os Fields vivos intactos.
+- Campo: escala local em volta da íris. `s = 1 + 0.28 t`. `D = α · w · (p − c)`, `α = 1 − 1/s`. `t < 0` encolhe; `t > 0` aumenta. Foto esquerda = íris **468** / canto **33**. Foto direita = íris **473** / canto **263**. A íris fica. Sobrancelha, nariz, boca e landmark 10 ficam (porta por distância, sem disco binário). Sem `RidgeWeight`. Sem `PersonMask`. Sem importar outros Fields.
+- Convenção: **esquerda encolhe**; **direita aumenta**. L/R da foto. Geral move os dois.
+- Runtime: o unitário é `w · (p − c)` por olho; o slider só entra em `α(t)`.
+- Cadeia: depois da Ponta (`head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → jaw → …`). Tab **Olhos**, ícone Tamanho. Preview e export partilham `applyFaceWarpChain`.
+- Spec: [`v2-eye-size.md`](./v2-eye-size.md).
+
 ### Eyebrow End — Sprint D
 
 - Key: `eyebrow_end` («Ponta»). **Não** é `eyebrows`. **Não** é `eyebrow_height` nem `eyebrow_width`. **Não** é Length / Front / Angle / Shape.
@@ -316,6 +327,10 @@ Aprovação de C é escrita. Sem ela, D não existe.
 **Adenda 2026-08-26 (V Chin encerrado).** Leonardo fechou o V Chin no editor. Aprovado. Vivo (`v_chin`). Não alterar. Documento [`v2-v-chin.md`](./v2-v-chin.md).
 
 **Adenda 2026-08-26 (V Chin aberto).** Leonardo abriu o menu V Chin (`v_chin`, «V do queixo»): forma da ponta, Δx, L/R da foto. Superado pelo fecho no mesmo dia.
+
+**Adenda 2026-09-29 (Eye Size).** Leonardo, com o Meitu em Olhos → Size: «vamos para criacao do menu de olhos… o primeiro menu interno do olho q vamos fazer é o tamanho… após eu aprovar esse menu, vamos para o proximo». Slider à esquerda encolhe, à direita aumenta. Tab **Olhos**, key `eye_size`, cadeia depois de `eyebrow_end`. Height / Width / Length / Distance / Puffy não entram. Sem B/C/E. Spec [`v2-eye-size.md`](./v2-eye-size.md).
+
+**Adenda 2026-09-05 (Lab p15).** Leonardo: «crie um novo lab… p15 com essa foto». Foto `phase12/p15-office-blazer.png` (1620×1080, a origem era 540×360) + 478 landmarks `benchmark/real/p15-office-blazer.json`. Botão **Lab p15** no editor, a seguir a p01/p05/p12. O `p15.jpg` antigo do dump phase12 (pexels-415829) fica intacto e **não** é o lab V2. As matrizes oficiais A/B continuam p01 / p05 / p12; p15 entra no manifest de rostos reais (`real-p15`) para uso futuro, sem alargar as suítes A.
 
 **Adenda 2026-09-04 (Eyebrow End amplitude).** Leonardo, no editor: «podemos chegar mais a ponta do meio», «aumente um pouco mais» e depois «podemos aumentar mais sem quebrar?? tipo uns 0.030». Amplitude `0.010` → `0.016` → `0.020` → `0.030`. Equação, `s_inner`, `lidGate` e os outros Fields intactos. Tecto `influenceMax < 0.040 × faceWidth`.
 

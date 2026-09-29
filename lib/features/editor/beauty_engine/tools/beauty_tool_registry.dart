@@ -8,6 +8,7 @@ abstract final class BeautyToolRegistry {
   static final List<ToolDescriptor> all = [
     ..._proportion,
     ..._eyebrow,
+    ..._eye,
     ..._face,
     ..._skin,
     ..._color,
@@ -44,6 +45,15 @@ abstract final class BeautyToolRegistry {
     ),
     ToolDescriptor(
       key: 'eyebrow_end',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
+  ];
+
+  static const _eye = [
+    ToolDescriptor(
+      key: 'eye_size',
       category: ToolCategory.face,
       pipelineStage: ToolPipelineStage.warp,
       requiresFace: true,
@@ -119,6 +129,7 @@ abstract final class BeautyToolRegistry {
   static List<String> get faceWarpKeys => [
         ...FaceFilterPipeline.proportionParameterKeys,
         ...FaceFilterPipeline.eyebrowParameterKeys,
+        ...FaceFilterPipeline.eyeParameterKeys,
         ...FaceFilterPipeline.faceWarpParameterKeys,
       ];
 }

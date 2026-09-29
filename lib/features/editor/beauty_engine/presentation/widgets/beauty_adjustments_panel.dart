@@ -87,6 +87,12 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       parameterKeys: FaceFilterPipeline.eyebrowParameterKeys,
     ),
     BeautyAdjustmentCategoryDef(
+      category: BeautyAdjustmentCategory.olhos,
+      icon: Icons.remove_red_eye_outlined,
+      label: BeautyEngineLabels.sectionOlhos,
+      parameterKeys: FaceFilterPipeline.eyeParameterKeys,
+    ),
+    BeautyAdjustmentCategoryDef(
       category: BeautyAdjustmentCategory.corpo,
       icon: Icons.accessibility_new_outlined,
       label: BeautyEngineLabels.sectionBody,
@@ -111,6 +117,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
     final params = <String, double>{
       for (final key in FaceFilterPipeline.proportionParameterKeys) key: 0,
       for (final key in FaceFilterPipeline.eyebrowParameterKeys) key: 0,
+      for (final key in FaceFilterPipeline.eyeParameterKeys) key: 0,
       for (final key in FaceFilterPipeline.faceWarpParameterKeys) key: 0,
       for (final key in BodyFilterPipeline.bodyWarpParameterKeys) key: 0,
       for (final key in SkinFilterPipeline.skinParameterKeys) key: 0,
@@ -137,6 +144,9 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       'eyebrow_end_left': 0,
       'eyebrow_end_right': 0,
       'eyebrow_end_side': 0,
+      'eye_size_left': 0,
+      'eye_size_right': 0,
+      'eye_size_side': 0,
     };
     return params;
   }
@@ -208,6 +218,7 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     'eyebrow_height',
     'eyebrow_width',
     'eyebrow_end',
+    'eye_size',
   };
 
   bool _isChanged(String key) {
@@ -455,7 +466,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'head' ||
         key == 'eyebrow_height' ||
         key == 'eyebrow_width' ||
-        key == 'eyebrow_end') {
+        key == 'eyebrow_end' ||
+        key == 'eye_size') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

@@ -47,6 +47,7 @@ void main() {
 
     expect(find.text('Proporção'), findsWidgets);
     expect(find.text('Sobrancelha'), findsWidgets);
+    expect(find.text('Olhos'), findsWidgets);
     expect(find.text('Linha do cabelo'), findsWidgets);
     expect(find.text('Mandíbula'), findsWidgets);
     expect(find.text('Ângulo da mandíbula'), findsWidgets);
@@ -65,6 +66,7 @@ void main() {
         BeautyAdjustmentCategory.proporcao,
         BeautyAdjustmentCategory.rosto,
         BeautyAdjustmentCategory.sobrancelha,
+        BeautyAdjustmentCategory.olhos,
         BeautyAdjustmentCategory.corpo,
         BeautyAdjustmentCategory.pele,
         BeautyAdjustmentCategory.cor,
@@ -180,6 +182,23 @@ void main() {
       isTrue,
     );
 
+    await tester.tap(find.text('Olhos'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('beauty-tool-icon-eye_size')), findsOneWidget);
+    expect(find.text('Geral'), findsWidgets);
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Tamanho',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+
     await tester.tap(find.text('Pele'));
     await tester.pumpAndSettle();
     expect(
@@ -239,6 +258,9 @@ void main() {
     for (final key in FaceFilterPipeline.eyebrowParameterKeys) {
       expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
     }
+    for (final key in FaceFilterPipeline.eyeParameterKeys) {
+      expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
+    }
     expect(BeautyToolIcons.hasGlyph('eyebrows'), isTrue);
     for (final key in SkinFilterPipeline.skinParameterKeys) {
       expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
@@ -267,6 +289,10 @@ void main() {
     expect(params.containsKey('eyebrow_end_left'), isTrue);
     expect(params.containsKey('eyebrow_end_right'), isTrue);
     expect(params.containsKey('eyebrow_end_side'), isTrue);
+    expect(params.containsKey('eye_size'), isTrue);
+    expect(params.containsKey('eye_size_left'), isTrue);
+    expect(params.containsKey('eye_size_right'), isTrue);
+    expect(params.containsKey('eye_size_side'), isTrue);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);

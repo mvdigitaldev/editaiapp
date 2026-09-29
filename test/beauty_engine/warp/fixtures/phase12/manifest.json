@@ -29,6 +29,7 @@
     {"id": "p27", "asset": "test/beauty_engine/warp/fixtures/phase12/p27.jpg", "label": "pexels-1036623"},
     {"id": "p28", "asset": "test/beauty_engine/warp/fixtures/phase12/p28-beard-pixabay.jpg", "label": "pixabay-beard"},
     {"id": "p29", "asset": "test/beauty_engine/warp/fixtures/phase12/p29.jpg", "label": "pexels-1181686"},
-    {"id": "p30", "asset": "test/beauty_engine/warp/fixtures/phase12/p30.jpg", "label": "pexels-1043471"}
+    {"id": "p30", "asset": "test/beauty_engine/warp/fixtures/phase12/p30.jpg", "label": "pexels-1043471"},
+    {"id": "p15-office", "asset": "test/beauty_engine/warp/fixtures/phase12/p15-office-blazer.png", "label": "office-blazer"}
   ]
 }

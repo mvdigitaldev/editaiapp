@@ -182,6 +182,13 @@ List<MvpBenchmarkRealFaceSpec> defaultRealBenchmarkFaces() {
       imageSize: Size(640, 960),
       label: 'square-jaw',
     ),
+    MvpBenchmarkRealFaceSpec(
+      id: 'real-p15',
+      landmarkJsonPath:
+          'test/beauty_engine/warp/fixtures/benchmark/real/p15-office-blazer.json',
+      imageSize: Size(1620, 1080),
+      label: 'office-blazer',
+    ),
   ];
 }
 

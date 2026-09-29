@@ -34,6 +34,13 @@
       "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p21-pexels-220453.json",
       "width": 960,
       "height": 1440
+    },
+    {
+      "id": "real-p15",
+      "label": "office-blazer",
+      "landmarkJson": "test/beauty_engine/warp/fixtures/benchmark/real/p15-office-blazer.json",
+      "width": 1620,
+      "height": 1080
     }
   ]
 }

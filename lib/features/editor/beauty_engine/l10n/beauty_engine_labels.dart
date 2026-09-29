@@ -21,6 +21,7 @@ abstract final class BeautyEngineLabels {
     'eyebrow_height': 'Altura',
     'eyebrow_width': 'Largura',
     'eyebrow_end': 'Ponta',
+    'eye_size': 'Tamanho',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',
@@ -83,6 +84,7 @@ abstract final class BeautyEngineLabels {
   static const sectionProportion = 'Proporção';
   static const sectionFace = 'Rosto';
   static const sectionSobrancelha = 'Sobrancelha';
+  static const sectionOlhos = 'Olhos';
   static const sectionSkin = 'Pele';
   static const sectionBody = 'Corpo';
 
