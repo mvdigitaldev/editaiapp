@@ -56,6 +56,7 @@ import '../warp/v2/backward_bilinear_warp.dart' as v2;
 import '../warp/v2/chin/chin_field.dart';
 import '../warp/v2/eyebrow_height/eyebrow_height_field.dart';
 import '../warp/v2/eyebrow_end/eyebrow_end_field.dart';
+import '../warp/v2/eye_height/eye_height_field.dart';
 import '../warp/v2/eye_size/eye_size_field.dart';
 import '../warp/v2/eyebrow_width/eyebrow_width_field.dart';
 import '../warp/v2/hairline/hairline_field.dart';
@@ -117,6 +118,7 @@ class BeautyEngineController {
       EyebrowWidthFieldRuntime();
   final EyebrowEndFieldRuntime _eyebrowEndRuntime = EyebrowEndFieldRuntime();
   final EyeSizeFieldRuntime _eyeSizeRuntime = EyeSizeFieldRuntime();
+  final EyeHeightFieldRuntime _eyeHeightRuntime = EyeHeightFieldRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
   final JawAngleFieldRuntime _jawAngleRuntime = JawAngleFieldRuntime();
   final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
@@ -1147,6 +1149,44 @@ class BeautyEngineController {
     return warped.rgba;
   }
 
+  /// EyeHeightField + remap bilinear. Não é a Altura da sobrancelha. t=0 não chama o renderer.
+  Uint8List applyEyeHeightWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['eye_height'] ?? 0).clamp(-1.0, 1.0);
+    final tPhotoLeft = (parameters['eye_height_left'] ?? t).clamp(-1.0, 1.0);
+    final tPhotoRight = (parameters['eye_height_right'] ?? t).clamp(-1.0, 1.0);
+    if (face == null ||
+        (tPhotoLeft.abs() <= 1e-6 && tPhotoRight.abs() <= 1e-6) ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = EyeHeightField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      tPhotoLeft: tPhotoLeft,
+      tPhotoRight: tPhotoRight,
+      computeMetrics: false,
+      runtime: _eyeHeightRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_eye_height';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
   /// Única pipeline facial: JawField + remap bilinear. Sem ROI/Mesh/MLS.
   Uint8List applyJawWarp({
     required Uint8List sourceRgba,
@@ -1405,6 +1445,14 @@ class BeautyEngineController {
         'eye_size_right',
       ],
     ),
+    (
+      backend: 'v2_eye_height',
+      parameters: [
+        'eye_height',
+        'eye_height_left',
+        'eye_height_right',
+      ],
+    ),
     (backend: 'v2_jaw', parameters: ['jaw']),
     (
       backend: 'v2_jaw_angle',
@@ -1572,6 +1620,16 @@ class BeautyEngineController {
           tPhotoRight: right,
           computeMetrics: false,
           runtime: _eyeSizeRuntime,
+        ).field;
+      case 'v2_eye_height':
+        return EyeHeightField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          tPhotoLeft: left,
+          tPhotoRight: right,
+          computeMetrics: false,
+          runtime: _eyeHeightRuntime,
         ).field;
       case 'v2_jaw':
         final t = general.clamp(0.0, 1.0);

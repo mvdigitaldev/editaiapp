@@ -14,7 +14,7 @@ abstract final class BeautyEngineLabels {
     'nose_bridge': 'Ponte nasal',
     'eye_scale': 'Tamanho dos olhos',
     'eye_distance': 'Distância dos olhos',
-    'eye_height': 'Altura dos olhos',
+    'eye_height': 'Altura',
     'eye_rotation': 'Rotação dos olhos',
     'double_eyelid': 'Pálpebra dupla',
     'head': 'Cabeça',

@@ -199,6 +199,25 @@ void main() {
       isTrue,
     );
 
+    await tester.tap(find.text('Altura'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-eye_height')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Altura',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+
     await tester.tap(find.text('Pele'));
     await tester.pumpAndSettle();
     expect(
@@ -293,6 +312,10 @@ void main() {
     expect(params.containsKey('eye_size_left'), isTrue);
     expect(params.containsKey('eye_size_right'), isTrue);
     expect(params.containsKey('eye_size_side'), isTrue);
+    expect(params.containsKey('eye_height'), isTrue);
+    expect(params.containsKey('eye_height_left'), isTrue);
+    expect(params.containsKey('eye_height_right'), isTrue);
+    expect(params.containsKey('eye_height_side'), isTrue);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);

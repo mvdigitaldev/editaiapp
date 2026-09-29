@@ -19,6 +19,7 @@ class FaceFilterPipeline {
   /// Tab Olhos. Não é makeup `eyelashes` / `iris_enhance`. Não é `eye_scale`.
   static const eyeParameterKeys = [
     'eye_size',
+    'eye_height',
   ];
 
   static const faceWarpParameterKeys = [
@@ -60,6 +61,9 @@ class FaceFilterPipeline {
     final eye = parameters['eye_size'] ?? 0;
     final eyeL = parameters['eye_size_left'] ?? 0;
     final eyeR = parameters['eye_size_right'] ?? 0;
+    final eyeH = parameters['eye_height'] ?? 0;
+    final eyeHL = parameters['eye_height_left'] ?? 0;
+    final eyeHR = parameters['eye_height_right'] ?? 0;
     return head.abs() > 1e-6 ||
         brow.abs() > 1e-6 ||
         browL.abs() > 1e-6 ||
@@ -73,6 +77,9 @@ class FaceFilterPipeline {
         eye.abs() > 1e-6 ||
         eyeL.abs() > 1e-6 ||
         eyeR.abs() > 1e-6 ||
+        eyeH.abs() > 1e-6 ||
+        eyeHL.abs() > 1e-6 ||
+        eyeHR.abs() > 1e-6 ||
         hairline.abs() > 1e-6 ||
         jaw > 0 ||
         jawAngle.abs() > 1e-6 ||

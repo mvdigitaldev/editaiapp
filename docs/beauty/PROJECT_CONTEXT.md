@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-09-29 (Eye Size no editor)
+Última actualização: 2026-09-29 (Eye Height no editor)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -48,7 +48,8 @@ A IA actua como **arquitecto** do Facial Warp V2.
 | **Eyebrow Height** | D no editor. Key `eyebrow_height` («Altura»). Tab Sobrancelha. **Não** é makeup `eyebrows`. Sem E escrita. Spec [`v2-eyebrow-height.md`](./v2-eyebrow-height.md). D [`v2-eyebrow-height-d-report.md`](./v2-eyebrow-height-d-report.md). **Intacto** no Width. |
 | **Eyebrow Width** | D no editor. Key `eyebrow_width` («Largura»). Tab Sobrancelha. **Não** é makeup `eyebrows`. **Não** é Altura. Sem E escrita. Spec [`v2-eyebrow-width.md`](./v2-eyebrow-width.md). D [`v2-eyebrow-width-d-report.md`](./v2-eyebrow-width-d-report.md). **Intacto** no End. |
 | **Eyebrow End** | D no editor. Key `eyebrow_end` («Ponta»; Meitu End = ponta interna / glabela). Tab Sobrancelha. **Não** é makeup `eyebrows`. **Não** é Altura nem Largura. Sem E escrita. Spec [`v2-eyebrow-end.md`](./v2-eyebrow-end.md). D [`v2-eyebrow-end-d-report.md`](./v2-eyebrow-end-d-report.md). |
-| **Eye Size** | No editor para aprovação visual. Key `eye_size` («Tamanho»). Tab Olhos. **Não** é `eye_scale`. **Não** é Height / Width / Length / Distance / Puffy. **Não** é makeup. Sem B/C/E. Spec [`v2-eye-size.md`](./v2-eye-size.md). |
+| **Eye Size** | No editor para aprovação visual. Key `eye_size` («Tamanho»). Tab Olhos. **Não** é `eye_scale`. **Não** é Height / Width / Length / Distance / Puffy. **Não** é makeup. Sem B/C/E. Spec [`v2-eye-size.md`](./v2-eye-size.md). **Intacto** na Altura do olho. |
+| **Eye Height** | No editor para aprovação visual. Key `eye_height` («Altura»). Tab Olhos. **Não** é `eyebrow_height`. **Não** é Tamanho. Sem B/C/E. Spec [`v2-eye-height.md`](./v2-eye-height.md). |
 
 Pipeline viva no produto:
 
@@ -56,11 +57,11 @@ Pipeline viva no produto:
 RGBA → applyFaceWarpChain → Body → Skin → Color
 ```
 
-`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
+`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → eye_height → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
 
 Entre etapas os landmarks são **advectados** para a geometria já deformada (`warp/v2/landmark_advection.dart`). Sem isso o efeito a jusante recebia o RGBA deformado mas media a geometria da origem, e a crista caía 6–10 px fora da silhueta. Ver [`v2-composicao-cadeia.md`](./v2-composicao-cadeia.md).
 
-Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline, Eyebrow Height, Eyebrow Width e Eyebrow End estão na mesma cadeia, **aprovados**. V Shape, Jaw Angle e Eye Size estão na cadeia como inspecção. Eye Size espera a assinatura visual do menu Tamanho.
+Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline, Eyebrow Height, Eyebrow Width e Eyebrow End estão na mesma cadeia, **aprovados**. V Shape, Jaw Angle, Eye Size e Eye Height estão na cadeia como inspecção. Eye Size e Eye Height esperam a assinatura visual dos menus.
 
 ---
 
@@ -284,6 +285,16 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Cadeia: depois da Ponta (`head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → jaw → …`). Tab **Olhos**, ícone Tamanho. Preview e export partilham `applyFaceWarpChain`.
 - Spec: [`v2-eye-size.md`](./v2-eye-size.md).
 
+### Eye Height — inspecção no editor
+
+- Key: `eye_height` («Altura»). **Não** é `eyebrow_height`. **Não** é `eye_size`. **Não** é Width / Length / Distance / Puffy eyes.
+- No editor (2026-09-29) para o Leonardo aprovar o menu. Sem B escrita. Sem C assinada. Sem E. Tamanho e os Fields vivos intactos.
+- Campo: só Δy. `dx = 0`. `dy = −t_lado · 0.030 · faceWidth · w`. `t > 0` sobe; `t < 0` desce. Foto esquerda = íris **468**. Foto direita = íris **473**. A íris anda com o olho. Sobrancelha, nariz, boca e landmark 10 ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Tamanho nem os outros Fields.
+- Convenção: **esquerda desce**; **direita sobe**. L/R da foto. Geral move os dois.
+- Runtime: o unitário é o peso de cada olho; o slider só escala `dy`.
+- Cadeia: depois do Tamanho (`… → eye_size → eye_height → jaw → …`). Tab **Olhos**, ícone Altura à direita de Tamanho.
+- Spec: [`v2-eye-height.md`](./v2-eye-height.md).
+
 ### Eyebrow End — Sprint D
 
 - Key: `eyebrow_end` («Ponta»). **Não** é `eyebrows`. **Não** é `eyebrow_height` nem `eyebrow_width`. **Não** é Length / Front / Angle / Shape.
@@ -327,6 +338,8 @@ Aprovação de C é escrita. Sem ela, D não existe.
 **Adenda 2026-08-26 (V Chin encerrado).** Leonardo fechou o V Chin no editor. Aprovado. Vivo (`v_chin`). Não alterar. Documento [`v2-v-chin.md`](./v2-v-chin.md).
 
 **Adenda 2026-08-26 (V Chin aberto).** Leonardo abriu o menu V Chin (`v_chin`, «V do queixo»): forma da ponta, Δx, L/R da foto. Superado pelo fecho no mesmo dia.
+
+**Adenda 2026-09-29 (Eye Height).** Leonardo, com o Meitu em Olhos → Height: «agora vamos para o height… note como é o movimento… tambem é possivel aumentar a altura e diminuir somente de 1 olho». Direita sobe, esquerda desce. Tab **Olhos**, key `eye_height`, cadeia depois de `eye_size`. Tamanho intacto. Width / Length / Distance / Puffy não entram. Sem B/C/E. Spec [`v2-eye-height.md`](./v2-eye-height.md).
 
 **Adenda 2026-09-29 (Eye Size).** Leonardo, com o Meitu em Olhos → Size: «vamos para criacao do menu de olhos… o primeiro menu interno do olho q vamos fazer é o tamanho… após eu aprovar esse menu, vamos para o proximo». Slider à esquerda encolhe, à direita aumenta. Tab **Olhos**, key `eye_size`, cadeia depois de `eyebrow_end`. Height / Width / Length / Distance / Puffy não entram. Sem B/C/E. Spec [`v2-eye-size.md`](./v2-eye-size.md).
 

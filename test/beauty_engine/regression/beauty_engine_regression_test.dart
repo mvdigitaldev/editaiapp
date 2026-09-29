@@ -54,7 +54,10 @@ void main() {
         FaceFilterPipeline.eyebrowParameterKeys,
         ['eyebrow_height', 'eyebrow_width', 'eyebrow_end'],
       );
-      expect(FaceFilterPipeline.eyeParameterKeys, ['eye_size']);
+      expect(
+        FaceFilterPipeline.eyeParameterKeys,
+        ['eye_size', 'eye_height'],
+      );
       expect(pipeline.hasActiveWarp({'head': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'head': -0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'head': 0}), isFalse);
@@ -78,6 +81,11 @@ void main() {
       expect(pipeline.hasActiveWarp({'eye_size': 0}), isFalse);
       expect(pipeline.hasActiveWarp({'eye_size_left': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'eye_size_right': -0.4}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_height': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_height': -0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_height': 0}), isFalse);
+      expect(pipeline.hasActiveWarp({'eye_height_left': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_height_right': -0.4}), isTrue);
       expect(pipeline.hasActiveWarp({'hairline': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'hairline': -0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'hairline': 0}), isFalse);
