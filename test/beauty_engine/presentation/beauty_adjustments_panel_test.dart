@@ -336,6 +336,46 @@ void main() {
     );
     expect(find.text('Geral'), findsNothing);
 
+    await tester.tap(find.text('Largura'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-nose_ala')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Largura',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+    expect(find.text('Geral'), findsWidgets);
+
+    await tester.tap(find.text('Ponte'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-nose_bridge')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Ponte',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+    expect(find.text('Geral'), findsNothing);
+
     await tester.tap(find.text('Pele'));
     await tester.pumpAndSettle();
     expect(
@@ -461,6 +501,14 @@ void main() {
     expect(params.containsKey('nose_lift_left'), isFalse);
     expect(params.containsKey('nose_lift_right'), isFalse);
     expect(params.containsKey('nose_lift_side'), isFalse);
+    expect(params.containsKey('nose_ala'), isTrue);
+    expect(params.containsKey('nose_ala_left'), isTrue);
+    expect(params.containsKey('nose_ala_right'), isTrue);
+    expect(params.containsKey('nose_ala_side'), isTrue);
+    expect(params.containsKey('nose_bridge'), isTrue);
+    expect(params.containsKey('nose_bridge_left'), isFalse);
+    expect(params.containsKey('nose_bridge_right'), isFalse);
+    expect(params.containsKey('nose_bridge_side'), isFalse);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);

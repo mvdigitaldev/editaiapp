@@ -166,6 +166,9 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       'eye_distance_left': 0,
       'eye_distance_right': 0,
       'eye_distance_side': 0,
+      'nose_ala_left': 0,
+      'nose_ala_right': 0,
+      'nose_ala_side': 0,
     };
     return params;
   }
@@ -242,6 +245,7 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     'eye_width',
     'eye_length',
     'eye_distance',
+    'nose_ala',
   };
 
   bool _isChanged(String key) {
@@ -496,7 +500,9 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'eye_length' ||
         key == 'eye_distance' ||
         key == 'nose_size' ||
-        key == 'nose_lift') {
+        key == 'nose_lift' ||
+        key == 'nose_ala' ||
+        key == 'nose_bridge') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

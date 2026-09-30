@@ -19,6 +19,8 @@ abstract final class BeautyToolIcons {
     'eye_puffy',
     'nose_size',
     'nose_lift',
+    'nose_ala',
+    'nose_bridge',
     'hairline',
     'jaw',
     'jaw_angle',
@@ -116,6 +118,10 @@ class _BeautyToolIconPainter extends CustomPainter {
         _paintNoseSize(canvas, paint);
       case 'nose_lift':
         _paintNoseLift(canvas, paint);
+      case 'nose_ala':
+        _paintNoseAla(canvas, paint);
+      case 'nose_bridge':
+        _paintNoseBridge(canvas, paint);
       case 'hairline':
         _paintHairline(canvas, paint);
       case 'jaw':
@@ -409,6 +415,34 @@ class _BeautyToolIconPainter extends CustomPainter {
     canvas.drawPath(nose, paint);
     _arrow(canvas, paint, const Offset(18.6, 16.4), const Offset(18.6, 5.2),
         head: 1.8);
+  }
+
+  void _paintNoseAla(Canvas canvas, Paint paint) {
+    final nose = Path()
+      ..moveTo(12, 6.0)
+      ..cubicTo(10.8, 10.2, 9.4, 13.6, 8.2, 16.6)
+      ..quadraticBezierTo(10.4, 19.0, 12, 18.6)
+      ..quadraticBezierTo(13.6, 19.0, 15.8, 16.6)
+      ..cubicTo(14.6, 13.6, 13.2, 10.2, 12, 6.0);
+    canvas.drawPath(nose, paint);
+    _arrow(canvas, paint, const Offset(8.8, 15.2), const Offset(4.0, 15.2),
+        head: 1.6);
+    _arrow(canvas, paint, const Offset(15.2, 15.2), const Offset(20.0, 15.2),
+        head: 1.6);
+  }
+
+  void _paintNoseBridge(Canvas canvas, Paint paint) {
+    final nose = Path()
+      ..moveTo(12, 6.0)
+      ..cubicTo(10.8, 10.2, 9.4, 13.6, 8.2, 16.6)
+      ..quadraticBezierTo(10.4, 19.0, 12, 18.6)
+      ..quadraticBezierTo(13.6, 19.0, 15.8, 16.6)
+      ..cubicTo(14.6, 13.6, 13.2, 10.2, 12, 6.0);
+    canvas.drawPath(nose, paint);
+    final wave = Path()
+      ..moveTo(10.6, 7.4)
+      ..cubicTo(13.4, 9.6, 10.2, 12.2, 13.2, 14.4);
+    canvas.drawPath(wave, paint);
   }
 
   void _paintEyebrowEnd(Canvas canvas, Paint paint) {

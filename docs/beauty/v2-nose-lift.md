@@ -5,7 +5,7 @@ Efeito novo. **Não** é `nose_size`. **Não** é Tip, Ala, Root nem Bridge.
 No Meitu, **Lift** é o segundo ícone do tab Nariz. O slider à direita sobe a ponta e a base. À esquerda desce. A raiz entre os olhos fica. Um slider só. Sem Geral / L / R.
 
 Data: 2026-09-30.  
-Estado: no editor para aprovação visual. Sem B escrita. Sem C assinada. Sem E. Tamanho e os Fields vivos **não se mexem**. Ala, Root, Bridge e Tip ainda não existem.
+Estado: no editor para aprovação visual. Sem B escrita. Sem C assinada. Sem E. Tamanho e os Fields vivos **não se mexem**. Root, Bridge e Tip ainda não existem.
 
 Módulo: `lib/features/editor/beauty_engine/warp/v2/nose_lift/`.  
 Memória: [`PROJECT_CONTEXT.md`](./PROJECT_CONTEXT.md).
@@ -76,7 +76,7 @@ Hull de `V2RegionCatalog.nose`, dilatado `0.040 × faceWidth`. Olhos, boca e sob
 ## 4. Pipeline e menu
 
 ```
-… → nose_size → nose_lift → jaw → …
+… → nose_size → nose_lift → nose_ala → nose_bridge → jaw → …
 ```
 
 Tab **Nariz**, ícone Elevação à direita de Tamanho. Preview e export partilham `applyFaceWarpChain`.

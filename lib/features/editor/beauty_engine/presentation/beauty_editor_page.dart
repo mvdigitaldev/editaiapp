@@ -679,6 +679,14 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     if ((_params['nose_lift'] ?? 0).abs() > 0.001) {
       return 'nose_lift';
     }
+    if ((_params['nose_ala'] ?? 0).abs() > 0.001 ||
+        (_params['nose_ala_left'] ?? 0).abs() > 0.001 ||
+        (_params['nose_ala_right'] ?? 0).abs() > 0.001) {
+      return 'nose_ala';
+    }
+    if ((_params['nose_bridge'] ?? 0).abs() > 0.001) {
+      return 'nose_bridge';
+    }
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
       if ((_params[key] ?? 0).abs() > 0.001) {
         return key;
@@ -717,6 +725,8 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'eye_puffy',
       'nose_size',
       'nose_lift',
+      'nose_ala',
+      'nose_bridge',
       'hairline',
       'jaw',
       'jaw_angle',
@@ -824,6 +834,14 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         if ((params[key] ?? 0) > 0 ||
             (params['eye_puffy_left'] ?? 0) > 0 ||
             (params['eye_puffy_right'] ?? 0) > 0) {
+          return true;
+        }
+        continue;
+      }
+      if (key == 'nose_ala') {
+        if ((params[key] ?? 0).abs() > 0 ||
+            (params['nose_ala_left'] ?? 0).abs() > 0 ||
+            (params['nose_ala_right'] ?? 0).abs() > 0) {
           return true;
         }
         continue;

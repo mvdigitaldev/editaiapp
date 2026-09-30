@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-09-30 (Nose Lift)
+Última actualização: 2026-09-30 (Nose Bridge)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -55,7 +55,9 @@ A IA actua como **arquitecto** do Facial Warp V2.
 | **Eye Distance** | No editor para aprovação visual. Key `eye_distance` («Distância»). Tab Olhos. **Não** é Comprimento. **Não** é Tamanho. Sem B/C/E. Spec [`v2-eye-distance.md`](./v2-eye-distance.md). |
 | **Eye Puffy** | No editor para aprovação visual. Key `eye_puffy` («Olheiras»). Tab Olhos. Um slider, os dois olhos. Clareia só a pele debaixo da pestana (sulco), em direção à pele vizinha; o poro fica. Interior do olho fica. **Não** é warp. Mesmo clareamento A3 de `remove_dark_circles`. Spec [`v2-eye-puffy.md`](./v2-eye-puffy.md). |
 | **Nose Size** | No editor para aprovação visual. Key `nose_size` («Tamanho»). Tab Nariz. **Não** é `nose_slim` / `nose_length` / `nose_height` / `nose_tip` / `nose_bridge`. **Não** é Head. Sem B/C/E. Spec [`v2-nose-size.md`](./v2-nose-size.md). **Intacto** na Elevação. |
-| **Nose Lift** | No editor para aprovação visual. Key `nose_lift` («Elevação»). Tab Nariz. **Não** é Tamanho. **Não** é Tip / Ala / Root / Bridge. Sem B/C/E. Spec [`v2-nose-lift.md`](./v2-nose-lift.md). |
+| **Nose Lift** | No editor para aprovação visual. Key `nose_lift` («Elevação»). Tab Nariz. **Não** é Tamanho. **Não** é Tip / Ala / Root / Bridge. Sem B/C/E. Spec [`v2-nose-lift.md`](./v2-nose-lift.md). **Intacto** na Largura. |
+| **Nose Ala** | No editor para aprovação visual. Key `nose_ala` («Largura»). Tab Nariz. Geral / L / R da foto. **Não** é `nose_slim`. **Não** é Tamanho nem Elevação. Sem B/C/E. Spec [`v2-nose-ala.md`](./v2-nose-ala.md). **Intacto** na Ponte. |
+| **Nose Bridge** | No editor para aprovação visual. Key `nose_bridge` («Ponte»). Tab Nariz. Um slider, sem L/R. **Não** é Ala nem Root nem Tip. Sem B/C/E. Spec [`v2-nose-bridge.md`](./v2-nose-bridge.md). |
 
 Pipeline viva no produto:
 
@@ -63,11 +65,11 @@ Pipeline viva no produto:
 RGBA → applyFaceWarpChain → Body → Skin → Color
 ```
 
-`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → eye_height → eye_width → eye_length → eye_distance → nose_size → nose_lift → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Olheiras (`eye_puffy`) não entra nesta cadeia: clareia a pele no passe de pele. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
+`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → eye_height → eye_width → eye_length → eye_distance → nose_size → nose_lift → nose_ala → nose_bridge → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Olheiras (`eye_puffy`) não entra nesta cadeia: clareia a pele no passe de pele. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
 
 Entre etapas os landmarks são **advectados** para a geometria já deformada (`warp/v2/landmark_advection.dart`). Sem isso o efeito a jusante recebia o RGBA deformado mas media a geometria da origem, e a crista caía 6–10 px fora da silhueta. Ver [`v2-composicao-cadeia.md`](./v2-composicao-cadeia.md).
 
-Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline, Eyebrow Height, Eyebrow Width e Eyebrow End estão na mesma cadeia, **aprovados**. V Shape, Jaw Angle, Eye Size, Eye Height, Eye Width, Eye Length, Eye Distance, Nose Size e Nose Lift estão na cadeia como inspecção. Eye Puffy está no tab Olhos como clareamento de pele, não como warp. Esses menus de Olhos e os de Nariz esperam a assinatura visual.
+Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline, Eyebrow Height, Eyebrow Width e Eyebrow End estão na mesma cadeia, **aprovados**. V Shape, Jaw Angle, Eye Size, Eye Height, Eye Width, Eye Length, Eye Distance, Nose Size, Nose Lift, Nose Ala e Nose Bridge estão na cadeia como inspecção. Eye Puffy está no tab Olhos como clareamento de pele, não como warp. Esses menus de Olhos e os de Nariz esperam a assinatura visual.
 
 ---
 
@@ -342,22 +344,42 @@ Aprovação de C é escrita. Sem ela, D não existe.
 ### Nose Size — inspecção no editor
 
 - Key: `nose_size` («Tamanho»). **Não** é `nose_slim`, `nose_length`, `nose_height`, `nose_tip` nem `nose_bridge`. **Não** é Head. **Não** é Lift / Ala / Root / Bridge / Tip.
-- No editor (2026-09-30) para o Leonardo aprovar o menu. Sem B escrita. Sem C assinada. Sem E. Os Fields vivos e os de Olhos intactos. **Intacto** na Elevação. Ala, Root, Bridge e Tip ainda não existem.
+- No editor (2026-09-30) para o Leonardo aprovar o menu. Sem B escrita. Sem C assinada. Sem E. Os Fields vivos e os de Olhos intactos. **Intacto** na Elevação, na Largura e na Ponte. Root e Tip ainda não existem.
 - Campo: escala isotrópica em volta do centróide do hull `V2RegionCatalog.nose`. `s = 1 − 0.14 t`, `α = 1 − 1/s`, `D = α · w · (p − c)`. `t > 0` encolhe; `t < 0` aumenta. Ponta (1) e asas (98/327) andam juntas. Olhos, sobrancelha, boca e linha do cabelo ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Head nem os outros Fields. Um slider só, sem Geral / L / R.
 - Convenção: **esquerda aumenta**; **direita encolhe**. Igual à Cabeça. Contrária ao Tamanho dos olhos.
 - Runtime: o unitário é `w · (p − c)`; o slider só entra em `α(t)`.
-- Cadeia: depois da Distância (`… → eye_distance → nose_size → nose_lift → jaw → …`). Tab **Nariz**, ícone Tamanho.
+- Cadeia: depois da Distância (`… → eye_distance → nose_size → nose_lift → nose_ala → nose_bridge → jaw → …`). Tab **Nariz**, ícone Tamanho.
 - Spec: [`v2-nose-size.md`](./v2-nose-size.md).
 
 ### Nose Lift — inspecção no editor
 
 - Key: `nose_lift` («Elevação»). **Não** é `nose_size`. **Não** é Tip / Ala / Root / Bridge. **Não** é `nose_length`.
-- No editor (2026-09-30) para o Leonardo aprovar o menu. Sem B escrita. Sem C assinada. Sem E. Tamanho e os Fields vivos intactos. Ala, Root, Bridge e Tip ainda não existem.
+- No editor (2026-09-30) para o Leonardo aprovar o menu. Sem B escrita. Sem C assinada. Sem E. Tamanho e os Fields vivos intactos. **Intacto** na Largura e na Ponte. Root e Tip ainda não existem.
 - Campo: só Δy. `dx = 0`. `dy = −t · 0.045 · faceWidth · w · perfil`. `perfil` é 0 na raiz (168) até `u = 0.08` do eixo 168→1, e 1 a partir de `u = 0.48` (ponta 1, asas 98/327, columela). `t > 0` sobe; `t < 0` desce. Hull pad `0.090` e rampa `0.105` para o extremo que desce não dobrar no lábio. Olhos, sobrancelha, boca e linha do cabelo ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Tamanho nem os outros Fields. Um slider só, sem Geral / L / R.
 - Convenção: **esquerda desce**; **direita sobe**.
 - Runtime: o unitário é `w · perfil`; o slider só escala `dy`.
-- Cadeia: depois do Tamanho (`… → nose_size → nose_lift → jaw → …`). Tab **Nariz**, ícone Elevação à direita de Tamanho.
+- Cadeia: depois do Tamanho (`… → nose_size → nose_lift → nose_ala → nose_bridge → jaw → …`). Tab **Nariz**, ícone Elevação à direita de Tamanho.
 - Spec: [`v2-nose-lift.md`](./v2-nose-lift.md).
+
+### Nose Ala — inspecção no editor
+
+- Key: `nose_ala` («Largura»). **Não** é `nose_slim`. **Não** é `nose_size` nem `nose_lift`. **Não** é Root / Bridge / Tip.
+- No editor (2026-09-30) para o Leonardo aprovar o menu. Sem B escrita. Sem C assinada. Sem E. Tamanho, Elevação e os Fields vivos intactos. **Intacto** na Ponte. Root e Tip ainda não existem.
+- Campo: só Δx. `dy = 0`. `s = 1 − 0.24 t`, `α = 1 − 1/s`, `dx = α · w · perfil · midGate · (x − x_mid)`. `x_mid` é a média do x de 168 e 1. `midGate` segura a ponta. `perfil` é 0 na raiz até `u = 0.12` e 1 a partir de `u = 0.42`. `t > 0` afina; `t < 0` alarga. Foto esquerda = asa **98**; foto direita = **327**. Olhos, ponta em x, raiz, boca e sobrancelha ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Tamanho, Elevação nem os outros Fields. Geral / L / R da foto.
+- Convenção: **esquerda alarga**; **direita afina**. L/R da foto.
+- Runtime: o unitário é `w · perfil · midGate · (x − x_mid)` por lado; o slider só entra em `α(t_lado)`.
+- Cadeia: depois da Elevação (`… → nose_lift → nose_ala → nose_bridge → jaw → …`). Tab **Nariz**, ícone Largura à direita de Elevação.
+- Spec: [`v2-nose-ala.md`](./v2-nose-ala.md).
+
+### Nose Bridge — inspecção no editor
+
+- Key: `nose_bridge` («Ponte»). **Não** é `nose_slim`. **Não** é `nose_size`, `nose_lift` nem `nose_ala`. **Não** é Root nem Tip.
+- No editor (2026-09-30) para o Leonardo aprovar o menu. Sem B escrita. Sem C assinada. Sem E. Tamanho, Elevação, Largura e os Fields vivos intactos. Root e Tip ainda não existem.
+- Campo: só Δx. `dy = 0`. `s = 1 − 0.28 t`, `α = 1 − 1/s`, `dx = α · w · perfil · midGate · (x − x_mid)`. `perfil` é uma banda no terço do meio (`0.18–0.70`, cheia em `0.32–0.50`). `t > 0` afina o dorso; `t < 0` alarga. Raiz (168), asas (98/327) e ponta (1) ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Tamanho, Elevação, Largura nem os outros Fields. Um slider só, sem Geral / L / R.
+- Convenção: **esquerda alarga**; **direita afina**.
+- Runtime: o unitário é `w · perfil · midGate · (x − x_mid)`; o slider só entra em `α(t)`.
+- Cadeia: depois da Largura (`… → nose_ala → nose_bridge → jaw → …`). Tab **Nariz**, ícone Ponte à direita de Largura.
+- Spec: [`v2-nose-bridge.md`](./v2-nose-bridge.md).
 
 ### Eyebrow End — Sprint D
 
@@ -402,6 +424,10 @@ Aprovação de C é escrita. Sem ela, D não existe.
 **Adenda 2026-08-26 (V Chin encerrado).** Leonardo fechou o V Chin no editor. Aprovado. Vivo (`v_chin`). Não alterar. Documento [`v2-v-chin.md`](./v2-v-chin.md).
 
 **Adenda 2026-08-26 (V Chin aberto).** Leonardo abriu o menu V Chin (`v_chin`, «V do queixo»): forma da ponta, Δx, L/R da foto. Superado pelo fecho no mesmo dia.
+
+**Adenda 2026-09-30 (Nose Bridge).** Leonardo, com o Meitu em Nariz → Bridge, slider à direita e à esquerda: «oq seria o Bridge? pode fazer?». Largura do dorso (terço do meio). Só Δx. `k = 0.28`. Tab **Nariz**, key `nose_bridge`, cadeia depois de `nose_ala`. Tamanho, Elevação e Largura intactos. Sem Root / Tip. Sem B/C/E. Spec [`v2-nose-bridge.md`](./v2-nose-bridge.md).
+
+**Adenda 2026-09-30 (Nose Ala).** Leonardo, com o Meitu em Nariz → Ala, Geral / esquerda / direita e o slider à esquerda: «agora vamos para largura  (ala) tem direita e esquerda, barra para o lado direito diminui a largura e pro lado esquerdo aumenta.. se selecionar lado esquerdo no geral, so o lado esqerduo vai receber os ajustes, e vice versa». Só Δx em volta da midline. `k = 0.24`. Tab **Nariz**, key `nose_ala`, cadeia depois de `nose_lift`. Tamanho e Elevação intactos. Sem Root / Bridge / Tip. Sem B/C/E. Spec [`v2-nose-ala.md`](./v2-nose-ala.md).
 
 **Adenda 2026-09-30 (Nose Lift).** Leonardo, com o Meitu em Nariz → Lift, slider à direita e à esquerda: «vou te mandar oq cada print representa lif faca primeiro.  ele sobe o nariz se lado direito e desce se lado esquerdo .. faca apenas o lift antes». Só Δy. Perfil 0 na raiz (168), 1 na ponta e nas asas. Tab **Nariz**, key `nose_lift`, cadeia depois de `nose_size`. Tamanho intacto. Sem Ala / Root / Bridge / Tip. Sem B/C/E. Spec [`v2-nose-lift.md`](./v2-nose-lift.md).
 

@@ -31,6 +31,8 @@ class FaceFilterPipeline {
   static const noseParameterKeys = [
     'nose_size',
     'nose_lift',
+    'nose_ala',
+    'nose_bridge',
   ];
 
   static const faceWarpParameterKeys = [
@@ -86,6 +88,10 @@ class FaceFilterPipeline {
     final eyeDR = parameters['eye_distance_right'] ?? 0;
     final nose = parameters['nose_size'] ?? 0;
     final noseLift = parameters['nose_lift'] ?? 0;
+    final noseAla = parameters['nose_ala'] ?? 0;
+    final noseAlaL = parameters['nose_ala_left'] ?? 0;
+    final noseAlaR = parameters['nose_ala_right'] ?? 0;
+    final noseBridge = parameters['nose_bridge'] ?? 0;
     return head.abs() > 1e-6 ||
         brow.abs() > 1e-6 ||
         browL.abs() > 1e-6 ||
@@ -113,6 +119,10 @@ class FaceFilterPipeline {
         eyeDR.abs() > 1e-6 ||
         nose.abs() > 1e-6 ||
         noseLift.abs() > 1e-6 ||
+        noseAla.abs() > 1e-6 ||
+        noseAlaL.abs() > 1e-6 ||
+        noseAlaR.abs() > 1e-6 ||
+        noseBridge.abs() > 1e-6 ||
         hairline.abs() > 1e-6 ||
         jaw > 0 ||
         jawAngle.abs() > 1e-6 ||
