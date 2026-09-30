@@ -28,6 +28,7 @@ abstract final class BeautyEngineLabels {
     'nose_size': 'Tamanho',
     'nose_lift': 'Elevação',
     'nose_ala': 'Largura',
+    'lip_size': 'Tamanho',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',
@@ -92,6 +93,7 @@ abstract final class BeautyEngineLabels {
   static const sectionSobrancelha = 'Sobrancelha';
   static const sectionOlhos = 'Olhos';
   static const sectionNariz = 'Nariz';
+  static const sectionLabios = 'Lábios';
   static const sectionSkin = 'Pele';
   static const sectionBody = 'Corpo';
 

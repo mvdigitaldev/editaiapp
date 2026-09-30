@@ -99,6 +99,12 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       parameterKeys: FaceFilterPipeline.noseParameterKeys,
     ),
     BeautyAdjustmentCategoryDef(
+      category: BeautyAdjustmentCategory.boca,
+      icon: Icons.sentiment_satisfied_alt_outlined,
+      label: BeautyEngineLabels.sectionLabios,
+      parameterKeys: FaceFilterPipeline.lipParameterKeys,
+    ),
+    BeautyAdjustmentCategoryDef(
       category: BeautyAdjustmentCategory.corpo,
       icon: Icons.accessibility_new_outlined,
       label: BeautyEngineLabels.sectionBody,
@@ -125,6 +131,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       for (final key in FaceFilterPipeline.eyebrowParameterKeys) key: 0,
       for (final key in FaceFilterPipeline.eyeParameterKeys) key: 0,
       for (final key in FaceFilterPipeline.noseParameterKeys) key: 0,
+      for (final key in FaceFilterPipeline.lipParameterKeys) key: 0,
       for (final key in FaceFilterPipeline.faceWarpParameterKeys) key: 0,
       for (final key in BodyFilterPipeline.bodyWarpParameterKeys) key: 0,
       for (final key in SkinFilterPipeline.skinParameterKeys) key: 0,
@@ -502,7 +509,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'nose_size' ||
         key == 'nose_lift' ||
         key == 'nose_ala' ||
-        key == 'nose_bridge') {
+        key == 'nose_bridge' ||
+        key == 'lip_size') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

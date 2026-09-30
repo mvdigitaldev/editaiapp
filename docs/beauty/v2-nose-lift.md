@@ -76,7 +76,7 @@ Hull de `V2RegionCatalog.nose`, dilatado `0.040 × faceWidth`. Olhos, boca e sob
 ## 4. Pipeline e menu
 
 ```
-… → nose_size → nose_lift → nose_ala → nose_bridge → jaw → …
+… → nose_size → nose_lift → nose_ala → nose_bridge → lip_size → jaw → …
 ```
 
 Tab **Nariz**, ícone Elevação à direita de Tamanho. Preview e export partilham `applyFaceWarpChain`.

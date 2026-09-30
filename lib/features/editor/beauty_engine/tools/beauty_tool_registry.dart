@@ -10,6 +10,7 @@ abstract final class BeautyToolRegistry {
     ..._eyebrow,
     ..._eye,
     ..._nose,
+    ..._lip,
     ..._face,
     ..._skin,
     ..._color,
@@ -112,6 +113,15 @@ abstract final class BeautyToolRegistry {
     ),
     ToolDescriptor(
       key: 'nose_bridge',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
+  ];
+
+  static const _lip = [
+    ToolDescriptor(
+      key: 'lip_size',
       category: ToolCategory.face,
       pipelineStage: ToolPipelineStage.warp,
       requiresFace: true,

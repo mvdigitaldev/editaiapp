@@ -66,6 +66,7 @@ void main() {
         ],
       );
       expect(FaceFilterPipeline.noseParameterKeys, ['nose_size', 'nose_lift', 'nose_ala', 'nose_bridge']);
+      expect(FaceFilterPipeline.lipParameterKeys, ['lip_size']);
       expect(pipeline.hasActiveWarp({'head': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'head': -0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'head': 0}), isFalse);
@@ -125,6 +126,9 @@ void main() {
       expect(pipeline.hasActiveWarp({'nose_bridge': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'nose_bridge': -0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'nose_bridge': 0}), isFalse);
+      expect(pipeline.hasActiveWarp({'lip_size': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'lip_size': -0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'lip_size': 0}), isFalse);
       expect(pipeline.hasActiveWarp({'hairline': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'hairline': -0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'hairline': 0}), isFalse);

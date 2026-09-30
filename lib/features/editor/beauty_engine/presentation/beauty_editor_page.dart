@@ -687,6 +687,9 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     if ((_params['nose_bridge'] ?? 0).abs() > 0.001) {
       return 'nose_bridge';
     }
+    if ((_params['lip_size'] ?? 0).abs() > 0.001) {
+      return 'lip_size';
+    }
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
       if ((_params[key] ?? 0).abs() > 0.001) {
         return key;
@@ -727,6 +730,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'nose_lift',
       'nose_ala',
       'nose_bridge',
+      'lip_size',
       'hairline',
       'jaw',
       'jaw_angle',

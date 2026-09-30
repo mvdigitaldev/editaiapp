@@ -68,6 +68,7 @@ void main() {
         BeautyAdjustmentCategory.sobrancelha,
         BeautyAdjustmentCategory.olhos,
         BeautyAdjustmentCategory.nariz,
+        BeautyAdjustmentCategory.boca,
         BeautyAdjustmentCategory.corpo,
         BeautyAdjustmentCategory.pele,
         BeautyAdjustmentCategory.cor,
@@ -376,6 +377,26 @@ void main() {
     );
     expect(find.text('Geral'), findsNothing);
 
+    await tester.tap(find.text('Lábios'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-lip_size')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Tamanho',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+    expect(find.text('Geral'), findsNothing);
+
     await tester.tap(find.text('Pele'));
     await tester.pumpAndSettle();
     expect(
@@ -439,6 +460,9 @@ void main() {
       expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
     }
     for (final key in FaceFilterPipeline.noseParameterKeys) {
+      expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
+    }
+    for (final key in FaceFilterPipeline.lipParameterKeys) {
       expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
     }
     expect(BeautyToolIcons.hasGlyph('eyebrows'), isTrue);
@@ -509,6 +533,10 @@ void main() {
     expect(params.containsKey('nose_bridge_left'), isFalse);
     expect(params.containsKey('nose_bridge_right'), isFalse);
     expect(params.containsKey('nose_bridge_side'), isFalse);
+    expect(params.containsKey('lip_size'), isTrue);
+    expect(params.containsKey('lip_size_left'), isFalse);
+    expect(params.containsKey('lip_size_right'), isFalse);
+    expect(params.containsKey('lip_size_side'), isFalse);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);
