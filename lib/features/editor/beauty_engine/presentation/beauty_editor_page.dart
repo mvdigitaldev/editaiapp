@@ -676,6 +676,9 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     if ((_params['nose_size'] ?? 0).abs() > 0.001) {
       return 'nose_size';
     }
+    if ((_params['nose_lift'] ?? 0).abs() > 0.001) {
+      return 'nose_lift';
+    }
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
       if ((_params[key] ?? 0).abs() > 0.001) {
         return key;
@@ -713,6 +716,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'eye_distance',
       'eye_puffy',
       'nose_size',
+      'nose_lift',
       'hairline',
       'jaw',
       'jaw_angle',
@@ -737,7 +741,8 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       if (key == 'chin' ||
           key == 'hairline' ||
           key == 'head' ||
-          key == 'nose_size') {
+          key == 'nose_size' ||
+          key == 'nose_lift') {
         if ((params[key] ?? 0).abs() > 0) {
           return true;
         }

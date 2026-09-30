@@ -60,6 +60,7 @@ import '../warp/v2/eye_height/eye_height_field.dart';
 import '../warp/v2/eye_distance/eye_distance_field.dart';
 import '../warp/v2/eye_length/eye_length_field.dart';
 import '../warp/v2/nose_size/nose_size_field.dart';
+import '../warp/v2/nose_lift/nose_lift_field.dart';
 import '../warp/v2/eye_size/eye_size_field.dart';
 import '../warp/v2/eye_width/eye_width_field.dart';
 import '../warp/v2/eyebrow_width/eyebrow_width_field.dart';
@@ -127,6 +128,7 @@ class BeautyEngineController {
   final EyeLengthFieldRuntime _eyeLengthRuntime = EyeLengthFieldRuntime();
   final EyeDistanceFieldRuntime _eyeDistanceRuntime = EyeDistanceFieldRuntime();
   final NoseSizeFieldRuntime _noseSizeRuntime = NoseSizeFieldRuntime();
+  final NoseLiftFieldRuntime _noseLiftRuntime = NoseLiftFieldRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
   final JawAngleFieldRuntime _jawAngleRuntime = JawAngleFieldRuntime();
   final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
@@ -1344,6 +1346,40 @@ class BeautyEngineController {
     return warped.rgba;
   }
 
+  /// NoseLiftField + remap bilinear. Não é Tamanho nem Tip. t=0 não chama o renderer.
+  Uint8List applyNoseLiftWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['nose_lift'] ?? 0).clamp(-1.0, 1.0);
+    if (face == null ||
+        t.abs() <= 1e-6 ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = NoseLiftField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      computeMetrics: false,
+      runtime: _noseLiftRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_nose_lift';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
   /// Olheiras não deforma o olho. O slider clareia a pele escura por baixo,
   /// no passe de pele. Este método fica para o teste da cadeia isolada.
   Uint8List applyEyePuffyWarp({
@@ -1647,6 +1683,7 @@ class BeautyEngineController {
       ],
     ),
     (backend: 'v2_nose_size', parameters: ['nose_size']),
+    (backend: 'v2_nose_lift', parameters: ['nose_lift']),
     (backend: 'v2_jaw', parameters: ['jaw']),
     (
       backend: 'v2_jaw_angle',
@@ -1862,6 +1899,14 @@ class BeautyEngineController {
           t: general,
           computeMetrics: false,
           runtime: _noseSizeRuntime,
+        ).field;
+      case 'v2_nose_lift':
+        return NoseLiftField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          computeMetrics: false,
+          runtime: _noseLiftRuntime,
         ).field;
       case 'v2_jaw':
         final t = general.clamp(0.0, 1.0);

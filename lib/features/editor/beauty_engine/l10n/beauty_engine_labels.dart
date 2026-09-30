@@ -26,6 +26,7 @@ abstract final class BeautyEngineLabels {
     'eye_length': 'Comprimento',
     'eye_puffy': 'Olheiras',
     'nose_size': 'Tamanho',
+    'nose_lift': 'Elevação',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',

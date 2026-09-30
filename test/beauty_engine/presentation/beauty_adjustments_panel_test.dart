@@ -316,6 +316,26 @@ void main() {
     );
     expect(find.text('Geral'), findsNothing);
 
+    await tester.tap(find.text('Elevação'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-nose_lift')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Elevação',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+    expect(find.text('Geral'), findsNothing);
+
     await tester.tap(find.text('Pele'));
     await tester.pumpAndSettle();
     expect(
@@ -437,6 +457,10 @@ void main() {
     expect(params.containsKey('nose_size_left'), isFalse);
     expect(params.containsKey('nose_size_right'), isFalse);
     expect(params.containsKey('nose_size_side'), isFalse);
+    expect(params.containsKey('nose_lift'), isTrue);
+    expect(params.containsKey('nose_lift_left'), isFalse);
+    expect(params.containsKey('nose_lift_right'), isFalse);
+    expect(params.containsKey('nose_lift_side'), isFalse);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);
