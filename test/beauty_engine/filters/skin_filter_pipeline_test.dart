@@ -27,6 +27,54 @@ void main() {
         pipeline.hasActiveSkin(const {'skin_smooth': 0.2}),
         isTrue,
       );
+      expect(pipeline.hasActiveSkin(const {'eye_puffy': 0.8}), isTrue);
+      expect(pipeline.hasActiveSkin(const {'eye_puffy': 0}), isFalse);
+    });
+
+    test('olheiras do tab Olhos entra no mesmo clareamento da pele', () {
+      final both = pipeline.darkCircleSides(const {'eye_puffy': 0.9});
+      expect(both.left, 0.9);
+      expect(both.right, 0.9);
+
+      final fromLegacy = pipeline.darkCircleSides(const {
+        'eye_puffy_left': 0.6,
+        'eye_puffy_right': 0,
+      });
+      expect(fromLegacy.left, 0.6);
+      expect(fromLegacy.right, 0.6);
+
+      final withSkin = pipeline.darkCircleSides(const {
+        'remove_dark_circles': 0.4,
+        'eye_puffy': 0.2,
+      });
+      expect(withSkin.left, 0.4);
+      expect(withSkin.right, 0.4);
+    });
+
+    test('olheira é um crescente debaixo dos dois olhos e poupa a íris', () {
+      final mask = SkinMaskUtils.build(_eyesFace(), imageSize);
+      expect(mask.underEyeEllipses.length, 2);
+      expect(mask.eyeEllipses.length, 2);
+
+      for (final eye in mask.eyeEllipses) {
+        expect(
+          SkinMaskUtils.underEyeWeight(eye.center.dx, eye.center.dy, mask),
+          lessThan(0.05),
+          reason: 'íris em ${eye.center}',
+        );
+        final insideLid = eye.center.dy + eye.radiusY * 0.85;
+        expect(
+          SkinMaskUtils.underEyeWeight(eye.center.dx, insideLid, mask),
+          lessThan(0.08),
+          reason: 'dentro do olho em (${eye.center.dx}, $insideLid)',
+        );
+        final trough = eye.center.dy + eye.radiusY * 1.55;
+        expect(
+          SkinMaskUtils.underEyeWeight(eye.center.dx, trough, mask),
+          greaterThan(0.40),
+          reason: 'sulco em (${eye.center.dx}, $trough)',
+        );
+      }
     });
 
     test('skin mask protects eye regions', () {
@@ -111,6 +159,50 @@ void main() {
       renderer.dispose();
     });
   });
+}
+
+FaceMeshResult _eyesFace() {
+  final landmarks = List<FaceLandmark>.generate(
+    FaceMeshResult.expectedLandmarkCount,
+    (index) => FaceLandmark(
+      index: index,
+      normalized: const Offset(0.5, 0.55),
+      z: 0,
+    ),
+  );
+  void box(Set<int> indices, Rect rect) {
+    final corners = [
+      rect.topLeft,
+      rect.topRight,
+      rect.bottomLeft,
+      rect.bottomRight,
+      rect.center,
+    ];
+    var i = 0;
+    for (final index in indices) {
+      landmarks[index] = FaceLandmark(
+        index: index,
+        normalized: corners[i % corners.length],
+        z: 0,
+      );
+      i++;
+    }
+  }
+
+  box(
+    {33, 7, 163, 144, 145, 153, 154, 155, 133, 246, 161, 160, 159, 158, 157, 173},
+    Rect.fromCenter(center: const Offset(0.38, 0.40), width: 0.10, height: 0.04),
+  );
+  box(
+    {263, 249, 390, 373, 374, 380, 381, 382, 362, 466, 388, 387, 386, 385, 384, 398},
+    Rect.fromCenter(center: const Offset(0.62, 0.40), width: 0.10, height: 0.04),
+  );
+
+  return FaceMeshResult(
+    landmarks: landmarks,
+    boundingBox: const Rect.fromLTWH(40, 40, 120, 180),
+    confidence: 0.95,
+  );
 }
 
 FaceMeshResult _fakeFaceMesh() {

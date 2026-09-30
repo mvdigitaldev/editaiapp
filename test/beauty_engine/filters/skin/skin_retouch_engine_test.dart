@@ -100,6 +100,7 @@ void main() {
     SkinRetouchParams params, {
     Uint8List? weights,
     Uint8List? underEye,
+    Uint8List? cheek,
   }) {
     return SkinRetouchRequest(
       rgba: rgba,
@@ -108,6 +109,7 @@ void main() {
       skinWeights: weights ?? skinWeights(),
       underEyeWeights: underEye ?? Uint8List(pixels),
       params: params,
+      cheekWeights: cheek,
       // O patch representa um recorte de um rosto de ~600px: os raios do
       // filtro são proporcionais ao rosto, não ao tamanho do buffer.
       faceEdgePx: faceEdgePx,
@@ -244,6 +246,67 @@ void main() {
       expect(underEyeAfter, greaterThan(underEyeBefore));
       // Invariante: nunca mais claro que a referência de pele.
       expect(underEyeAfter, lessThanOrEqualTo(cheekAfter * 1.02));
+    });
+
+    test('clareia o sulco mesmo com peso de pele zero, pela bochecha', () {
+      final input = skinPatch(withDarkUnderEye: true);
+      final cheek = Uint8List(pixels);
+      for (var y = 20; y < 40; y++) {
+        for (var x = 0; x < 80; x++) {
+          cheek[y * width + x] = 255;
+        }
+      }
+      final output = SkinRetouchEngine.run(
+        request(
+          input,
+          const SkinRetouchParams(darkCircles: 1),
+          weights: Uint8List(pixels),
+          underEye: underEyeWeights(),
+          cheek: cheek,
+        ),
+      );
+
+      final underEyeBefore = _meanLuma(input, width, height,
+          maxX: 80, minY: 62, maxY: 74);
+      final underEyeAfter = _meanLuma(output, width, height,
+          maxX: 80, minY: 62, maxY: 74);
+      expect(underEyeAfter, greaterThan(underEyeBefore * 1.2));
+    });
+
+    test('pele já no tom da bochecha, dentro da máscara, não vira mancha', () {
+      final input = skinPatch(withDarkUnderEye: true);
+      final wide = Uint8List(pixels);
+      for (var y = 40; y < 76; y++) {
+        for (var x = 0; x < 80; x++) {
+          wide[y * width + x] = 255;
+        }
+      }
+      final cheek = Uint8List(pixels);
+      for (var y = 8; y < 32; y++) {
+        for (var x = 0; x < 80; x++) {
+          cheek[y * width + x] = 255;
+        }
+      }
+      final output = SkinRetouchEngine.run(
+        request(
+          input,
+          const SkinRetouchParams(darkCircles: 1),
+          underEye: wide,
+          cheek: cheek,
+        ),
+      );
+
+      final plainBefore =
+          _meanLuma(input, width, height, maxX: 80, minY: 42, maxY: 52);
+      final plainAfter =
+          _meanLuma(output, width, height, maxX: 80, minY: 42, maxY: 52);
+      final darkBefore =
+          _meanLuma(input, width, height, maxX: 80, minY: 64, maxY: 72);
+      final darkAfter =
+          _meanLuma(output, width, height, maxX: 80, minY: 64, maxY: 72);
+
+      expect((plainAfter - plainBefore).abs(), lessThan(plainBefore * 0.04));
+      expect(darkAfter, greaterThan(darkBefore * 1.08));
     });
 
     test('não altera pele fora da região de olheira', () {

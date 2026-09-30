@@ -112,10 +112,12 @@ abstract final class DerivedMaskBuilder {
 
         final skinW = skinWeights[p] / 255.0;
 
-        // --- Olheiras v2: landmark ∩ pele ---
+        // Olheiras: o crescente geométrico. A protecção do olho zera o peso
+        // de pele no sulco, por isso esta máscara não se multiplica por ela.
+        // A abertura do olho já sai a zero em underEyeWeight.
         final under = SkinMaskUtils.underEyeWeight(nx, ny, geometric);
-        if (under > 0 && skinW > 0.15) {
-          underEye[p] = (under * skinW * 255).round().clamp(0, 255);
+        if (under > 0.02) {
+          underEye[p] = (under * 255).round().clamp(0, 255);
         }
 
         // --- Mandíbula / contorno ---

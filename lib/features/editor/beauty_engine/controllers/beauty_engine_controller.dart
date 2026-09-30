@@ -57,7 +57,10 @@ import '../warp/v2/chin/chin_field.dart';
 import '../warp/v2/eyebrow_height/eyebrow_height_field.dart';
 import '../warp/v2/eyebrow_end/eyebrow_end_field.dart';
 import '../warp/v2/eye_height/eye_height_field.dart';
+import '../warp/v2/eye_distance/eye_distance_field.dart';
+import '../warp/v2/eye_length/eye_length_field.dart';
 import '../warp/v2/eye_size/eye_size_field.dart';
+import '../warp/v2/eye_width/eye_width_field.dart';
 import '../warp/v2/eyebrow_width/eyebrow_width_field.dart';
 import '../warp/v2/hairline/hairline_field.dart';
 import '../warp/v2/head/head_field.dart';
@@ -119,6 +122,9 @@ class BeautyEngineController {
   final EyebrowEndFieldRuntime _eyebrowEndRuntime = EyebrowEndFieldRuntime();
   final EyeSizeFieldRuntime _eyeSizeRuntime = EyeSizeFieldRuntime();
   final EyeHeightFieldRuntime _eyeHeightRuntime = EyeHeightFieldRuntime();
+  final EyeWidthFieldRuntime _eyeWidthRuntime = EyeWidthFieldRuntime();
+  final EyeLengthFieldRuntime _eyeLengthRuntime = EyeLengthFieldRuntime();
+  final EyeDistanceFieldRuntime _eyeDistanceRuntime = EyeDistanceFieldRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
   final JawAngleFieldRuntime _jawAngleRuntime = JawAngleFieldRuntime();
   final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
@@ -1187,6 +1193,133 @@ class BeautyEngineController {
     return warped.rgba;
   }
 
+  /// EyeWidthField + remap bilinear. Não é a Largura da sobrancelha. t=0 não chama o renderer.
+  Uint8List applyEyeWidthWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['eye_width'] ?? 0).clamp(-1.0, 1.0);
+    final tPhotoLeft = (parameters['eye_width_left'] ?? t).clamp(-1.0, 1.0);
+    final tPhotoRight = (parameters['eye_width_right'] ?? t).clamp(-1.0, 1.0);
+    if (face == null ||
+        (tPhotoLeft.abs() <= 1e-6 && tPhotoRight.abs() <= 1e-6) ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = EyeWidthField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      tPhotoLeft: tPhotoLeft,
+      tPhotoRight: tPhotoRight,
+      computeMetrics: false,
+      runtime: _eyeWidthRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_eye_width';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
+  /// EyeLengthField + remap bilinear. Não é a Largura. t=0 não chama o renderer.
+  Uint8List applyEyeLengthWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['eye_length'] ?? 0).clamp(-1.0, 1.0);
+    final tPhotoLeft = (parameters['eye_length_left'] ?? t).clamp(-1.0, 1.0);
+    final tPhotoRight = (parameters['eye_length_right'] ?? t).clamp(-1.0, 1.0);
+    if (face == null ||
+        (tPhotoLeft.abs() <= 1e-6 && tPhotoRight.abs() <= 1e-6) ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = EyeLengthField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      tPhotoLeft: tPhotoLeft,
+      tPhotoRight: tPhotoRight,
+      computeMetrics: false,
+      runtime: _eyeLengthRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_eye_length';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
+  /// EyeDistanceField + remap bilinear. Não é o Comprimento. t=0 não chama o renderer.
+  Uint8List applyEyeDistanceWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['eye_distance'] ?? 0).clamp(-1.0, 1.0);
+    final tPhotoLeft = (parameters['eye_distance_left'] ?? t).clamp(-1.0, 1.0);
+    final tPhotoRight =
+        (parameters['eye_distance_right'] ?? t).clamp(-1.0, 1.0);
+    if (face == null ||
+        (tPhotoLeft.abs() <= 1e-6 && tPhotoRight.abs() <= 1e-6) ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = EyeDistanceField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      tPhotoLeft: tPhotoLeft,
+      tPhotoRight: tPhotoRight,
+      computeMetrics: false,
+      runtime: _eyeDistanceRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_eye_distance';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
+  /// Olheiras não deforma o olho. O slider clareia a pele escura por baixo,
+  /// no passe de pele. Este método fica para o teste da cadeia isolada.
+  Uint8List applyEyePuffyWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    return sourceRgba;
+  }
+
   /// Única pipeline facial: JawField + remap bilinear. Sem ROI/Mesh/MLS.
   Uint8List applyJawWarp({
     required Uint8List sourceRgba,
@@ -1453,6 +1586,30 @@ class BeautyEngineController {
         'eye_height_right',
       ],
     ),
+    (
+      backend: 'v2_eye_width',
+      parameters: [
+        'eye_width',
+        'eye_width_left',
+        'eye_width_right',
+      ],
+    ),
+    (
+      backend: 'v2_eye_length',
+      parameters: [
+        'eye_length',
+        'eye_length_left',
+        'eye_length_right',
+      ],
+    ),
+    (
+      backend: 'v2_eye_distance',
+      parameters: [
+        'eye_distance',
+        'eye_distance_left',
+        'eye_distance_right',
+      ],
+    ),
     (backend: 'v2_jaw', parameters: ['jaw']),
     (
       backend: 'v2_jaw_angle',
@@ -1630,6 +1787,36 @@ class BeautyEngineController {
           tPhotoRight: right,
           computeMetrics: false,
           runtime: _eyeHeightRuntime,
+        ).field;
+      case 'v2_eye_width':
+        return EyeWidthField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          tPhotoLeft: left,
+          tPhotoRight: right,
+          computeMetrics: false,
+          runtime: _eyeWidthRuntime,
+        ).field;
+      case 'v2_eye_length':
+        return EyeLengthField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          tPhotoLeft: left,
+          tPhotoRight: right,
+          computeMetrics: false,
+          runtime: _eyeLengthRuntime,
+        ).field;
+      case 'v2_eye_distance':
+        return EyeDistanceField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          tPhotoLeft: left,
+          tPhotoRight: right,
+          computeMetrics: false,
+          runtime: _eyeDistanceRuntime,
         ).field;
       case 'v2_jaw':
         final t = general.clamp(0.0, 1.0);

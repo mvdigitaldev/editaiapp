@@ -47,6 +47,12 @@ class PassSkinEngine implements RenderPass {
     final acne = _f(context, 'remove_acne');
     final wrinkles = _f(context, 'remove_wrinkles');
     final darkCircles = _f(context, 'remove_dark_circles');
+    final darkLeft = context.uniforms.containsKey('eye_dark_left')
+        ? _f(context, 'eye_dark_left')
+        : darkCircles;
+    final darkRight = context.uniforms.containsKey('eye_dark_right')
+        ? _f(context, 'eye_dark_right')
+        : darkCircles;
     final shine = _f(context, 'skin_shine');
     final teeth = _f(context, 'teeth_whitening');
     final blush = _f(context, 'blush');
@@ -59,7 +65,7 @@ class PassSkinEngine implements RenderPass {
       smooth: smooth,
       acne: acne,
       wrinkles: wrinkles,
-      darkCircles: darkCircles,
+      darkCircles: math.max(darkCircles, math.max(darkLeft, darkRight)),
       shine: shine,
     );
 
@@ -77,9 +83,8 @@ class PassSkinEngine implements RenderPass {
 
     final width = source.width;
     final height = source.height;
-    final mapping =
-        (context.uniforms['tileMapping'] as SkinTileMapping?) ??
-            const SkinTileMapping();
+    final mapping = (context.uniforms['tileMapping'] as SkinTileMapping?) ??
+        const SkinTileMapping();
     final faceWarp = context.uniforms['faceWarp'] as WarpField?;
     var output = Uint8List.fromList(source.rgba);
 
@@ -95,10 +100,10 @@ class PassSkinEngine implements RenderPass {
         width: width,
         height: height,
         geometric: mask,
-        segmentation: (context.uniforms['faceParsing'] as FaceParsingResult?) ==
-                null
-            ? context.uniforms['faceParts'] as FacePartsSegmentation?
-            : null,
+        segmentation:
+            (context.uniforms['faceParsing'] as FaceParsingResult?) == null
+                ? context.uniforms['faceParts'] as FacePartsSegmentation?
+                : null,
         parsing: context.uniforms['faceParsing'] as FaceParsingResult?,
         mapping: mapping,
       );
@@ -130,6 +135,8 @@ class PassSkinEngine implements RenderPass {
         skinWeights: skinMap.weights,
         derived: derived,
         nativeSkinBackend: nativeSkinBackend,
+        darkLeft: darkLeft,
+        darkRight: darkRight,
       );
     }
 
@@ -171,13 +178,33 @@ class PassSkinEngine implements RenderPass {
     required Uint8List skinWeights,
     required DerivedMaskBundle derived,
     NativeSkinBackend? nativeSkinBackend,
+    required double darkLeft,
+    required double darkRight,
   }) async {
     if (skinWeights.isEmpty && derived.underEye.every((v) => v == 0)) {
       return rgba;
     }
 
     final resolved = mapping.resolve(width, height);
-    final underEye = params.darkCircles > 0 ? derived.underEye : Uint8List(0);
+    final cheek = params.darkCircles > 0
+        ? _cheekWeights(
+            width: width,
+            height: height,
+            mask: mask,
+            mapping: resolved,
+          )
+        : null;
+    final underEye = params.darkCircles > 0
+        ? _underEyeForSides(
+            source: derived.underEye,
+            width: width,
+            height: height,
+            mask: mask,
+            mapping: resolved,
+            left: darkLeft,
+            right: darkRight,
+          )
+        : Uint8List(0);
     final shineMask = params.shine > 0 ? derived.shine : null;
 
     final request = SkinRetouchRequest(
@@ -189,13 +216,18 @@ class PassSkinEngine implements RenderPass {
       params: params,
       shineWeights: shineMask,
       shineKnee: derived.tone.isValid ? derived.tone.shineKnee : null,
+      cheekWeights: cheek,
       faceEdgePx: math.max(
         mask.faceBounds.width * resolved.fullWidth,
         mask.faceBounds.height * resolved.fullHeight,
       ),
     );
 
-    if (nativeSkinBackend != null) {
+    // O shader nativo ainda multiplica a olheira pelo peso de pele, e esse
+    // peso é zero no sulco (a protecção do olho engole-o). O passe Dart
+    // clareia a máscara e usa a bochecha como referência. Hot restart
+    // apanha este caminho sem recompilar o Metal/GLES.
+    if (nativeSkinBackend != null && params.darkCircles <= 0) {
       final native = await nativeSkinBackend.skinRetouch(request);
       if (native != null && native.length == rgba.length) {
         return native;
@@ -206,6 +238,66 @@ class PassSkinEngine implements RenderPass {
       return compute(SkinRetouchEngine.run, request);
     }
     return SkinRetouchEngine.run(request);
+  }
+
+  static Uint8List _cheekWeights({
+    required int width,
+    required int height,
+    required SkinProcessingMask mask,
+    required ResolvedSkinTileMapping mapping,
+  }) {
+    final out = Uint8List(width * height);
+    if (mask.cheekEllipses.isEmpty) return out;
+    for (var y = 0; y < height; y++) {
+      final ny = mapping.normalizedY(y);
+      for (var x = 0; x < width; x++) {
+        final w = SkinMaskUtils.cheekSampleWeight(
+          mapping.normalizedX(x),
+          ny,
+          mask,
+        );
+        if (w <= 0) continue;
+        out[y * width + x] = (w * 255).round().clamp(0, 255);
+      }
+    }
+    return out;
+  }
+
+  /// A máscara de olheira cobre os dois olhos. Os dois recebem a mesma
+  /// intensidade: Olheiras é um slider só.
+  static Uint8List _underEyeForSides({
+    required Uint8List source,
+    required int width,
+    required int height,
+    required SkinProcessingMask mask,
+    required ResolvedSkinTileMapping mapping,
+    required double left,
+    required double right,
+  }) {
+    final peak = math.max(left, right);
+    if (source.isEmpty ||
+        peak <= 1e-6 ||
+        (left - right).abs() <= 1e-6 ||
+        mask.underEyeEllipses.length < 2) {
+      return source;
+    }
+    final a = mask.underEyeEllipses[0].center.dx;
+    final b = mask.underEyeEllipses[1].center.dx;
+    final mid = (a + b) / 2;
+    final leftScale = left / peak;
+    final rightScale = right / peak;
+    final out = Uint8List.fromList(source);
+    for (var y = 0; y < height; y++) {
+      for (var x = 0; x < width; x++) {
+        final scale = mapping.normalizedX(x) < mid ? leftScale : rightScale;
+        if (scale >= 0.999) {
+          continue;
+        }
+        final p = y * width + x;
+        out[p] = (out[p] * scale).round().clamp(0, 255);
+      }
+    }
+    return out;
   }
 
   static double _f(RenderPassContext context, String key) {
@@ -306,106 +398,105 @@ class PassSkinEngine implements RenderPass {
           b = rgbOut[2].round();
         }
 
-      if (teeth > 0 && derived != null) {
-        final weight = derived.teeth[p] / 255.0;
-        if (weight > 0) {
-          final t = teeth * 0.28 * weight;
-          r = (r + (255 - r) * t).round();
-          g = (g + (255 - g) * t).round();
-          b = (b + (255 - b) * t).round();
+        if (teeth > 0 && derived != null) {
+          final weight = derived.teeth[p] / 255.0;
+          if (weight > 0) {
+            final t = teeth * 0.28 * weight;
+            r = (r + (255 - r) * t).round();
+            g = (g + (255 - g) * t).round();
+            b = (b + (255 - b) * t).round();
+          }
         }
-      }
 
-      if (irisEnhance > 0 && derived != null) {
-        final weight = derived.iris[p] / 255.0;
-        if (weight > 0) {
-          final t = irisEnhance * 0.22 * weight;
-          r = (r + (255 - r) * t * 0.35).round().clamp(0, 255);
-          g = (g + (255 - g) * t * 0.55).round().clamp(0, 255);
-          b = (b + (255 - b) * t).round().clamp(0, 255);
+        if (irisEnhance > 0 && derived != null) {
+          final weight = derived.iris[p] / 255.0;
+          if (weight > 0) {
+            final t = irisEnhance * 0.22 * weight;
+            r = (r + (255 - r) * t * 0.35).round().clamp(0, 255);
+            g = (g + (255 - g) * t * 0.55).round().clamp(0, 255);
+            b = (b + (255 - b) * t).round().clamp(0, 255);
+          }
         }
-      }
 
-      if (blush > 0) {
-        final weight = SkinMaskUtils.blushWeight(
-          nx,
-          ny,
-          mask,
-          skinWeight: skinW,
-        );
-        if (weight > 0) {
-          MakeupBlendEngine.applyBlush(
-            r: r,
-            g: g,
-            b: b,
-            amount: blush,
-            weight: weight,
-            out: rgbOut,
-          );
-          r = rgbOut[0].round();
-          g = rgbOut[1].round();
-          b = rgbOut[2].round();
-        }
-      }
-
-      if (contour > 0) {
-        final jaw =
-            derived != null ? derived.jawBand[p] / 255.0 : 0.0;
-        final weight = jaw > 0
-            ? jaw
-            : SkinMaskUtils.softRegionsWeight(
-                nx,
-                ny,
-                mask.contourRegions,
-                edgeFeather: 0.03,
-              );
-        if (weight > 0) {
-          final c = contour * 0.12 * weight;
-          r = (r * (1 - c)).round();
-          g = (g * (1 - c)).round();
-          b = (b * (1 - c)).round();
-        }
-      }
-
-      if (eyebrows > 0) {
-        var weight = derived != null ? derived.eyebrows[p] / 255.0 : 0.0;
-        if (weight <= 0) {
-          weight = SkinMaskUtils.softRegionsWeight(
+        if (blush > 0) {
+          final weight = SkinMaskUtils.blushWeight(
             nx,
             ny,
-            mask.eyebrowRegions,
-            edgeFeather: 0.025,
+            mask,
+            skinWeight: skinW,
           );
+          if (weight > 0) {
+            MakeupBlendEngine.applyBlush(
+              r: r,
+              g: g,
+              b: b,
+              amount: blush,
+              weight: weight,
+              out: rgbOut,
+            );
+            r = rgbOut[0].round();
+            g = rgbOut[1].round();
+            b = rgbOut[2].round();
+          }
         }
-        if (weight > 0) {
-          MakeupBlendEngine.applyEyebrowDarken(
-            r: r,
-            g: g,
-            b: b,
-            amount: eyebrows,
-            weight: weight,
-            out: rgbOut,
-          );
-          r = rgbOut[0].round();
-          g = rgbOut[1].round();
-          b = rgbOut[2].round();
-        }
-      }
 
-      if (eyelashes > 0) {
-        final weight = SkinMaskUtils.softRegionsWeight(
-          nx,
-          ny,
-          mask.eyelashRegions,
-          edgeFeather: 0.02,
-        );
-        if (weight > 0) {
-          final e = eyelashes * 0.15 * weight;
-          r = (r * (1 - e)).round();
-          g = (g * (1 - e)).round();
-          b = (b * (1 - e)).round();
+        if (contour > 0) {
+          final jaw = derived != null ? derived.jawBand[p] / 255.0 : 0.0;
+          final weight = jaw > 0
+              ? jaw
+              : SkinMaskUtils.softRegionsWeight(
+                  nx,
+                  ny,
+                  mask.contourRegions,
+                  edgeFeather: 0.03,
+                );
+          if (weight > 0) {
+            final c = contour * 0.12 * weight;
+            r = (r * (1 - c)).round();
+            g = (g * (1 - c)).round();
+            b = (b * (1 - c)).round();
+          }
         }
-      }
+
+        if (eyebrows > 0) {
+          var weight = derived != null ? derived.eyebrows[p] / 255.0 : 0.0;
+          if (weight <= 0) {
+            weight = SkinMaskUtils.softRegionsWeight(
+              nx,
+              ny,
+              mask.eyebrowRegions,
+              edgeFeather: 0.025,
+            );
+          }
+          if (weight > 0) {
+            MakeupBlendEngine.applyEyebrowDarken(
+              r: r,
+              g: g,
+              b: b,
+              amount: eyebrows,
+              weight: weight,
+              out: rgbOut,
+            );
+            r = rgbOut[0].round();
+            g = rgbOut[1].round();
+            b = rgbOut[2].round();
+          }
+        }
+
+        if (eyelashes > 0) {
+          final weight = SkinMaskUtils.softRegionsWeight(
+            nx,
+            ny,
+            mask.eyelashRegions,
+            edgeFeather: 0.02,
+          );
+          if (weight > 0) {
+            final e = eyelashes * 0.15 * weight;
+            r = (r * (1 - e)).round();
+            g = (g * (1 - e)).round();
+            b = (b * (1 - e)).round();
+          }
+        }
 
         output[i] = r.clamp(0, 255);
         output[i + 1] = g.clamp(0, 255);

@@ -653,6 +653,26 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         (_params['eye_height_right'] ?? 0).abs() > 0.001) {
       return 'eye_height';
     }
+    if ((_params['eye_width'] ?? 0).abs() > 0.001 ||
+        (_params['eye_width_left'] ?? 0).abs() > 0.001 ||
+        (_params['eye_width_right'] ?? 0).abs() > 0.001) {
+      return 'eye_width';
+    }
+    if ((_params['eye_length'] ?? 0).abs() > 0.001 ||
+        (_params['eye_length_left'] ?? 0).abs() > 0.001 ||
+        (_params['eye_length_right'] ?? 0).abs() > 0.001) {
+      return 'eye_length';
+    }
+    if ((_params['eye_distance'] ?? 0).abs() > 0.001 ||
+        (_params['eye_distance_left'] ?? 0).abs() > 0.001 ||
+        (_params['eye_distance_right'] ?? 0).abs() > 0.001) {
+      return 'eye_distance';
+    }
+    if ((_params['eye_puffy'] ?? 0) > 0.001 ||
+        (_params['eye_puffy_left'] ?? 0) > 0.001 ||
+        (_params['eye_puffy_right'] ?? 0) > 0.001) {
+      return 'eye_puffy';
+    }
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
       if ((_params[key] ?? 0).abs() > 0.001) {
         return key;
@@ -685,6 +705,10 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'eyebrow_end',
       'eye_size',
       'eye_height',
+      'eye_width',
+      'eye_length',
+      'eye_distance',
+      'eye_puffy',
       'hairline',
       'jaw',
       'jaw_angle',
@@ -756,6 +780,38 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         if ((params[key] ?? 0).abs() > 0 ||
             (params['eye_height_left'] ?? 0).abs() > 0 ||
             (params['eye_height_right'] ?? 0).abs() > 0) {
+          return true;
+        }
+        continue;
+      }
+      if (key == 'eye_width') {
+        if ((params[key] ?? 0).abs() > 0 ||
+            (params['eye_width_left'] ?? 0).abs() > 0 ||
+            (params['eye_width_right'] ?? 0).abs() > 0) {
+          return true;
+        }
+        continue;
+      }
+      if (key == 'eye_length') {
+        if ((params[key] ?? 0).abs() > 0 ||
+            (params['eye_length_left'] ?? 0).abs() > 0 ||
+            (params['eye_length_right'] ?? 0).abs() > 0) {
+          return true;
+        }
+        continue;
+      }
+      if (key == 'eye_distance') {
+        if ((params[key] ?? 0).abs() > 0 ||
+            (params['eye_distance_left'] ?? 0).abs() > 0 ||
+            (params['eye_distance_right'] ?? 0).abs() > 0) {
+          return true;
+        }
+        continue;
+      }
+      if (key == 'eye_puffy') {
+        if ((params[key] ?? 0) > 0 ||
+            (params['eye_puffy_left'] ?? 0) > 0 ||
+            (params['eye_puffy_right'] ?? 0) > 0) {
           return true;
         }
         continue;

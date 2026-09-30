@@ -455,8 +455,6 @@ class SkinRetouchBackend {
         for (p in 0 until pixels) {
             val region = (underEye[p].toInt() and 0xFF) / 255f
             if (region <= 0f) continue
-            val sk = (skin[p].toInt() and 0xFF) / 255f
-            if (sk <= 0f) continue
             val i = p * 4
             linearRgbToOklab(
                 srgbToLinear(output[i].toInt() and 0xFF),
@@ -465,7 +463,7 @@ class SkinRetouchBackend {
                 lab,
             )
             if (lab[0] >= refL) continue
-            val t = (intensity * region * sk).coerceIn(0f, 1f)
+            val t = (intensity * region).coerceIn(0f, 1f)
             oklabToLinearRgb(
                 lab[0] + (refL - lab[0]) * t,
                 lab[1] + (refA - lab[1]) * t * 0.6f,
@@ -996,8 +994,7 @@ class SkinRetouchBackend {
             void main() {
               vec4 srgba = texture(uSrc, vUv);
               float region = texture(uEye, vUv).r;
-              float sk = texture(uSkin, vUv).r;
-              if (region <= 0.0 || sk <= 0.0) { fragColor = srgba; return; }
+              if (region <= 0.0) { fragColor = srgba; return; }
               vec3 lin = vec3(
                 srgb_to_linear(srgba.r),
                 srgb_to_linear(srgba.g),
@@ -1005,7 +1002,7 @@ class SkinRetouchBackend {
               );
               vec3 lab = linear_to_oklab(lin);
               if (lab.x >= uRefL) { fragColor = srgba; return; }
-              float t = clamp(uIntensity * region * sk, 0.0, 1.0);
+              float t = clamp(uIntensity * region, 0.0, 1.0);
               lab.x = lab.x + (uRefL - lab.x) * t;
               lab.y = lab.y + (uRefA - lab.y) * t * 0.6;
               lab.z = lab.z + (uRefB - lab.z) * t * 0.6;

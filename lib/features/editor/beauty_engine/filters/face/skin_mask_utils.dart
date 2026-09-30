@@ -17,6 +17,7 @@ class SkinProcessingMask {
     required this.cheekEllipses,
     required this.underEyeRegions,
     required this.underEyeEllipses,
+    this.eyeEllipses = const [],
     required this.eyebrowRegions,
     required this.eyelashRegions,
     required this.innerMouthRegions,
@@ -31,6 +32,9 @@ class SkinProcessingMask {
   final List<NormalizedEllipse> cheekEllipses;
   final List<Rect> underEyeRegions;
   final List<NormalizedEllipse> underEyeEllipses;
+
+  /// Abertura do olho. Serve para o crescente da olheira não entrar na íris.
+  final List<NormalizedEllipse> eyeEllipses;
   final List<Rect> eyebrowRegions;
   final List<Rect> eyelashRegions;
   final List<Rect> innerMouthRegions;
@@ -117,9 +121,14 @@ abstract final class SkinMaskUtils {
       padY: 0.010,
     );
 
+    final noseX = leftEyeEllipse != null && rightEyeEllipse != null
+        ? (leftEyeEllipse.center.dx + rightEyeEllipse.center.dx) / 2
+        : 0.5;
     final underEyeEllipses = [
-      if (leftEyeEllipse != null) _underEyeEllipse(leftEyeEllipse),
-      if (rightEyeEllipse != null) _underEyeEllipse(rightEyeEllipse),
+      if (leftEyeEllipse != null)
+        _underEyeEllipse(leftEyeEllipse, noseX: noseX),
+      if (rightEyeEllipse != null)
+        _underEyeEllipse(rightEyeEllipse, noseX: noseX),
     ].where((e) => e.isValid).toList();
 
     final underEyeLeft = _underEyeRegion(leftEye);
@@ -181,6 +190,10 @@ abstract final class SkinMaskUtils {
       ].where((e) => e.isValid).toList(),
       underEyeRegions: [underEyeLeft, underEyeRight].where((r) => !r.isEmpty).toList(),
       underEyeEllipses: underEyeEllipses,
+      eyeEllipses: [
+        if (leftEyeEllipse != null) leftEyeEllipse,
+        if (rightEyeEllipse != null) rightEyeEllipse,
+      ].where((e) => e.isValid).toList(),
       eyebrowRegions: [leftBrow, rightBrow].where((r) => !r.isEmpty).toList(),
       eyelashRegions: [lashLeft, lashRight].where((r) => !r.isEmpty).toList(),
       innerMouthRegions: innerMouth.isEmpty ? const [] : [innerMouth],
@@ -210,11 +223,48 @@ abstract final class SkinMaskUtils {
 
   static double underEyeWeight(double nx, double ny, SkinProcessingMask mask) {
     var weight = 0.0;
-    for (final ellipse in mask.underEyeEllipses) {
-      weight = math.max(weight, ellipse.weight(nx, ny, edgeFeather: 0.055));
+    if (mask.underEyeEllipses.isNotEmpty) {
+      for (final ellipse in mask.underEyeEllipses) {
+        weight = math.max(weight, ellipse.weight(nx, ny, edgeFeather: 0.10));
+      }
+    } else {
+      for (final region in mask.underEyeRegions) {
+        weight = math.max(
+          weight,
+          softRectWeight(nx, ny, region, edgeFeather: 0.045),
+        );
+      }
     }
-    for (final region in mask.underEyeRegions) {
-      weight = math.max(weight, softRectWeight(nx, ny, region, edgeFeather: 0.045));
+    if (weight <= 0) {
+      return 0;
+    }
+    var opening = 0.0;
+    for (final ellipse in mask.eyeEllipses) {
+      opening = math.max(opening, _eyeOpening(nx, ny, ellipse));
+    }
+    if (opening >= 0.999) {
+      return 0;
+    }
+    return weight * (1.0 - opening);
+  }
+
+  /// Abertura do olho, com folga na pálpebra: íris, esclera e linha d'água
+  /// ficam a zero. A olheira começa debaixo da pestana.
+  static double _eyeOpening(double nx, double ny, NormalizedEllipse eye) {
+    if (!eye.isValid) return 0;
+    final dx = (nx - eye.center.dx) / (eye.radiusX * 1.06);
+    final dy = (ny - eye.center.dy) / (eye.radiusY * 1.14);
+    final radial = math.sqrt(dx * dx + dy * dy);
+    if (radial >= 1.0) return 0;
+    if (radial <= 0.82) return 1;
+    return (1.0 - radial) / 0.18;
+  }
+
+  /// Peso da bochecha usado como tom de referência das olheiras.
+  static double cheekSampleWeight(double nx, double ny, SkinProcessingMask mask) {
+    var weight = 0.0;
+    for (final ellipse in mask.cheekEllipses) {
+      weight = math.max(weight, ellipse.weight(nx, ny, edgeFeather: 0.05));
     }
     return weight;
   }
@@ -355,14 +405,23 @@ abstract final class SkinMaskUtils {
     );
   }
 
-  static NormalizedEllipse _underEyeEllipse(NormalizedEllipse eye) {
+  /// Oval da olheira: só a pele debaixo da pestana (sulco). O topo encosta
+  /// na linha das pestanas; o interior do olho não entra.
+  static NormalizedEllipse _underEyeEllipse(
+    NormalizedEllipse eye, {
+    required double noseX,
+  }) {
+    final ry = (eye.radiusY * 0.72).clamp(0.012, 0.07);
+    final rx = (eye.radiusX * 1.18).clamp(0.026, 0.22);
+    final towardNose = noseX >= eye.center.dx ? 1.0 : -1.0;
+    final top = eye.center.dy + eye.radiusY * 1.04;
     return NormalizedEllipse(
       center: Offset(
-        eye.center.dx,
-        eye.center.dy + eye.radiusY * 0.65,
+        eye.center.dx + towardNose * rx * 0.10,
+        top + ry,
       ),
-      radiusX: eye.radiusX * 1.08,
-      radiusY: eye.radiusY * 0.62,
+      radiusX: rx,
+      radiusY: ry,
     );
   }
 
@@ -412,10 +471,10 @@ abstract final class SkinMaskUtils {
       return Rect.zero;
     }
     return Rect.fromLTWH(
-      eye.left,
-      eye.top + eye.height * 0.65,
-      eye.width,
-      eye.height * 0.55,
+      (eye.left - eye.width * 0.06).clamp(0.0, 1.0),
+      (eye.top + eye.height * 0.92).clamp(0.0, 1.0),
+      (eye.width * 1.12).clamp(0.01, 0.5),
+      (eye.height * 0.72).clamp(0.01, 0.5),
     );
   }
 }

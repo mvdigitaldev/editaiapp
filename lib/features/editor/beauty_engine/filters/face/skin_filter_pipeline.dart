@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import '../../models/face_mesh_result.dart';
@@ -51,7 +52,8 @@ class SkinFilterPipeline {
         return true;
       }
     }
-    return false;
+    final dark = darkCircleSides(parameters);
+    return dark.left > 0 || dark.right > 0;
   }
 
   /// Parsing semântico (BiSeNet/mapper) só é necessário para retouch e
@@ -74,7 +76,28 @@ class SkinFilterPipeline {
         return true;
       }
     }
-    return false;
+    final dark = darkCircleSides(parameters);
+    return dark.left > 0 || dark.right > 0;
+  }
+
+  /// Intensidade de olheiras. Um slider só, os dois olhos.
+  ///
+  /// O slider de Olhos (`eye_puffy`) e o de Pele (`remove_dark_circles`)
+  /// alimentam o mesmo clareamento. O maior dos dois vale. Chaves
+  /// `eye_puffy_left` / `eye_puffy_right` antigas não escolhem um olho:
+  /// entram no mesmo máximo.
+  ({double left, double right}) darkCircleSides(
+    Map<String, double> parameters,
+  ) {
+    final skin = _read(parameters, 'remove_dark_circles');
+    final general = _read(parameters, 'eye_puffy');
+    final legacyLeft = (parameters['eye_puffy_left'] ?? 0).clamp(0.0, 1.0);
+    final legacyRight = (parameters['eye_puffy_right'] ?? 0).clamp(0.0, 1.0);
+    final intensity = math.max(
+      skin,
+      math.max(general, math.max(legacyLeft, legacyRight)),
+    );
+    return (left: intensity, right: intensity);
   }
 
   List<RenderPipelineStage> buildPostStages({
@@ -116,6 +139,10 @@ class SkinFilterPipeline {
     for (final key in skinParameterKeys) {
       uniforms[key] = _read(parameters, key);
     }
+    final dark = darkCircleSides(parameters);
+    uniforms['remove_dark_circles'] = math.max(dark.left, dark.right);
+    uniforms['eye_dark_left'] = dark.left;
+    uniforms['eye_dark_right'] = dark.right;
 
     return [
       RenderPipelineStage(

@@ -36,6 +36,7 @@ class SkinRetouchRequest {
     required this.faceEdgePx,
     this.shineWeights,
     this.shineKnee,
+    this.cheekWeights,
   });
 
   final Uint8List rgba;
@@ -51,6 +52,10 @@ class SkinRetouchRequest {
 
   /// Joelho de brilho calibrado por tom; fallback interno se null.
   final double? shineKnee;
+
+  /// Bochecha, para a referência de cor das olheiras. Sem isto, a referência
+  /// volta à pele fora da olheira.
+  final Uint8List? cheekWeights;
 }
 
 /// Pipeline de pele do Grupo A: separação de frequências em 3 bandas sobre
@@ -93,6 +98,27 @@ abstract final class SkinRetouchEngine {
     final output = Uint8List.fromList(request.rgba);
 
     if (params.isNoop || pixels <= 0 || request.skinWeights.length != pixels) {
+      return output;
+    }
+
+    // Só olheiras: o sulco não precisa das bandas de frequência.
+    if (params.darkCircles > 0 &&
+        params.smooth <= 0 &&
+        params.acne <= 0 &&
+        params.wrinkles <= 0 &&
+        params.shine <= 0) {
+      if (request.underEyeWeights.length == pixels) {
+        _applyDarkCircles(
+          output: output,
+          width: width,
+          height: height,
+          skinWeights: request.skinWeights,
+          underEyeWeights: request.underEyeWeights,
+          cheekWeights: request.cheekWeights,
+          pixels: pixels,
+          intensity: params.darkCircles,
+        );
+      }
       return output;
     }
 
@@ -218,8 +244,11 @@ abstract final class SkinRetouchEngine {
         request.underEyeWeights.length == pixels) {
       _applyDarkCircles(
         output: output,
+        width: width,
+        height: height,
         skinWeights: request.skinWeights,
         underEyeWeights: request.underEyeWeights,
+        cheekWeights: request.cheekWeights,
         pixels: pixels,
         intensity: params.darkCircles,
       );
@@ -228,70 +257,180 @@ abstract final class SkinRetouchEngine {
     return output;
   }
 
-  /// Corrige a região sob os olhos em direção ao tom de pele de referência
-  /// amostrado do próprio rosto — nunca clareia além dele (invariante A3).
+  /// No slider máximo, a sombra de baixa frequência sobe até este fracção
+  /// do vão à pele vizinha. Fechar 100% achata o volume da órbita.
+  static const _darkCircleLift = 0.90;
+
+  /// Corrige a olheira por separação de frequências: a sombra (baixa
+  /// frequência) vai ao tom da pele logo ao lado; o poro (alta) fica.
+  /// A referência é a média local da pele FORA da máscara — a bochecha
+  /// distante falha com barba ou luz lateral.
   static void _applyDarkCircles({
     required Uint8List output,
+    required int width,
+    required int height,
     required Uint8List skinWeights,
     required Uint8List underEyeWeights,
     required int pixels,
     required double intensity,
+    Uint8List? cheekWeights,
   }) {
     final table = ColorScience.srgbToLinearTable;
     final lab = Float64List(3);
     final rgb = Float64List(3);
 
-    // Referência: pele com peso alto e FORA da região de olheira.
+    final L = Float32List(pixels);
+    final A = Float32List(pixels);
+    final Bch = Float32List(pixels);
+    var minY = height;
+    var maxY = 0;
+    var maskHits = 0;
+    for (var p = 0; p < pixels; p++) {
+      final i = p * 4;
+      ColorScience.linearRgbToOklab(
+        table[output[i]],
+        table[output[i + 1]],
+        table[output[i + 2]],
+        lab,
+      );
+      L[p] = lab[0];
+      A[p] = lab[1];
+      Bch[p] = lab[2];
+      if (underEyeWeights[p] <= 16) continue;
+      final y = p ~/ width;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      maskHits++;
+    }
+    if (maskHits < 8) return;
+
+    final allowed = Float32List(pixels);
+    var allowedHits = 0;
+    for (var p = 0; p < pixels; p++) {
+      if (underEyeWeights[p] >= 40) continue;
+      final onCheek =
+          cheekWeights != null && cheekWeights.length == pixels && cheekWeights[p] >= 120;
+      if (skinWeights[p] < 120 && !onCheek) continue;
+      allowed[p] = 1;
+      allowedHits++;
+    }
+    if (allowedHits < 40) {
+      for (var p = 0; p < pixels; p++) {
+        if (skinWeights[p] < 180 || underEyeWeights[p] > 0) continue;
+        allowed[p] = 1;
+        allowedHits++;
+      }
+    }
+    if (allowedHits < 20) return;
+
+    final band = math.max(6, maxY - minY);
+    final refRadius = (band * 2.2).round().clamp(16, 72);
+    final poreRadius = (band * 0.10).round().clamp(2, 6);
+
     var sumL = 0.0;
     var sumA = 0.0;
     var sumB = 0.0;
-    var count = 0;
+    var nAllow = 0;
     for (var p = 0; p < pixels; p++) {
-      if (skinWeights[p] < 180 || underEyeWeights[p] > 0) continue;
-      final i = p * 4;
-      ColorScience.linearRgbToOklab(
-        table[output[i]],
-        table[output[i + 1]],
-        table[output[i + 2]],
-        lab,
-      );
-      sumL += lab[0];
-      sumA += lab[1];
-      sumB += lab[2];
-      count++;
+      if (allowed[p] <= 0) continue;
+      sumL += L[p];
+      sumA += A[p];
+      sumB += Bch[p];
+      nAllow++;
     }
-    if (count == 0) return;
+    final fallbackL = nAllow == 0 ? 0.7 : sumL / nAllow;
+    final fallbackA = nAllow == 0 ? 0.0 : sumA / nAllow;
+    final fallbackB = nAllow == 0 ? 0.0 : sumB / nAllow;
 
-    final refL = sumL / count;
-    final refA = sumA / count;
-    final refB = sumB / count;
+    final refL = _maskedMean(
+      values: L,
+      allowed: allowed,
+      width: width,
+      height: height,
+      radius: refRadius,
+      fallback: fallbackL,
+    );
+    final refA = _maskedMean(
+      values: A,
+      allowed: allowed,
+      width: width,
+      height: height,
+      radius: refRadius,
+      fallback: fallbackA,
+    );
+    final refB = _maskedMean(
+      values: Bch,
+      allowed: allowed,
+      width: width,
+      height: height,
+      radius: refRadius,
+      fallback: fallbackB,
+    );
+    final lowL = GuidedFilter.boxMean(
+      L,
+      width: width,
+      height: height,
+      radius: poreRadius,
+    );
+    final region = GuidedFilter.boxMeanU8(
+      underEyeWeights,
+      width: width,
+      height: height,
+      radius: (band * 0.12).round().clamp(2, 8),
+    );
 
     for (var p = 0; p < pixels; p++) {
-      final region = underEyeWeights[p] / 255.0;
-      if (region <= 0) continue;
-      final skin = skinWeights[p] / 255.0;
-      if (skin <= 0) continue;
+      final w = region[p];
+      if (w <= 0.02) continue;
 
-      final i = p * 4;
-      ColorScience.linearRgbToOklab(
-        table[output[i]],
-        table[output[i + 1]],
-        table[output[i + 2]],
-        lab,
-      );
-      // Só clareia: sombra mais clara que a bochecha fica intocada.
-      if (lab[0] >= refL) continue;
+      final gap = refL[p] - lowL[p];
+      if (gap <= 0.004) continue;
 
-      final t = (intensity * region * skin).clamp(0.0, 1.0);
-      final newL = lab[0] + (refL - lab[0]) * t;
-      final newA = lab[1] + (refA - lab[1]) * t * 0.6;
-      final newB = lab[2] + (refB - lab[2]) * t * 0.6;
+      final t = (intensity * w * _darkCircleLift).clamp(0.0, _darkCircleLift);
+      final newL = L[p] + gap * t;
+      final shade = (gap / 0.07).clamp(0.0, 1.0);
+      final chroma = t * (0.22 + 0.50 * shade);
+      final newA = A[p] + (refA[p] - A[p]) * chroma;
+      final newB = Bch[p] + (refB[p] - Bch[p]) * chroma;
 
       ColorScience.oklabToLinearRgb(newL, newA, newB, rgb);
+      final i = p * 4;
       output[i] = ColorScience.linearToSrgb8(rgb[0].clamp(0.0, 1.0));
       output[i + 1] = ColorScience.linearToSrgb8(rgb[1].clamp(0.0, 1.0));
       output[i + 2] = ColorScience.linearToSrgb8(rgb[2].clamp(0.0, 1.0));
     }
+  }
+
+  static Float32List _maskedMean({
+    required Float32List values,
+    required Float32List allowed,
+    required int width,
+    required int height,
+    required int radius,
+    required double fallback,
+  }) {
+    final weighted = Float32List(values.length);
+    for (var i = 0; i < values.length; i++) {
+      weighted[i] = values[i] * allowed[i];
+    }
+    final num = GuidedFilter.boxMean(
+      weighted,
+      width: width,
+      height: height,
+      radius: radius,
+    );
+    final den = GuidedFilter.boxMean(
+      allowed,
+      width: width,
+      height: height,
+      radius: radius,
+    );
+    final out = Float32List(values.length);
+    for (var i = 0; i < values.length; i++) {
+      final d = den[i];
+      out[i] = d > 0.05 ? num[i] / d : fallback;
+    }
+    return out;
   }
 
   static double _weightedMean(

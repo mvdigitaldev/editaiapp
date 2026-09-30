@@ -64,6 +64,30 @@ abstract final class BeautyToolRegistry {
       pipelineStage: ToolPipelineStage.warp,
       requiresFace: true,
     ),
+    ToolDescriptor(
+      key: 'eye_width',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
+    ToolDescriptor(
+      key: 'eye_length',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
+    ToolDescriptor(
+      key: 'eye_distance',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
+    ToolDescriptor(
+      key: 'eye_puffy',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
   ];
 
   static const _face = [

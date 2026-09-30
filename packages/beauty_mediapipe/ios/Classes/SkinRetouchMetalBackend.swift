@@ -660,8 +660,7 @@ final class SkinRetouchMetalBackend {
     if (gid.x >= img.get_width() || gid.y >= img.get_height()) return;
     float4 srgba = img.read(gid);
     float region = underEye.read(gid).r;
-    float sk = skin.read(gid).r;
-    if (region <= 0.0 || sk <= 0.0) {
+    if (region <= 0.0) {
       outTex.write(srgba, gid);
       return;
     }
@@ -675,7 +674,7 @@ final class SkinRetouchMetalBackend {
       outTex.write(srgba, gid);
       return;
     }
-    float t = clamp(u.intensity * region * sk, 0.0, 1.0);
+    float t = clamp(u.intensity * region, 0.0, 1.0);
     lab.x = lab.x + (u.refL - lab.x) * t;
     lab.y = lab.y + (u.refA - lab.y) * t * 0.6;
     lab.z = lab.z + (u.refB - lab.z) * t * 0.6;

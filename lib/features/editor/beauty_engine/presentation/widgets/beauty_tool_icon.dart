@@ -13,6 +13,10 @@ abstract final class BeautyToolIcons {
     'eyebrow_end',
     'eye_size',
     'eye_height',
+    'eye_width',
+    'eye_length',
+    'eye_distance',
+    'eye_puffy',
     'hairline',
     'jaw',
     'jaw_angle',
@@ -98,6 +102,14 @@ class _BeautyToolIconPainter extends CustomPainter {
         _paintEyeSize(canvas, paint);
       case 'eye_height':
         _paintEyeHeight(canvas, paint);
+      case 'eye_width':
+        _paintEyeWidth(canvas, paint);
+      case 'eye_length':
+        _paintEyeLength(canvas, paint);
+      case 'eye_distance':
+        _paintEyeDistance(canvas, paint);
+      case 'eye_puffy':
+        _paintEyePuffy(canvas, paint);
       case 'hairline':
         _paintHairline(canvas, paint);
       case 'jaw':
@@ -268,6 +280,67 @@ class _BeautyToolIconPainter extends CustomPainter {
       ..cubicTo(17.0, 6.1, 14.4, 5.9, 12.8, 7.9);
     _strokeDashed(canvas, leftDash, paint);
     _strokeDashed(canvas, rightDash, paint);
+  }
+
+  void _paintEyePuffy(Canvas canvas, Paint paint) {
+    final eye = Path()
+      ..moveTo(6.4, 8.6)
+      ..quadraticBezierTo(12, 5.6, 17.6, 8.6)
+      ..quadraticBezierTo(12, 11.6, 6.4, 8.6);
+    canvas.drawPath(eye, paint);
+    canvas.drawCircle(const Offset(12, 8.6), 1.15, paint);
+    final bag = Path()
+      ..moveTo(7.4, 13.0)
+      ..quadraticBezierTo(12, 16.4, 16.6, 13.0);
+    canvas.drawPath(bag, paint);
+    _arrow(
+      canvas,
+      paint,
+      const Offset(12, 21.2),
+      const Offset(12, 17.8),
+      head: 1.6,
+    );
+  }
+
+  void _paintEyeDistance(Canvas canvas, Paint paint) {
+    final eye = Path()
+      ..moveTo(7.2, 13.6)
+      ..quadraticBezierTo(12, 10.4, 16.8, 13.6)
+      ..quadraticBezierTo(12, 16.8, 7.2, 13.6);
+    canvas.drawPath(eye, paint);
+    canvas.drawCircle(const Offset(12, 13.6), 1.3, paint);
+    _arrow(canvas, paint, const Offset(6.2, 7.4), const Offset(3.0, 7.4),
+        head: 1.6);
+    _arrow(canvas, paint, const Offset(17.8, 7.4), const Offset(21.0, 7.4),
+        head: 1.6);
+  }
+
+  void _paintEyeLength(Canvas canvas, Paint paint) {
+    final eye = Path()
+      ..moveTo(3.4, 14.2)
+      ..quadraticBezierTo(12, 9.2, 20.6, 14.2)
+      ..quadraticBezierTo(12, 17.6, 3.4, 14.2);
+    canvas.drawPath(eye, paint);
+    canvas.drawCircle(const Offset(12, 14.2), 1.4, paint);
+    _arrow(canvas, paint, const Offset(6.2, 7.2), const Offset(3.2, 7.2),
+        head: 1.6);
+    _arrow(canvas, paint, const Offset(17.8, 7.2), const Offset(20.8, 7.2),
+        head: 1.6);
+  }
+
+  void _paintEyeWidth(Canvas canvas, Paint paint) {
+    final eye = Path()
+      ..moveTo(5.6, 13.2)
+      ..quadraticBezierTo(12, 9.8, 18.4, 13.2)
+      ..quadraticBezierTo(12, 16.6, 5.6, 13.2);
+    canvas.drawPath(eye, paint);
+    canvas.drawCircle(const Offset(12, 13.2), 1.5, paint);
+    _doubleArrow(
+      canvas,
+      paint,
+      const Offset(4.2, 6.2),
+      const Offset(19.8, 6.2),
+    );
   }
 
   void _paintEyeHeight(Canvas canvas, Paint paint) {

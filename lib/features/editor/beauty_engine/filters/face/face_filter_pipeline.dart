@@ -1,5 +1,5 @@
 /// Catálogo facial do produto: Head (Proporção) + Eyebrow Height/Width/End
-/// (Sobrancelha) + Eye Size (Olhos) + Hairline + Jaw + Jaw Angle +
+/// (Sobrancelha) + Eye Size/Height/Width/Length/Distance (Olhos) + Hairline + Jaw + Jaw Angle +
 /// Chin Length + V Chin + V Shape + Cheekbones.
 class FaceFilterPipeline {
   const FaceFilterPipeline();
@@ -20,6 +20,10 @@ class FaceFilterPipeline {
   static const eyeParameterKeys = [
     'eye_size',
     'eye_height',
+    'eye_width',
+    'eye_length',
+    'eye_distance',
+    'eye_puffy',
   ];
 
   static const faceWarpParameterKeys = [
@@ -64,6 +68,15 @@ class FaceFilterPipeline {
     final eyeH = parameters['eye_height'] ?? 0;
     final eyeHL = parameters['eye_height_left'] ?? 0;
     final eyeHR = parameters['eye_height_right'] ?? 0;
+    final eyeW = parameters['eye_width'] ?? 0;
+    final eyeWL = parameters['eye_width_left'] ?? 0;
+    final eyeWR = parameters['eye_width_right'] ?? 0;
+    final eyeLen = parameters['eye_length'] ?? 0;
+    final eyeLenL = parameters['eye_length_left'] ?? 0;
+    final eyeLenR = parameters['eye_length_right'] ?? 0;
+    final eyeD = parameters['eye_distance'] ?? 0;
+    final eyeDL = parameters['eye_distance_left'] ?? 0;
+    final eyeDR = parameters['eye_distance_right'] ?? 0;
     return head.abs() > 1e-6 ||
         brow.abs() > 1e-6 ||
         browL.abs() > 1e-6 ||
@@ -80,6 +93,15 @@ class FaceFilterPipeline {
         eyeH.abs() > 1e-6 ||
         eyeHL.abs() > 1e-6 ||
         eyeHR.abs() > 1e-6 ||
+        eyeW.abs() > 1e-6 ||
+        eyeWL.abs() > 1e-6 ||
+        eyeWR.abs() > 1e-6 ||
+        eyeLen.abs() > 1e-6 ||
+        eyeLenL.abs() > 1e-6 ||
+        eyeLenR.abs() > 1e-6 ||
+        eyeD.abs() > 1e-6 ||
+        eyeDL.abs() > 1e-6 ||
+        eyeDR.abs() > 1e-6 ||
         hairline.abs() > 1e-6 ||
         jaw > 0 ||
         jawAngle.abs() > 1e-6 ||

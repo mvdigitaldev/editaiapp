@@ -56,7 +56,14 @@ void main() {
       );
       expect(
         FaceFilterPipeline.eyeParameterKeys,
-        ['eye_size', 'eye_height'],
+        [
+          'eye_size',
+          'eye_height',
+          'eye_width',
+          'eye_length',
+          'eye_distance',
+          'eye_puffy',
+        ],
       );
       expect(pipeline.hasActiveWarp({'head': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'head': -0.5}), isTrue);
@@ -86,6 +93,23 @@ void main() {
       expect(pipeline.hasActiveWarp({'eye_height': 0}), isFalse);
       expect(pipeline.hasActiveWarp({'eye_height_left': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'eye_height_right': -0.4}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_width': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_width': -0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_width': 0}), isFalse);
+      expect(pipeline.hasActiveWarp({'eye_width_left': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_width_right': -0.4}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_length': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_length': -0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_length': 0}), isFalse);
+      expect(pipeline.hasActiveWarp({'eye_length_left': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_length_right': -0.4}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_distance': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_distance': -0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_distance': 0}), isFalse);
+      expect(pipeline.hasActiveWarp({'eye_distance_left': 0.5}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_distance_right': -0.4}), isTrue);
+      expect(pipeline.hasActiveWarp({'eye_puffy': 0.5}), isFalse);
+      expect(pipeline.hasActiveWarp({'eye_puffy_left': 0.5}), isFalse);
       expect(pipeline.hasActiveWarp({'hairline': 0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'hairline': -0.5}), isTrue);
       expect(pipeline.hasActiveWarp({'hairline': 0}), isFalse);

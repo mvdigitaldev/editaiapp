@@ -218,6 +218,83 @@ void main() {
       isTrue,
     );
 
+    await tester.tap(find.text('Largura'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-eye_width')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Largura',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+
+    await tester.tap(find.text('Comprimento'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-eye_length')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Comprimento',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+
+    await tester.tap(find.text('Distância'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-eye_distance')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Distância',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+
+    await tester.tap(find.text('Olheiras'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-eye_puffy')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Olheiras',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isFalse,
+    );
+    expect(find.text('Geral'), findsNothing);
+
     await tester.tap(find.text('Pele'));
     await tester.pumpAndSettle();
     expect(
@@ -316,6 +393,22 @@ void main() {
     expect(params.containsKey('eye_height_left'), isTrue);
     expect(params.containsKey('eye_height_right'), isTrue);
     expect(params.containsKey('eye_height_side'), isTrue);
+    expect(params.containsKey('eye_width'), isTrue);
+    expect(params.containsKey('eye_width_left'), isTrue);
+    expect(params.containsKey('eye_width_right'), isTrue);
+    expect(params.containsKey('eye_width_side'), isTrue);
+    expect(params.containsKey('eye_length'), isTrue);
+    expect(params.containsKey('eye_length_left'), isTrue);
+    expect(params.containsKey('eye_length_right'), isTrue);
+    expect(params.containsKey('eye_length_side'), isTrue);
+    expect(params.containsKey('eye_distance'), isTrue);
+    expect(params.containsKey('eye_distance_left'), isTrue);
+    expect(params.containsKey('eye_distance_right'), isTrue);
+    expect(params.containsKey('eye_distance_side'), isTrue);
+    expect(params.containsKey('eye_puffy'), isTrue);
+    expect(params.containsKey('eye_puffy_left'), isFalse);
+    expect(params.containsKey('eye_puffy_right'), isFalse);
+    expect(params.containsKey('eye_puffy_side'), isFalse);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);
