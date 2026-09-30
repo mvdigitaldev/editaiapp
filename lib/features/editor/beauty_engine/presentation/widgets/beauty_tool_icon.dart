@@ -17,6 +17,7 @@ abstract final class BeautyToolIcons {
     'eye_length',
     'eye_distance',
     'eye_puffy',
+    'nose_size',
     'hairline',
     'jaw',
     'jaw_angle',
@@ -110,6 +111,8 @@ class _BeautyToolIconPainter extends CustomPainter {
         _paintEyeDistance(canvas, paint);
       case 'eye_puffy':
         _paintEyePuffy(canvas, paint);
+      case 'nose_size':
+        _paintNoseSize(canvas, paint);
       case 'hairline':
         _paintHairline(canvas, paint);
       case 'jaw':
@@ -373,6 +376,24 @@ class _BeautyToolIconPainter extends CustomPainter {
         head: 1.7);
     _arrow(canvas, paint, const Offset(14.8, 12), const Offset(18.6, 12),
         head: 1.7);
+  }
+
+  void _paintNoseSize(Canvas canvas, Paint paint) {
+    final nose = Path()
+      ..moveTo(12, 5.4)
+      ..cubicTo(10.8, 9.8, 9.6, 13.4, 8.4, 16.2)
+      ..quadraticBezierTo(10.4, 18.8, 12, 18.4)
+      ..quadraticBezierTo(13.6, 18.8, 15.6, 16.2)
+      ..cubicTo(14.4, 13.4, 13.2, 9.8, 12, 5.4);
+    canvas.drawPath(nose, paint);
+    _arrow(canvas, paint, const Offset(12, 6.6), const Offset(12, 2.8),
+        head: 1.6);
+    _arrow(canvas, paint, const Offset(12, 17.6), const Offset(12, 21.6),
+        head: 1.6);
+    _arrow(canvas, paint, const Offset(8.6, 12.6), const Offset(4.4, 12.6),
+        head: 1.6);
+    _arrow(canvas, paint, const Offset(15.4, 12.6), const Offset(19.6, 12.6),
+        head: 1.6);
   }
 
   void _paintEyebrowEnd(Canvas canvas, Paint paint) {

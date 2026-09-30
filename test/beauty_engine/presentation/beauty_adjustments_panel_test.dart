@@ -67,6 +67,7 @@ void main() {
         BeautyAdjustmentCategory.rosto,
         BeautyAdjustmentCategory.sobrancelha,
         BeautyAdjustmentCategory.olhos,
+        BeautyAdjustmentCategory.nariz,
         BeautyAdjustmentCategory.corpo,
         BeautyAdjustmentCategory.pele,
         BeautyAdjustmentCategory.cor,
@@ -295,6 +296,26 @@ void main() {
     );
     expect(find.text('Geral'), findsNothing);
 
+    await tester.tap(find.text('Nariz'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-nose_size')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Tamanho',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+    expect(find.text('Geral'), findsNothing);
+
     await tester.tap(find.text('Pele'));
     await tester.pumpAndSettle();
     expect(
@@ -357,6 +378,9 @@ void main() {
     for (final key in FaceFilterPipeline.eyeParameterKeys) {
       expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
     }
+    for (final key in FaceFilterPipeline.noseParameterKeys) {
+      expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
+    }
     expect(BeautyToolIcons.hasGlyph('eyebrows'), isTrue);
     for (final key in SkinFilterPipeline.skinParameterKeys) {
       expect(BeautyToolIcons.hasGlyph(key), isTrue, reason: key);
@@ -409,6 +433,10 @@ void main() {
     expect(params.containsKey('eye_puffy_left'), isFalse);
     expect(params.containsKey('eye_puffy_right'), isFalse);
     expect(params.containsKey('eye_puffy_side'), isFalse);
+    expect(params.containsKey('nose_size'), isTrue);
+    expect(params.containsKey('nose_size_left'), isFalse);
+    expect(params.containsKey('nose_size_right'), isFalse);
+    expect(params.containsKey('nose_size_side'), isFalse);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);

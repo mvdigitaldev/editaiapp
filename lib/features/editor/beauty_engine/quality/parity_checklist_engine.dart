@@ -138,6 +138,7 @@ abstract final class ParityChecklistEngine {
       ...FaceFilterPipeline.proportionParameterKeys,
       ...FaceFilterPipeline.eyebrowParameterKeys,
       ...FaceFilterPipeline.eyeParameterKeys,
+      ...FaceFilterPipeline.noseParameterKeys,
       ...FaceFilterPipeline.faceWarpParameterKeys,
     ].where((k) => (params[k] ?? 0).abs() > 1e-6).length;
     if (activeCount > 0 && (warpStats?.vertexMaxPx ?? 0) <= 0.05) {

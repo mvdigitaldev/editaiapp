@@ -55,6 +55,7 @@ class ToolGateEngine {
         return _eyes(key, ctx);
       case 'nose_slim':
       case 'nose_tip':
+      case 'nose_size':
         return _faceWarp(key, ctx, yawThreshold: 0.2, minFacePx: 180);
       case 'lip_thickness':
         return _faceWarp(key, ctx, yawThreshold: 0.25, minFacePx: 160);

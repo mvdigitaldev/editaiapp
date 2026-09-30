@@ -93,6 +93,12 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       parameterKeys: FaceFilterPipeline.eyeParameterKeys,
     ),
     BeautyAdjustmentCategoryDef(
+      category: BeautyAdjustmentCategory.nariz,
+      icon: Icons.face_retouching_natural_outlined,
+      label: BeautyEngineLabels.sectionNariz,
+      parameterKeys: FaceFilterPipeline.noseParameterKeys,
+    ),
+    BeautyAdjustmentCategoryDef(
       category: BeautyAdjustmentCategory.corpo,
       icon: Icons.accessibility_new_outlined,
       label: BeautyEngineLabels.sectionBody,
@@ -118,6 +124,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       for (final key in FaceFilterPipeline.proportionParameterKeys) key: 0,
       for (final key in FaceFilterPipeline.eyebrowParameterKeys) key: 0,
       for (final key in FaceFilterPipeline.eyeParameterKeys) key: 0,
+      for (final key in FaceFilterPipeline.noseParameterKeys) key: 0,
       for (final key in FaceFilterPipeline.faceWarpParameterKeys) key: 0,
       for (final key in BodyFilterPipeline.bodyWarpParameterKeys) key: 0,
       for (final key in SkinFilterPipeline.skinParameterKeys) key: 0,
@@ -487,7 +494,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'eye_height' ||
         key == 'eye_width' ||
         key == 'eye_length' ||
-        key == 'eye_distance') {
+        key == 'eye_distance' ||
+        key == 'nose_size') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

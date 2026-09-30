@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-09-30 (Eye Puffy, só o sulco)
+Última actualização: 2026-09-30 (Nose Size)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -54,6 +54,7 @@ A IA actua como **arquitecto** do Facial Warp V2.
 | **Eye Length** | No editor para aprovação visual. Key `eye_length` («Comprimento»). Tab Olhos. **Não** é `eye_width`. **Não** é Tamanho nem Altura. Sem B/C/E. Spec [`v2-eye-length.md`](./v2-eye-length.md). **Intacto** na Distância dos olhos. |
 | **Eye Distance** | No editor para aprovação visual. Key `eye_distance` («Distância»). Tab Olhos. **Não** é Comprimento. **Não** é Tamanho. Sem B/C/E. Spec [`v2-eye-distance.md`](./v2-eye-distance.md). |
 | **Eye Puffy** | No editor para aprovação visual. Key `eye_puffy` («Olheiras»). Tab Olhos. Um slider, os dois olhos. Clareia só a pele debaixo da pestana (sulco), em direção à pele vizinha; o poro fica. Interior do olho fica. **Não** é warp. Mesmo clareamento A3 de `remove_dark_circles`. Spec [`v2-eye-puffy.md`](./v2-eye-puffy.md). |
+| **Nose Size** | No editor para aprovação visual. Key `nose_size` («Tamanho»). Tab Nariz. **Não** é `nose_slim` / `nose_length` / `nose_height` / `nose_tip` / `nose_bridge`. **Não** é Head. Sem B/C/E. Spec [`v2-nose-size.md`](./v2-nose-size.md). |
 
 Pipeline viva no produto:
 
@@ -61,11 +62,11 @@ Pipeline viva no produto:
 RGBA → applyFaceWarpChain → Body → Skin → Color
 ```
 
-`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → eye_height → eye_width → eye_length → eye_distance → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Olheiras (`eye_puffy`) não entra nesta cadeia: clareia a pele no passe de pele. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
+`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → eye_height → eye_width → eye_length → eye_distance → nose_size → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Olheiras (`eye_puffy`) não entra nesta cadeia: clareia a pele no passe de pele. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
 
 Entre etapas os landmarks são **advectados** para a geometria já deformada (`warp/v2/landmark_advection.dart`). Sem isso o efeito a jusante recebia o RGBA deformado mas media a geometria da origem, e a crista caía 6–10 px fora da silhueta. Ver [`v2-composicao-cadeia.md`](./v2-composicao-cadeia.md).
 
-Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline, Eyebrow Height, Eyebrow Width e Eyebrow End estão na mesma cadeia, **aprovados**. V Shape, Jaw Angle, Eye Size, Eye Height, Eye Width, Eye Length e Eye Distance estão na cadeia como inspecção. Eye Puffy está no tab Olhos como clareamento de pele, não como warp. Esses menus de Olhos esperam a assinatura visual.
+Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline, Eyebrow Height, Eyebrow Width e Eyebrow End estão na mesma cadeia, **aprovados**. V Shape, Jaw Angle, Eye Size, Eye Height, Eye Width, Eye Length, Eye Distance e Nose Size estão na cadeia como inspecção. Eye Puffy está no tab Olhos como clareamento de pele, não como warp. Esses menus de Olhos e o Tamanho do nariz esperam a assinatura visual.
 
 ---
 
@@ -326,7 +327,7 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Campo: só Δx. `dy = 0`. O olho inteiro translada, íris incluída. `dx = t_lado · 0.030 · faceWidth · w · side`. `side` aponta para fora da linha do meio das íris (468 e 473). `t > 0` afasta; `t < 0` aproxima. Hull pad `0.09 × faceWidth`, para o canto externo estar no planalto e andar com a íris. Porta do nariz `0.10 × faceWidth`. A da sobrancelha é o vão até à pálpebra (159 / 386), borrado: a pálpebra anda com a íris e a sobrancelha fica. Ajuste 2026-09-29, a porta fixa de `0.10` deixava a pálpebra presa. Sobrancelha, nariz, boca e landmark 10 ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar os outros Fields.
 - Convenção: **esquerda aproxima**; **direita afasta**. L/R da foto. Geral move os dois.
 - Runtime: o unitário é `w · side` por olho; o slider só escala `dx`.
-- Cadeia: depois do Comprimento (`… → eye_length → eye_distance → jaw → …`). Tab **Olhos**, ícone Distância à direita de Comprimento.
+- Cadeia: depois do Comprimento (`… → eye_length → eye_distance → nose_size → jaw → …`). Tab **Olhos**, ícone Distância à direita de Comprimento.
 - Spec: [`v2-eye-distance.md`](./v2-eye-distance.md).
 
 ### Eye Puffy — inspecção no editor
@@ -334,8 +335,18 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Key: `eye_puffy` («Olheiras»). Tab Olhos. **Não** é warp. **Não** fecha o olho. **Não** é Distância nem Tamanho.
 - No editor (2026-09-29) para o Leonardo aprovar o menu. Sem B/C/E. Os Fields vivos intactos.
 - Efeito: clarear a sombra da pálpebra inferior e do sulco, nos dois olhos, no passe A3, em direção ao tom da pele vizinha (anel fora da máscara). Separação de frequências: a baixa sobe 90% do vão; o poro fica. Pele já nesse tom não se pinta. Íris e esclera ficam. É o invariante A3 de [`13-visual-quality-targets.md`](./13-visual-quality-targets.md), o mesmo passe de `remove_dark_circles`. O slider de Olhos e o de Pele usam o maior dos dois. Um slider só.
-- Fora da cadeia de warp (`… → eye_distance → jaw → …`). Tab **Olhos**, ícone Olheiras à direita de Distância.
+- Fora da cadeia de warp (`… → eye_distance → nose_size → jaw → …`). Tab **Olhos**, ícone Olheiras à direita de Distância.
 - Spec: [`v2-eye-puffy.md`](./v2-eye-puffy.md).
+
+### Nose Size — inspecção no editor
+
+- Key: `nose_size` («Tamanho»). **Não** é `nose_slim`, `nose_length`, `nose_height`, `nose_tip` nem `nose_bridge`. **Não** é Head. **Não** é Lift / Ala / Root / Bridge / Tip.
+- No editor (2026-09-30) para o Leonardo aprovar o menu. Sem B escrita. Sem C assinada. Sem E. Os Fields vivos e os de Olhos intactos. Lift, Ala, Root, Bridge e Tip ainda não existem.
+- Campo: escala isotrópica em volta do centróide do hull `V2RegionCatalog.nose`. `s = 1 − 0.14 t`, `α = 1 − 1/s`, `D = α · w · (p − c)`. `t > 0` encolhe; `t < 0` aumenta. Ponta (1) e asas (98/327) andam juntas. Olhos, sobrancelha, boca e linha do cabelo ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Head nem os outros Fields. Um slider só, sem Geral / L / R.
+- Convenção: **esquerda aumenta**; **direita encolhe**. Igual à Cabeça. Contrária ao Tamanho dos olhos.
+- Runtime: o unitário é `w · (p − c)`; o slider só entra em `α(t)`.
+- Cadeia: depois da Distância (`… → eye_distance → nose_size → jaw → …`). Tab **Nariz**, ícone Tamanho.
+- Spec: [`v2-nose-size.md`](./v2-nose-size.md).
 
 ### Eyebrow End — Sprint D
 
@@ -380,6 +391,8 @@ Aprovação de C é escrita. Sem ela, D não existe.
 **Adenda 2026-08-26 (V Chin encerrado).** Leonardo fechou o V Chin no editor. Aprovado. Vivo (`v_chin`). Não alterar. Documento [`v2-v-chin.md`](./v2-v-chin.md).
 
 **Adenda 2026-08-26 (V Chin aberto).** Leonardo abriu o menu V Chin (`v_chin`, «V do queixo»): forma da ponta, Δx, L/R da foto. Superado pelo fecho no mesmo dia.
+
+**Adenda 2026-09-30 (Nose Size).** Leonardo, com o Meitu em Nariz → Size: «agora vamos para o nariz, criar um menu de nariz.. e dentrod ele o primeiro menu de tamanho.. size para o lado direito, ele diminui como umt odo o nariz de forma natural.. nao é absurdo a diminuicao.. e par ao lado esquerdo ele aumenta o nariz, seguindo proporcoes ideiais.. sem exagero, fica muito natural, replique essa engenharia». Escala isotrópica em volta do centróide, `k = 0.14` (`s` de 0,86 a 1,14), igual à Cabeça no nariz. Tab **Nariz**, key `nose_size`, cadeia depois de `eye_distance`. Não é `nose_slim`. Olhos e os outros Fields intactos. Sem Lift / Ala / Root / Bridge / Tip. Sem B/C/E. Spec [`v2-nose-size.md`](./v2-nose-size.md).
 
 **Adenda 2026-09-30 (Eye Puffy, interior do olho).** Leonardo, a 99, contra o Meitu a 100: «vc clareou dentro do olho, nao é isso q queremos.. observe a segunda imagem do meitu.. é desse jeito que quero  ele so mexe na parte da olheira mesmo». O oval começava a meio do olho (`centro + 0,72 · radiusY`) e o corte da íris só cobria 62% do raio, logo a linha d'água e a esclera clareavam. O oval passou a nascer debaixo da pestana e a abertura do olho ficou a zero no interior.
 

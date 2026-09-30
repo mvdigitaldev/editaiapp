@@ -9,6 +9,7 @@ abstract final class BeautyToolRegistry {
     ..._proportion,
     ..._eyebrow,
     ..._eye,
+    ..._nose,
     ..._face,
     ..._skin,
     ..._color,
@@ -90,6 +91,15 @@ abstract final class BeautyToolRegistry {
     ),
   ];
 
+  static const _nose = [
+    ToolDescriptor(
+      key: 'nose_size',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
+  ];
+
   static const _face = [
     ToolDescriptor(
       key: 'jaw',
@@ -160,6 +170,7 @@ abstract final class BeautyToolRegistry {
         ...FaceFilterPipeline.proportionParameterKeys,
         ...FaceFilterPipeline.eyebrowParameterKeys,
         ...FaceFilterPipeline.eyeParameterKeys,
+        ...FaceFilterPipeline.noseParameterKeys,
         ...FaceFilterPipeline.faceWarpParameterKeys,
       ];
 }
