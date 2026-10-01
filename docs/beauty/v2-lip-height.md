@@ -66,7 +66,7 @@ Hull de `V2RegionCatalog.lips`, dilatado `0.040 × faceWidth`.
 ## 4. Pipeline e menu
 
 ```
-… → lip_width → lip_height → lip_angle → lip_plump → jaw → …
+… → lip_width → lip_height → lip_angle → lip_plump → lip_smile → jaw → …
 ```
 
 Tab **Lábios**, ícone Altura à direita de Largura.

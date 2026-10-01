@@ -611,7 +611,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'lip_width' ||
         key == 'lip_height' ||
         key == 'lip_angle' ||
-        key == 'lip_plump') {
+        key == 'lip_plump' ||
+        key == 'lip_smile') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

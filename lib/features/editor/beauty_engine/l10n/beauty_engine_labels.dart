@@ -33,6 +33,7 @@ abstract final class BeautyEngineLabels {
     'lip_height': 'Altura',
     'lip_angle': 'Ângulo',
     'lip_plump': 'Volume',
+    'lip_smile': 'Sorriso',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',

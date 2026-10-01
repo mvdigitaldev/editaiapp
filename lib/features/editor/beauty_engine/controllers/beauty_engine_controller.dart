@@ -68,6 +68,7 @@ import '../warp/v2/lip_width/lip_width_field.dart';
 import '../warp/v2/lip_height/lip_height_field.dart';
 import '../warp/v2/lip_angle/lip_angle_field.dart';
 import '../warp/v2/lip_plump/lip_plump_field.dart';
+import '../warp/v2/lip_smile/lip_smile_field.dart';
 import '../warp/v2/eye_size/eye_size_field.dart';
 import '../warp/v2/eye_width/eye_width_field.dart';
 import '../warp/v2/eyebrow_width/eyebrow_width_field.dart';
@@ -143,6 +144,7 @@ class BeautyEngineController {
   final LipHeightFieldRuntime _lipHeightRuntime = LipHeightFieldRuntime();
   final LipAngleFieldRuntime _lipAngleRuntime = LipAngleFieldRuntime();
   final LipPlumpFieldRuntime _lipPlumpRuntime = LipPlumpFieldRuntime();
+  final LipSmileFieldRuntime _lipSmileRuntime = LipSmileFieldRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
   final JawAngleFieldRuntime _jawAngleRuntime = JawAngleFieldRuntime();
   final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
@@ -1640,6 +1642,40 @@ class BeautyEngineController {
     return warped.rgba;
   }
 
+  /// LipSmileField + remap bilinear. Não é `lip_angle`. t=0 não chama o renderer.
+  Uint8List applyLipSmileWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['lip_smile'] ?? 0).clamp(-1.0, 1.0);
+    if (face == null ||
+        t.abs() <= 1e-6 ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = LipSmileField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      computeMetrics: false,
+      runtime: _lipSmileRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_lip_smile';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
   /// Olheiras não deforma o olho. O slider clareia a pele escura por baixo,
   /// no passe de pele. Este método fica para o teste da cadeia isolada.
   Uint8List applyEyePuffyWarp({
@@ -1957,6 +1993,7 @@ class BeautyEngineController {
       backend: 'v2_lip_plump',
       parameters: ['lip_plump', 'lip_plump_upper', 'lip_plump_lower'],
     ),
+    (backend: 'v2_lip_smile', parameters: ['lip_smile']),
     (backend: 'v2_jaw', parameters: ['jaw']),
     (
       backend: 'v2_jaw_angle',
@@ -2240,6 +2277,14 @@ class BeautyEngineController {
           tLower: right,
           computeMetrics: false,
           runtime: _lipPlumpRuntime,
+        ).field;
+      case 'v2_lip_smile':
+        return LipSmileField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          computeMetrics: false,
+          runtime: _lipSmileRuntime,
         ).field;
       case 'v2_jaw':
         final t = general.clamp(0.0, 1.0);

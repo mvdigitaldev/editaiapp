@@ -64,6 +64,7 @@ class ToolGateEngine {
       case 'lip_height':
       case 'lip_angle':
       case 'lip_plump':
+      case 'lip_smile':
         return _faceWarp(key, ctx, yawThreshold: 0.2, minFacePx: 180);
       case 'lip_thickness':
         return _faceWarp(key, ctx, yawThreshold: 0.25, minFacePx: 160);

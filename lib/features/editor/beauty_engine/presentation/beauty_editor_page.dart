@@ -704,6 +704,9 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         (_params['lip_plump_lower'] ?? 0).abs() > 0.001) {
       return 'lip_plump';
     }
+    if ((_params['lip_smile'] ?? 0).abs() > 0.001) {
+      return 'lip_smile';
+    }
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
       if ((_params[key] ?? 0).abs() > 0.001) {
         return key;
@@ -749,6 +752,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'lip_height',
       'lip_angle',
       'lip_plump',
+      'lip_smile',
       'hairline',
       'jaw',
       'jaw_angle',

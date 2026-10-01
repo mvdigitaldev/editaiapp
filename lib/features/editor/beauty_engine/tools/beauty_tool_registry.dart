@@ -150,6 +150,12 @@ abstract final class BeautyToolRegistry {
       pipelineStage: ToolPipelineStage.warp,
       requiresFace: true,
     ),
+    ToolDescriptor(
+      key: 'lip_smile',
+      category: ToolCategory.face,
+      pipelineStage: ToolPipelineStage.warp,
+      requiresFace: true,
+    ),
   ];
 
   static const _face = [
