@@ -18,6 +18,7 @@ import '../body_reshape/models/warp_plan.dart';
 import '../controllers/beauty_engine_controller.dart';
 import '../di/face_warp_v3_rollout_provider.dart';
 import '../di/beauty_engine_providers.dart';
+import '../di/body_background_lock_access_provider.dart';
 import '../diagnostics/beauty_editor_session_reporter.dart';
 import '../diagnostics/beauty_engine_error_reporter.dart';
 import '../config/face_warp_v3_rollout.dart';
@@ -25,6 +26,7 @@ import '../filters/face/face_filter_pipeline.dart';
 import '../filters/body/body_filter_pipeline.dart';
 import '../filters/body/body_warp_chain.dart';
 import '../l10n/beauty_engine_labels.dart';
+import '../l10n/body_reshape_labels.dart';
 import '../models/beauty_image_loader.dart';
 import '../models/face_mesh_result.dart';
 import '../models/image_source.dart';
@@ -483,14 +485,54 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   }
 
   Map<String, double> _gatedParams(BeautyEngineController controller) {
+    final params = BodyWarpChain.gateBackgroundLock(
+      _params,
+      allowed: widget.bodyOnly && ref.read(bodyBackgroundLockAllowedProvider),
+    );
     // Lab e pré-produção: sliders crus enquanto o V3 ainda está sendo calibrado.
     if (widget.labMode || FaceWarpV3Rollout.preProductionForceFull) {
-      return Map<String, double>.of(_params);
+      return Map<String, double>.of(params);
     }
-    return controller.applyToolGating(_params);
+    return controller.applyToolGating(params);
   }
 
   bool get _warpDebugAvailable => widget.labMode || kDebugMode;
+
+  void _showBackgroundLockPaywall() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                BodyReshapeLabels.backgroundLockPaywallTitle,
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              const Text(BodyReshapeLabels.backgroundLockPaywallBody),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.of(sheetContext).pop();
+                    Navigator.of(context).pushNamed('/subscription');
+                  },
+                  child: const Text(
+                    BodyReshapeLabels.backgroundLockPaywallAction,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _labPhotoPanel() {
     return Material(
@@ -1332,6 +1374,9 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                   : ref.watch(beautyEngineControllerProvider).lastToolGatePlan,
               onParamChanged: _onParamChanged,
               onLinkEyesChanged: _onLinkEyesChanged,
+              backgroundLockAllowed: widget.bodyOnly &&
+                  ref.watch(bodyBackgroundLockAllowedProvider),
+              onBackgroundLockLocked: _showBackgroundLockPaywall,
             ),
           ],
         ],

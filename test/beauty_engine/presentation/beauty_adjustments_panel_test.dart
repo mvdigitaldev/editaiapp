@@ -70,6 +70,7 @@ void main() {
         BeautyAdjustmentCategory.nariz,
         BeautyAdjustmentCategory.boca,
         BeautyAdjustmentCategory.corpo,
+        BeautyAdjustmentCategory.pernas,
         BeautyAdjustmentCategory.pele,
         BeautyAdjustmentCategory.cor,
       ],

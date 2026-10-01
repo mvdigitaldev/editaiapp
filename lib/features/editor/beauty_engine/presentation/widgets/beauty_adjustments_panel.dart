@@ -22,9 +22,16 @@ enum BeautyAdjustmentCategory {
   olhos,
   boca,
   corpo,
+  pernas,
   pele,
   cor,
 }
+
+/// Abas do Ajustar corpo (`bodyOnly`).
+const _bodyCategories = {
+  BeautyAdjustmentCategory.corpo,
+  BeautyAdjustmentCategory.pernas,
+};
 
 /// Definição de uma categoria com ícone e parâmetros associados.
 class BeautyAdjustmentCategoryDef {
@@ -54,9 +61,17 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
     this.bodyOnly = false,
     this.labMode = false,
     this.gatePlan,
+    this.backgroundLockAllowed = false,
+    this.onBackgroundLockLocked,
   });
 
   final Map<String, double> params;
+
+  /// Plano pago activo: a trava de fundo do corpo pode ser ligada.
+  final bool backgroundLockAllowed;
+
+  /// Toque na trava sem plano pago.
+  final VoidCallback? onBackgroundLockLocked;
   final bool enabled;
   final bool linkEyes;
   final void Function(String key, double value) onParamChanged;
@@ -108,8 +123,14 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
     BeautyAdjustmentCategoryDef(
       category: BeautyAdjustmentCategory.corpo,
       icon: Icons.accessibility_new_outlined,
-      label: BeautyEngineLabels.sectionBody,
-      parameterKeys: BodyWarpChain.parameterKeys,
+      label: BeautyEngineLabels.sectionBodySlim,
+      parameterKeys: BodyWarpChain.slimParameterKeys,
+    ),
+    BeautyAdjustmentCategoryDef(
+      category: BeautyAdjustmentCategory.pernas,
+      icon: Icons.directions_walk_outlined,
+      label: BeautyEngineLabels.sectionBodyLegs,
+      parameterKeys: BodyWarpChain.legParameterKeys,
     ),
     BeautyAdjustmentCategoryDef(
       category: BeautyAdjustmentCategory.pele,
@@ -196,12 +217,12 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
   List<BeautyAdjustmentCategoryDef> get _visibleCategories {
     if (widget.bodyOnly) {
       return BeautyAdjustmentsPanel.categories
-          .where((def) => def.category == BeautyAdjustmentCategory.corpo)
+          .where((def) => _bodyCategories.contains(def.category))
           .toList(growable: false);
     }
     // Retoque facial — corpo fica em menu/rota separada (`bodyOnly`).
     return BeautyAdjustmentsPanel.categories
-        .where((def) => def.category != BeautyAdjustmentCategory.corpo)
+        .where((def) => !_bodyCategories.contains(def.category))
         .map(_resolveCategoryDef)
         .toList(growable: false);
   }
@@ -293,7 +314,7 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         : isLipBand
             ? _lipBandSliderValue(activeKey)
             : (widget.params[activeKey] ?? 0);
-    final isBody = _category == BeautyAdjustmentCategory.corpo;
+    final isBody = _bodyCategories.contains(_category);
     final sliderRange = _sliderRangeForKey(activeKey);
     final gate = widget.gatePlan?.decisionFor(activeKey);
     final paramEnabled = widget.enabled && (gate == null || !gate.isDisabled);
@@ -375,6 +396,18 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                     ),
                   ),
                 ),
+              ),
+            if (isBody && activeKey.isNotEmpty)
+              _BackgroundLockRow(
+                value: widget.backgroundLockAllowed &&
+                    BodyWarpChain.backgroundLockRequested(widget.params),
+                allowed: widget.backgroundLockAllowed,
+                enabled: widget.enabled,
+                onChanged: (on) => widget.onParamChanged(
+                  BodyWarpChain.backgroundLockKey,
+                  on ? 1 : 0,
+                ),
+                onLocked: widget.onBackgroundLockLocked,
               ),
             if (activeKey.isNotEmpty)
               SizedBox(
@@ -633,7 +666,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'lip_angle' ||
         key == 'lip_plump' ||
         key == 'lip_smile' ||
-        key == BodyWarpChain.waistKey) {
+        key == BodyWarpChain.waistKey ||
+        key == BodyWarpChain.legsKey) {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {
@@ -785,6 +819,76 @@ class _CategoryNavItem extends StatelessWidget {
               fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               color: color,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// «Travar fundo» do corpo. Sem plano pago o switch fica desligado e o toque
+/// abre o aviso de planos.
+class _BackgroundLockRow extends StatelessWidget {
+  const _BackgroundLockRow({
+    required this.value,
+    required this.allowed,
+    required this.enabled,
+    required this.onChanged,
+    required this.onLocked,
+  });
+
+  final bool value;
+  final bool allowed;
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+  final VoidCallback? onLocked;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+      child: Row(
+        children: [
+          Icon(
+            allowed ? Icons.lock_outline_rounded : Icons.lock_rounded,
+            size: 18,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            BodyReshapeLabels.backgroundLock,
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              BodyReshapeLabels.backgroundLockBadge,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const Spacer(),
+          Switch(
+            key: const ValueKey('body_bg_lock_switch'),
+            value: value,
+            onChanged: !enabled
+                ? null
+                : (on) {
+                    if (!allowed) {
+                      onLocked?.call();
+                      return;
+                    }
+                    onChanged(on);
+                  },
           ),
         ],
       ),

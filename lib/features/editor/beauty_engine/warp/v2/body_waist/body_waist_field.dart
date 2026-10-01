@@ -85,6 +85,18 @@ abstract final class BodyWaistField {
 
   static double alphaOf(double t) => gain * t.clamp(-1.0, 1.0);
 
+  /// Maior deslocamento da borda possível no extremo do slider (px).
+  static double maxEdgeShift(BodyWaistGeometry geometry) {
+    var edge = 0.0;
+    for (var k = 0; k < geometry.edgeLeft.length; k++) {
+      edge = math.max(
+        edge,
+        math.max(geometry.edgeLeft[k], geometry.edgeRight[k]),
+      );
+    }
+    return gain * edge;
+  }
+
   /// Campo, ou `null` sem pose fiável / slider em zero.
   static DisplacementField? build({
     required PoseResult pose,
@@ -272,8 +284,8 @@ abstract final class BodyWaistField {
         ? Offset(-e.dy, e.dx)
         : Offset(e.dy, -e.dx);
 
-    final t0 = centerT - halfSpanT;
-    final t1 = centerT + halfSpanT;
+    const t0 = centerT - halfSpanT;
+    const t1 = centerT + halfSpanT;
     var maxReach = 0.0;
     for (var k = 0; k < sampleCount; k++) {
       maxReach = math.max(
@@ -351,7 +363,7 @@ abstract final class BodyWaistField {
   }
 
   static double _edgeAt(BodyWaistGeometry g, double t, Float64List edges) {
-    final last = sampleCount - 1;
+    const last = sampleCount - 1;
     final f = ((t - g.tSamples[0]) / (g.tSamples[last] - g.tSamples[0]) * last)
         .clamp(0.0, last.toDouble());
     final i = f.floor().clamp(0, last - 1);

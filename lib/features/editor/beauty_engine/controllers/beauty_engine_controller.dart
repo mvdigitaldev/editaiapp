@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -70,6 +71,8 @@ import '../warp/v2/lip_height/lip_height_field.dart';
 import '../warp/v2/lip_angle/lip_angle_field.dart';
 import '../warp/v2/lip_plump/lip_plump_field.dart';
 import '../warp/v2/lip_smile/lip_smile_field.dart';
+import '../warp/v2/body_background/body_background_lock.dart';
+import '../warp/v2/body_legs/body_legs_field.dart';
 import '../warp/v2/body_waist/body_waist_field.dart';
 import '../warp/v2/eye_size/eye_size_field.dart';
 import '../warp/v2/eye_width/eye_width_field.dart';
@@ -148,6 +151,9 @@ class BeautyEngineController {
   final LipPlumpFieldRuntime _lipPlumpRuntime = LipPlumpFieldRuntime();
   final LipSmileFieldRuntime _lipSmileRuntime = LipSmileFieldRuntime();
   final BodyWaistFieldRuntime _bodyWaistRuntime = BodyWaistFieldRuntime();
+  final BodyLegsFieldRuntime _bodyLegsRuntime = BodyLegsFieldRuntime();
+  final BodyBackgroundLockRuntime _bodyBackgroundLockRuntime =
+      BodyBackgroundLockRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
   final JawAngleFieldRuntime _jawAngleRuntime = JawAngleFieldRuntime();
   final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
@@ -462,24 +468,74 @@ class BeautyEngineController {
         sourceRgba.length != width * height * 4) {
       return sourceRgba;
     }
-    final field = BodyWaistField.build(
+    final imageSize = Size(width.toDouble(), height.toDouble());
+    final fields = <DisplacementField>[];
+    var maxShift = 0.0;
+
+    final waist = BodyWaistField.build(
       pose: pose,
-      imageSize: Size(width.toDouble(), height.toDouble()),
+      imageSize: imageSize,
       mask: personMask,
       t: (parameters[BodyWarpChain.waistKey] ?? 0).clamp(-1.0, 1.0),
       runtime: _bodyWaistRuntime,
     );
-    if (field == null) {
+    final waistGeometry = _bodyWaistRuntime.geometry;
+    if (waist != null && waistGeometry != null) {
+      fields.add(waist);
+      maxShift = math.max(maxShift, BodyWaistField.maxEdgeShift(waistGeometry));
+    }
+
+    final legs = BodyLegsField.build(
+      pose: pose,
+      imageSize: imageSize,
+      mask: personMask,
+      t: (parameters[BodyWarpChain.legsKey] ?? 0).clamp(-1.0, 1.0),
+      runtime: _bodyLegsRuntime,
+    );
+    final legsGeometry = _bodyLegsRuntime.geometry;
+    if (legs != null && legsGeometry != null) {
+      fields.add(legs);
+      maxShift = math.max(maxShift, BodyLegsField.maxEdgeShift(legsGeometry));
+    }
+
+    if (fields.isEmpty) {
       return sourceRgba;
     }
-    return v2.BackwardBilinearWarp.apply(
-      v2.WarpRequest(
-        sourceRgba: sourceRgba,
-        width: width,
-        height: height,
-        field: field,
-      ),
-    ).rgba;
+
+    final prepared =
+        BodyWarpChain.backgroundLockRequested(parameters) && personMask != null
+            ? BodyBackgroundLock.prepare(
+                sourceRgba: sourceRgba,
+                width: width,
+                height: height,
+                mask: personMask,
+                fields: fields,
+                bandPx: maxShift.ceil() + 6,
+                runtime: _bodyBackgroundLockRuntime,
+              )
+            : null;
+
+    var rgba = prepared == null
+        ? sourceRgba
+        : BodyBackgroundLock.packAlpha(sourceRgba, prepared);
+    for (final f in fields) {
+      rgba = v2.BackwardBilinearWarp.apply(
+        v2.WarpRequest(
+          sourceRgba: rgba,
+          width: width,
+          height: height,
+          field: f,
+        ),
+      ).rgba;
+    }
+    if (prepared == null) {
+      return rgba;
+    }
+    return BodyBackgroundLock.composite(
+      warpedRgba: rgba,
+      prepared: prepared,
+      fields: fields,
+    );
   }
 
   bool _shouldDetectFaceParts(Map<String, double> parameters) {
