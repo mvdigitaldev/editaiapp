@@ -18,8 +18,8 @@ void main() {
   group('MeshResolutionProfile', () {
     test('LOD scales interactive < preview < export', () {
       const size = Size(1080, 1920);
-      final interactive =
-          MeshResolutionProfile.fromQuality(WarpQualityProfile.interactive, size);
+      final interactive = MeshResolutionProfile.fromQuality(
+          WarpQualityProfile.interactive, size);
       final preview =
           MeshResolutionProfile.fromQuality(WarpQualityProfile.preview, size);
       final export =
@@ -89,8 +89,7 @@ void main() {
       );
 
       final counts = mesh.vertexCountsByRegion();
-      final focus =
-          (counts[BodyRegion.waist] ?? 0) +
+      final focus = (counts[BodyRegion.waist] ?? 0) +
           (counts[BodyRegion.hip] ?? 0) +
           (counts[BodyRegion.leftArm] ?? 0) +
           (counts[BodyRegion.rightArm] ?? 0) +
@@ -213,7 +212,8 @@ bool _silhouetteContains(double nx, double ny) {
   final rightArm = (nx - 0.66).abs() < 0.08 && ny >= 0.22 && ny <= 0.50;
   final leftLeg = (nx - 0.43).abs() < 0.07 && ny >= 0.52 && ny <= 0.90;
   final rightLeg = (nx - 0.57).abs() < 0.07 && ny >= 0.52 && ny <= 0.90;
-  final head = math.pow(nx - 0.5, 2) / 0.045 + math.pow(ny - 0.14, 2) / 0.03 <= 1;
+  final head =
+      math.pow(nx - 0.5, 2) / 0.045 + math.pow(ny - 0.14, 2) / 0.03 <= 1;
   return torso || hips || leftArm || rightArm || leftLeg || rightLeg || head;
 }
 

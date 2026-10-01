@@ -102,8 +102,8 @@ void main() {
       expect(result.rigidity.sampleNormalized(0.5, 0.5), lessThan(0.08));
 
       final field = _syntheticBodyField(imageSize, protection);
-      final centerIdx = (field.gridHeight ~/ 2) * field.gridWidth +
-          (field.gridWidth ~/ 2);
+      final centerIdx =
+          (field.gridHeight ~/ 2) * field.gridWidth + (field.gridWidth ~/ 2);
       // Garante deslocamento corporal conhecido antes da proteção.
       field.displacement[centerIdx * 2] = 6;
       field.displacement[centerIdx * 2 + 1] = 0;

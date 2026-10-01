@@ -34,11 +34,12 @@ class BodyBackgroundLockPrepared {
   /// Alfa da pessoa 0..1 no recorte.
   final Float32List alpha;
 
-  /// RGBA do fundo limpo no recorte: origem no fundo, preenchido junto à borda
-  /// por dentro da pessoa, origem no resto.
+  /// RGBA do fundo limpo no recorte: origem no fundo seguro, preenchido na
+  /// faixa de guarda e até `bandPx` por dentro da pessoa, origem no resto.
   final Uint8List plate;
 
-  /// 1 onde a origem já era fundo seguro: aí o fundo limpo é a própria origem.
+  /// 1 onde a origem já era fundo seguro (fora da borda 0.5 dilatada da
+  /// guarda): aí o fundo limpo é a própria origem.
   final Uint8List background;
 
   /// Pixels do recorte cujo fundo foi inventado.
@@ -97,13 +98,21 @@ abstract final class BodyBackgroundLock {
   static const guidedRadius = 2;
   static const guidedEps = 1e-3;
 
-  /// O guided filter só decide a ±[trimapRadius] px da borda da máscara: num
-  /// fundo com textura forte ele copia as arestas da luma e espalharia alfa
-  /// pelo fundo, e o fundo com alfa acima de zero é arrastado com o corpo.
+  /// O guided filter só decide a ±[trimapRadius] px da borda (nível 0.5 da
+  /// máscara): num fundo com textura forte ele copia as arestas da luma e
+  /// espalharia alfa pelo fundo, e o fundo com alfa acima de zero é arrastado
+  /// com o corpo.
   static const trimapRadius = 1;
 
-  /// Abaixo disto o pixel é fundo seguro.
-  static const backgroundAlpha = 0.04;
+  /// Faixa de guarda à volta da borda 0.5: o erro da máscara ampliada é da
+  /// ordem de um texel dela, mais o do segmentador.
+  static int guardPx(int width, int height, PersonMask mask) {
+    final upscale = math.max(width / mask.width, height / mask.height);
+    return math.max(
+      3,
+      math.max((2 * upscale).ceil(), (0.004 * math.max(width, height)).round()),
+    );
+  }
 
   /// `|D|` a partir do qual a composição vale por inteiro.
   static const fullLockDisplacement = 0.25;
@@ -216,9 +225,8 @@ abstract final class BodyBackgroundLock {
         final p = local * 4;
         for (var c = 0; c < 3; c++) {
           final v = out[o + c];
-          out[o + c] = (v + lambda * (prepared.plate[p + c] - v))
-              .round()
-              .clamp(0, 255);
+          out[o + c] =
+              (v + lambda * (prepared.plate[p + c] - v)).round().clamp(0, 255);
         }
       }
     }
@@ -296,9 +304,14 @@ abstract final class BodyBackgroundLock {
         );
       }
     }
-    final guided =
-        _guidedFilter(luma, coarse, rw, rh, guidedRadius, guidedEps);
-    final near = _boxMean(coarse, rw, rh, trimapRadius);
+    // A máscara do segmentador é confiança suave e ampliada: a rampa dela tem
+    // vários px e cobre fundo. A borda é o nível 0.5; daí para fora é fundo.
+    final hard = Float32List(n);
+    for (var i = 0; i < n; i++) {
+      hard[i] = coarse[i] >= 0.5 ? 1 : 0;
+    }
+    final guided = _guidedFilter(luma, hard, rw, rh, guidedRadius, guidedEps);
+    final near = _boxMean(hard, rw, rh, trimapRadius);
     final alpha = Float32List(n);
     for (var i = 0; i < n; i++) {
       final m = near[i];
@@ -314,13 +327,23 @@ abstract final class BodyBackgroundLock {
       final src = ((y + top) * width + left) * 4;
       plate.setRange(y * rw * 4, (y + 1) * rw * 4, sourceRgba, src);
     }
+    // A borda 0.5 erra alguns px: a pessoa que fica fora dela não pode ser
+    // fundo conhecido, senão fica parada (fantasma) e semeia o preenchimento.
+    final guard = guardPx(width, height, mask);
+    final dilated = _boxMean(hard, rw, rh, guard);
+    final interior = _boxMean(hard, rw, rh, bandPx);
     final background = Uint8List(n);
+    final target = Uint8List(n);
+    var filled = 0;
     for (var i = 0; i < n; i++) {
-      if (alpha[i] < backgroundAlpha) {
+      if (dilated[i] <= 1e-6) {
         background[i] = 1;
+      } else if (interior[i] < 1 - 1e-6) {
+        target[i] = 1;
+        filled++;
       }
     }
-    final filled = _onionFill(plate, alpha, rw, rh, bandPx);
+    _pullPushFill(plate, background, target, rw, rh);
 
     return BodyBackgroundLockPrepared(
       width: width,
@@ -401,128 +424,119 @@ abstract final class BodyBackgroundLock {
     return out;
   }
 
-  /// Preenche, anel a anel e de fora para dentro, até [band] px por dentro da
-  /// pessoa: cada pixel recebe a média dos vizinhos já conhecidos. Depois uma
-  /// caixa 3×3 só nos preenchidos tira o padrão dos anéis.
-  static int _onionFill(
+  /// Preenche [target] a partir de [known] por pull-push: pirâmide de médias
+  /// ponderadas dos conhecidos, depois subida bilinear. Sai liso; a média anel
+  /// a anel arrastava raios de cor da borda para dentro do buraco.
+  static void _pullPushFill(
     Uint8List plate,
-    Float32List alpha,
+    Uint8List known,
+    Uint8List target,
     int w,
     int h,
-    int band,
   ) {
     final n = w * h;
-    final known = Uint8List(n);
+    final c0 = Float32List(n * 3);
+    final w0 = Float32List(n);
+    var any = false;
     for (var i = 0; i < n; i++) {
-      if (alpha[i] < backgroundAlpha) {
-        known[i] = 1;
-      }
-    }
-    final filledMask = Uint8List(n);
-    var frontier = <int>[];
-    for (var i = 0; i < n; i++) {
-      if (known[i] == 0 && _hasKnownNeighbour(known, i % w, i ~/ w, w, h)) {
-        frontier.add(i);
-      }
-    }
-    var filled = 0;
-    final colors = Float64List(4);
-    for (var ring = 0; ring < band && frontier.isNotEmpty; ring++) {
-      final values = Uint8List(frontier.length * 3);
-      for (var k = 0; k < frontier.length; k++) {
-        final i = frontier[k];
-        final x = i % w;
-        final y = i ~/ w;
-        colors.fillRange(0, 4, 0);
-        for (var dy = -1; dy <= 1; dy++) {
-          final ny = y + dy;
-          if (ny < 0 || ny >= h) continue;
-          for (var dx = -1; dx <= 1; dx++) {
-            final nx = x + dx;
-            if ((dx == 0 && dy == 0) || nx < 0 || nx >= w) continue;
-            final j = ny * w + nx;
-            if (known[j] == 0) continue;
-            colors[0] += plate[j * 4];
-            colors[1] += plate[j * 4 + 1];
-            colors[2] += plate[j * 4 + 2];
-            colors[3] += 1;
-          }
-        }
+      if (known[i] == 1) {
+        any = true;
+        w0[i] = 1;
         for (var c = 0; c < 3; c++) {
-          values[k * 3 + c] = (colors[c] / colors[3]).round();
+          c0[i * 3 + c] = plate[i * 4 + c].toDouble();
         }
       }
-      final next = <int>[];
-      for (var k = 0; k < frontier.length; k++) {
-        final i = frontier[k];
-        plate[i * 4] = values[k * 3];
-        plate[i * 4 + 1] = values[k * 3 + 1];
-        plate[i * 4 + 2] = values[k * 3 + 2];
-        known[i] = 1;
-        filledMask[i] = 1;
-        filled++;
-      }
-      for (final i in frontier) {
-        final x = i % w;
-        final y = i ~/ w;
-        for (var dy = -1; dy <= 1; dy++) {
-          final ny = y + dy;
-          if (ny < 0 || ny >= h) continue;
-          for (var dx = -1; dx <= 1; dx++) {
-            final nx = x + dx;
-            if (nx < 0 || nx >= w) continue;
-            final j = ny * w + nx;
-            if (known[j] == 0 && filledMask[j] == 0) {
-              filledMask[j] = 2;
-              next.add(j);
+    }
+    if (!any) {
+      return;
+    }
+    final colors = <Float32List>[c0];
+    final weights = <Float32List>[w0];
+    final widths = <int>[w];
+    final heights = <int>[h];
+    while (widths.last > 1 || heights.last > 1) {
+      final pw = widths.last;
+      final ph = heights.last;
+      final nw = (pw + 1) >> 1;
+      final nh = (ph + 1) >> 1;
+      final pc = colors.last;
+      final pwt = weights.last;
+      final nc = Float32List(nw * nh * 3);
+      final nwt = Float32List(nw * nh);
+      for (var y = 0; y < nh; y++) {
+        for (var x = 0; x < nw; x++) {
+          var sw = 0.0;
+          var s0 = 0.0;
+          var s1 = 0.0;
+          var s2 = 0.0;
+          for (var dy = 0; dy < 2; dy++) {
+            final sy = 2 * y + dy;
+            if (sy >= ph) continue;
+            for (var dx = 0; dx < 2; dx++) {
+              final sx = 2 * x + dx;
+              if (sx >= pw) continue;
+              final j = sy * pw + sx;
+              final wt = pwt[j];
+              if (wt <= 0) continue;
+              sw += wt;
+              s0 += pc[j * 3] * wt;
+              s1 += pc[j * 3 + 1] * wt;
+              s2 += pc[j * 3 + 2] * wt;
             }
           }
+          if (sw > 0) {
+            final k = y * nw + x;
+            nc[k * 3] = s0 / sw;
+            nc[k * 3 + 1] = s1 / sw;
+            nc[k * 3 + 2] = s2 / sw;
+            nwt[k] = math.min(1.0, sw);
+          }
         }
       }
-      for (final j in next) {
-        filledMask[j] = 0;
-      }
-      frontier = next;
+      colors.add(nc);
+      weights.add(nwt);
+      widths.add(nw);
+      heights.add(nh);
     }
-
-    final smooth = Uint8List.fromList(plate);
+    for (var l = colors.length - 2; l >= 0; l--) {
+      final lw = widths[l];
+      final lh = heights[l];
+      final c = colors[l];
+      final wt = weights[l];
+      final uc = colors[l + 1];
+      final uw = widths[l + 1];
+      final uh = heights[l + 1];
+      for (var y = 0; y < lh; y++) {
+        final fy = ((y + 0.5) / 2 - 0.5).clamp(0.0, uh - 1.0);
+        final y0 = fy.floor();
+        final y1 = math.min(uh - 1, y0 + 1);
+        final ty = fy - y0;
+        for (var x = 0; x < lw; x++) {
+          final k = y * lw + x;
+          final own = wt[k];
+          if (own >= 1) continue;
+          final fx = ((x + 0.5) / 2 - 0.5).clamp(0.0, uw - 1.0);
+          final x0 = fx.floor();
+          final x1 = math.min(uw - 1, x0 + 1);
+          final tx = fx - x0;
+          for (var ch = 0; ch < 3; ch++) {
+            final a = uc[(y0 * uw + x0) * 3 + ch];
+            final b = uc[(y0 * uw + x1) * 3 + ch];
+            final d = uc[(y1 * uw + x0) * 3 + ch];
+            final e = uc[(y1 * uw + x1) * 3 + ch];
+            final up = (a + (b - a) * tx) +
+                ((d + (e - d) * tx) - (a + (b - a) * tx)) * ty;
+            c[k * 3 + ch] = own * c[k * 3 + ch] + (1 - own) * up;
+          }
+          wt[k] = 1;
+        }
+      }
+    }
     for (var i = 0; i < n; i++) {
-      if (filledMask[i] != 1) continue;
-      final x = i % w;
-      final y = i ~/ w;
-      colors.fillRange(0, 4, 0);
-      for (var dy = -1; dy <= 1; dy++) {
-        final ny = y + dy;
-        if (ny < 0 || ny >= h) continue;
-        for (var dx = -1; dx <= 1; dx++) {
-          final nx = x + dx;
-          if (nx < 0 || nx >= w) continue;
-          final j = ny * w + nx;
-          if (known[j] == 0) continue;
-          colors[0] += plate[j * 4];
-          colors[1] += plate[j * 4 + 1];
-          colors[2] += plate[j * 4 + 2];
-          colors[3] += 1;
-        }
-      }
-      for (var c = 0; c < 3; c++) {
-        smooth[i * 4 + c] = (colors[c] / colors[3]).round();
+      if (target[i] == 0) continue;
+      for (var ch = 0; ch < 3; ch++) {
+        plate[i * 4 + ch] = c0[i * 3 + ch].round().clamp(0, 255);
       }
     }
-    plate.setAll(0, smooth);
-    return filled;
-  }
-
-  static bool _hasKnownNeighbour(Uint8List known, int x, int y, int w, int h) {
-    for (var dy = -1; dy <= 1; dy++) {
-      final ny = y + dy;
-      if (ny < 0 || ny >= h) continue;
-      for (var dx = -1; dx <= 1; dx++) {
-        final nx = x + dx;
-        if ((dx == 0 && dy == 0) || nx < 0 || nx >= w) continue;
-        if (known[ny * w + nx] == 1) return true;
-      }
-    }
-    return false;
   }
 }

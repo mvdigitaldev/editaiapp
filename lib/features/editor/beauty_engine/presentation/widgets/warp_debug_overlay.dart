@@ -171,8 +171,8 @@ class _WarpDebugPainter extends CustomPainter {
 
     final f = field;
     if (f != null && !f.isIdentity) {
-      final active = f.activeCellCount ??
-          f.mask.where((m) => m >= _maskThreshold).length;
+      final active =
+          f.activeCellCount ?? f.mask.where((m) => m >= _maskThreshold).length;
       parts.add(
         'grade Δmax ${f.maxDisplacementMagnitude.toStringAsFixed(1)}px · '
         '${f.gridWidth}×${f.gridHeight} · $active células',

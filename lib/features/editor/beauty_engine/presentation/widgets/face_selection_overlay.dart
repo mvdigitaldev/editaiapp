@@ -82,9 +82,8 @@ class _FaceSelectionPainter extends CustomPainter {
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = selected ? 3 : 2
-        ..color = selected
-            ? AppColors.primary
-            : Colors.white.withValues(alpha: 0.85);
+        ..color =
+            selected ? AppColors.primary : Colors.white.withValues(alpha: 0.85);
       canvas.drawRRect(
         RRect.fromRectAndRadius(rect.inflate(4), const Radius.circular(8)),
         paint,

@@ -95,13 +95,16 @@ class BeautyAccessibleSlider extends StatelessWidget {
             builder: (context, constraints) {
               final span = max - min;
               final t = span.abs() < 1e-9 ? 0.0 : (clamped - min) / span;
-              final trackWidth = math.max(0.0, constraints.maxWidth - 2 * _thumbPad);
+              final trackWidth =
+                  math.max(0.0, constraints.maxWidth - 2 * _thumbPad);
               final thumbX = _thumbPad + t * trackWidth;
               const numberWidth = 36.0;
-              final numberLeft = (thumbX - numberWidth / 2).clamp(
-                0.0,
-                math.max(0.0, constraints.maxWidth - numberWidth),
-              ).toDouble();
+              final numberLeft = (thumbX - numberWidth / 2)
+                  .clamp(
+                    0.0,
+                    math.max(0.0, constraints.maxWidth - numberWidth),
+                  )
+                  .toDouble();
               return Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -129,12 +132,12 @@ class BeautyAccessibleSlider extends StatelessWidget {
                             const RoundSliderOverlayShape(overlayRadius: 24),
                         trackHeight: 4,
                         activeTrackColor: AppColors.primary,
-                        inactiveTrackColor: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.22),
+                        inactiveTrackColor:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.22),
                         disabledActiveTrackColor:
                             AppColors.primary.withValues(alpha: 0.35),
-                        disabledInactiveTrackColor: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.10),
+                        disabledInactiveTrackColor:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.10),
                         trackShape: _BeautySliderTrackShape(bipolar: bipolar),
                         showValueIndicator: ShowValueIndicator.never,
                         year2023: true,

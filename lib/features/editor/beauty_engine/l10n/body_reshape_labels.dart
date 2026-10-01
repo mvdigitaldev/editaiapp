@@ -12,12 +12,15 @@ abstract final class BodyReshapeLabels {
 
   static const emptyToolsHint = 'Sem ferramentas ainda.';
   static const backgroundLock = 'Travar fundo';
-  static const backgroundLockBadge = 'PRO';
   static const backgroundLockPaywallTitle = 'Travar fundo';
   static const backgroundLockPaywallBody =
       'Disponível nos planos pagos. O fundo fica parado enquanto o corpo é '
       'ajustado, sem portas ou linhas tortas.';
   static const backgroundLockPaywallAction = 'Ver planos';
+  static const proToolPaywallBody =
+      'Ferramenta dos planos pagos. Assine para ajustar com ela.';
+  static const legsNotRecognized =
+      'Falha ao reconhecer as linhas das pernas, não foi possível ajustar.';
   static const limitedByOcclusion = 'Ajuste limitado por oclusão';
   static const limitedByConfidence = 'Ajuste limitado por confiança baixa';
   static const limitedByCapability = 'Ajuste limitado — evidência insuficiente';

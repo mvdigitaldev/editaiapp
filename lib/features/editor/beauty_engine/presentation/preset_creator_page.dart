@@ -66,7 +66,8 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
       return;
     }
 
-    final preset = await ref.read(beautyPresetRepositoryProvider).findById(editId);
+    final preset =
+        await ref.read(beautyPresetRepositoryProvider).findById(editId);
     if (!mounted) {
       return;
     }
@@ -123,7 +124,8 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
     if (!auth.isAuthenticated) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Entre na conta para sincronizar filtros')),
+          const SnackBar(
+              content: Text('Entre na conta para sincronizar filtros')),
         );
       }
       return;
@@ -162,10 +164,11 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
     }
 
     try {
-      final updated = await ref.read(beautyPresetRepositoryProvider).setPresetPublic(
-            id: _presetId!,
-            isPublic: value,
-          );
+      final updated =
+          await ref.read(beautyPresetRepositoryProvider).setPresetPublic(
+                id: _presetId!,
+                isPublic: value,
+              );
       setState(() => _isPublic = updated.isPublic);
       ref.invalidate(userBeautyPresetsProvider);
       ref.invalidate(allBeautyPresetsProvider);
@@ -197,7 +200,8 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
 
   Future<void> _pickImage() async {
     final picker = image_picker.ImagePicker();
-    final file = await picker.pickImage(source: image_picker.ImageSource.gallery);
+    final file =
+        await picker.pickImage(source: image_picker.ImageSource.gallery);
     if (file == null) {
       return;
     }
@@ -320,7 +324,8 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
     }
 
     try {
-      final preset = await ref.read(beautyPresetRepositoryProvider).findById(id);
+      final preset =
+          await ref.read(beautyPresetRepositoryProvider).findById(id);
       if (preset == null) {
         return;
       }
@@ -594,49 +599,56 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
                       value: _tune.exposure,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(exposure: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(exposure: v)),
                     ),
                     _TuneSlider(
                       label: 'Contraste',
                       value: _tune.contrast,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(contrast: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(contrast: v)),
                     ),
                     _TuneSlider(
                       label: 'Brilho',
                       value: _tune.brightness,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(brightness: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(brightness: v)),
                     ),
                     _TuneSlider(
                       label: 'Realces',
                       value: _tune.highlights,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(highlights: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(highlights: v)),
                     ),
                     _TuneSlider(
                       label: 'Sombras',
                       value: _tune.shadows,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(shadows: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(shadows: v)),
                     ),
                     _TuneSlider(
                       label: 'Brancos',
                       value: _tune.whites,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(whites: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(whites: v)),
                     ),
                     _TuneSlider(
                       label: 'Pretos',
                       value: _tune.blacks,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(blacks: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(blacks: v)),
                     ),
                   ],
                 ),
@@ -648,7 +660,8 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
                       value: _tune.temperature,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(temperature: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(temperature: v)),
                     ),
                     _TuneSlider(
                       label: 'Matiz (tint)',
@@ -662,14 +675,16 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
                       value: _tune.vibrance,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(vibrance: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(vibrance: v)),
                     ),
                     _TuneSlider(
                       label: 'Saturação',
                       value: _tune.saturation,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(saturation: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(saturation: v)),
                     ),
                     _TuneSlider(
                       label: 'Matiz (hue)',
@@ -695,28 +710,32 @@ class _PresetCreatorPageState extends ConsumerState<PresetCreatorPage> {
                       value: _tune.sharpness,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(sharpness: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(sharpness: v)),
                     ),
                     _TuneSlider(
                       label: 'Luminância',
                       value: _tune.luminance,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(luminance: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(luminance: v)),
                     ),
                     _TuneSlider(
                       label: 'Vinheta',
                       value: _tune.vignette,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(vignette: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(vignette: v)),
                     ),
                     _TuneSlider(
                       label: 'Gamma',
                       value: _tune.gamma,
                       min: -0.5,
                       max: 0.5,
-                      onChanged: (v) => _updateTune((t) => t.copyWith(gamma: v)),
+                      onChanged: (v) =>
+                          _updateTune((t) => t.copyWith(gamma: v)),
                     ),
                   ],
                 ),

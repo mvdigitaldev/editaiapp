@@ -114,8 +114,7 @@ void main() {
         ],
         qualityProfile: WarpQualityProfile.preview,
       );
-      final optimized =
-          deformer.deform(mesh: mesh, assets: assets, plan: plan);
+      final optimized = deformer.deform(mesh: mesh, assets: assets, plan: plan);
       final protection = preprocessor.buildProtectionMaps(
         assets.personMatte!,
         imageSize: imageSize,
@@ -181,8 +180,7 @@ void main() {
         ],
         qualityProfile: WarpQualityProfile.preview,
       );
-      final optimized =
-          deformer.deform(mesh: mesh, assets: assets, plan: plan);
+      final optimized = deformer.deform(mesh: mesh, assets: assets, plan: plan);
       final protection = preprocessor.buildProtectionMaps(
         assets.personMatte!,
         imageSize: imageSize,

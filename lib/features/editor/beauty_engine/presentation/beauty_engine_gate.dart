@@ -24,8 +24,7 @@ class BeautyEngineGate extends ConsumerWidget {
       data: (enabled) {
         if (!enabled) {
           return const _UnavailableScaffold(
-            message:
-                'Retoque Beauty ainda não está disponível para sua conta. '
+            message: 'Retoque Beauty ainda não está disponível para sua conta. '
                 'Estamos liberando aos poucos — tente novamente em breve.',
           );
         }

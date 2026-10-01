@@ -152,6 +152,7 @@ class BeautyEngineController {
   final LipSmileFieldRuntime _lipSmileRuntime = LipSmileFieldRuntime();
   final BodyWaistFieldRuntime _bodyWaistRuntime = BodyWaistFieldRuntime();
   final BodyLegsFieldRuntime _bodyLegsRuntime = BodyLegsFieldRuntime();
+  final BodyLegsFieldRuntime _bodyThighsRuntime = BodyLegsFieldRuntime();
   final BodyBackgroundLockRuntime _bodyBackgroundLockRuntime =
       BodyBackgroundLockRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
@@ -496,6 +497,23 @@ class BeautyEngineController {
     if (legs != null && legsGeometry != null) {
       fields.add(legs);
       maxShift = math.max(maxShift, BodyLegsField.maxEdgeShift(legsGeometry));
+    }
+
+    final thighs = BodyLegsField.build(
+      pose: pose,
+      imageSize: imageSize,
+      mask: personMask,
+      t: (parameters[BodyWarpChain.thighsKey] ?? 0).clamp(-1.0, 1.0),
+      band: BodyLegBand.thighs,
+      runtime: _bodyThighsRuntime,
+    );
+    final thighsGeometry = _bodyThighsRuntime.geometry;
+    if (thighs != null && thighsGeometry != null) {
+      fields.add(thighs);
+      maxShift = math.max(
+        maxShift,
+        BodyLegsField.maxEdgeShift(thighsGeometry, BodyLegBand.thighs),
+      );
     }
 
     if (fields.isEmpty) {

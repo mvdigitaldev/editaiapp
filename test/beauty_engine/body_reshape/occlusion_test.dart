@@ -90,7 +90,8 @@ void main() {
       expect(decision.occluders, contains(OccluderKind.leftHand));
       if (decision.wasReduced) {
         expect(
-          result.plan.adjustmentOfType(BodyAdjustmentType.waistSlim)!
+          result.plan
+              .adjustmentOfType(BodyAdjustmentType.waistSlim)!
               .occlusionReason,
           isNotNull,
         );

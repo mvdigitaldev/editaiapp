@@ -253,7 +253,8 @@ class _Thumbnail extends StatelessWidget {
             : Image.network(
                 url!,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined),
+                errorBuilder: (_, __, ___) =>
+                    const Icon(Icons.broken_image_outlined),
               ),
       ),
     );

@@ -39,11 +39,13 @@ void main() {
       final size = expected[photo.id]!;
       expect(photo.width, size.$1, reason: photo.id);
       expect(photo.height, size.$2, reason: photo.id);
-      expect(photo.rgba.length, photo.width * photo.height * 4, reason: photo.id);
+      expect(photo.rgba.length, photo.width * photo.height * 4,
+          reason: photo.id);
     }
   });
 
-  test('seed do laboratório grava original.png em .cursor/body-reshape-v2/catalog',
+  test(
+      'seed do laboratório grava original.png em .cursor/body-reshape-v2/catalog',
       () {
     Directory(_dumpRoot).createSync(recursive: true);
     final summary = <Map<String, Object?>>[];

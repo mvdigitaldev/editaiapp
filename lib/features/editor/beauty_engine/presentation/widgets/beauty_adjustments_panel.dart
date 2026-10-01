@@ -61,17 +61,25 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
     this.bodyOnly = false,
     this.labMode = false,
     this.gatePlan,
-    this.backgroundLockAllowed = false,
-    this.onBackgroundLockLocked,
+    this.proToolsAllowed = false,
+    this.onProToolLocked,
+    this.unavailableToolKeys = const {},
+    this.onUnavailableTool,
   });
 
   final Map<String, double> params;
 
-  /// Plano pago activo: a trava de fundo do corpo pode ser ligada.
-  final bool backgroundLockAllowed;
+  /// Plano pago activo: as ferramentas de [BodyWarpChain.proParameterKeys]
+  /// podem ser usadas.
+  final bool proToolsAllowed;
 
-  /// Toque na trava sem plano pago.
-  final VoidCallback? onBackgroundLockLocked;
+  /// Toque numa ferramenta paga sem plano pago.
+  final ValueChanged<String>? onProToolLocked;
+
+  /// Ferramentas que a foto não deixa usar (ex.: pernas não reconhecidas):
+  /// ficam cinzentas e o toque só avisa.
+  final Set<String> unavailableToolKeys;
+  final ValueChanged<String>? onUnavailableTool;
   final bool enabled;
   final bool linkEyes;
   final void Function(String key, double value) onParamChanged;
@@ -259,11 +267,17 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     if (keys.isEmpty) {
       return '';
     }
-    if (_selectedKey != null && keys.contains(_selectedKey)) {
+    if (_selectedKey != null &&
+        keys.contains(_selectedKey) &&
+        _canUse(_selectedKey!)) {
       return _selectedKey!;
     }
-    return keys.first;
+    return keys.firstWhere(_canUse, orElse: () => keys.first);
   }
+
+  bool _canUse(String key) =>
+      !widget.unavailableToolKeys.contains(key) &&
+      (widget.proToolsAllowed || !BodyWarpChain.isPro(key));
 
   bool get _usesToolIcons =>
       _activeCategoryDef.parameterKeys.any(BeautyToolIcons.hasGlyph);
@@ -317,7 +331,9 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     final isBody = _bodyCategories.contains(_category);
     final sliderRange = _sliderRangeForKey(activeKey);
     final gate = widget.gatePlan?.decisionFor(activeKey);
-    final paramEnabled = widget.enabled && (gate == null || !gate.isDisabled);
+    final paramEnabled = widget.enabled &&
+        (gate == null || !gate.isDisabled) &&
+        !widget.unavailableToolKeys.contains(activeKey);
     final gateHint = BeautyEngineLabels.gateHint(gate?.hintKey);
     final limitationHint = isBody
         ? BodyReshapeLabels.limitationHint(
@@ -397,63 +413,78 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                   ),
                 ),
               ),
-            if (isBody && activeKey.isNotEmpty)
-              _BackgroundLockRow(
-                value: widget.backgroundLockAllowed &&
-                    BodyWarpChain.backgroundLockRequested(widget.params),
-                allowed: widget.backgroundLockAllowed,
-                enabled: widget.enabled,
-                onChanged: (on) => widget.onParamChanged(
-                  BodyWarpChain.backgroundLockKey,
-                  on ? 1 : 0,
-                ),
-                onLocked: widget.onBackgroundLockLocked,
-              ),
             if (activeKey.isNotEmpty)
               SizedBox(
-              height: _usesToolIcons ? 78 : 40,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: _activeCategoryDef.parameterKeys.length,
-                separatorBuilder: (_, __) =>
-                    SizedBox(width: _usesToolIcons ? 2 : 6),
-                itemBuilder: (context, index) {
-                  final key = _activeCategoryDef.parameterKeys[index];
-                  final selected = key == activeKey;
-                  final disabled =
-                      widget.gatePlan?.decisionFor(key).isDisabled ?? false;
-                  if (disabled) {
-                    return const SizedBox.shrink();
-                  }
-                  if (BeautyToolIcons.hasGlyph(key)) {
-                    return _ToolNavItem(
-                      toolKey: key,
-                      label: BeautyEngineLabels.parameterLabel(key),
-                      selected: selected,
-                      enabled: widget.enabled,
-                      changed: _isChanged(key),
-                      onTap: () => setState(() => _selectedKey = key),
-                    );
-                  }
-                  return ChoiceChip(
-                    label: Text(
-                      BeautyEngineLabels.parameterLabel(key),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: selected ? Colors.white : null,
+                height: _usesToolIcons ? 78 : 40,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: _activeCategoryDef.parameterKeys.length,
+                  separatorBuilder: (_, __) =>
+                      SizedBox(width: _usesToolIcons ? 2 : 6),
+                  itemBuilder: (context, index) {
+                    final key = _activeCategoryDef.parameterKeys[index];
+                    final selected = key == activeKey;
+                    final disabled =
+                        widget.gatePlan?.decisionFor(key).isDisabled ?? false;
+                    if (disabled) {
+                      return const SizedBox.shrink();
+                    }
+                    if (BeautyToolIcons.hasGlyph(key)) {
+                      return _ToolNavItem(
+                        toolKey: key,
+                        label: BeautyEngineLabels.parameterLabel(key),
+                        selected: selected,
+                        enabled: widget.enabled,
+                        changed: _isChanged(key),
+                        onTap: () => setState(() => _selectedKey = key),
+                      );
+                    }
+                    final pro = BodyWarpChain.isPro(key);
+                    final unavailable =
+                        widget.unavailableToolKeys.contains(key);
+                    final chip = ChoiceChip(
+                      key: ValueKey('tool_chip_$key'),
+                      label: Text(
+                        BeautyEngineLabels.parameterLabel(key),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: selected ? Colors.white : null,
+                        ),
                       ),
-                    ),
-                    selected: selected,
-                    onSelected: widget.enabled
-                        ? (_) => setState(() => _selectedKey = key)
-                        : null,
-                    selectedColor: AppColors.primary,
-                    visualDensity: VisualDensity.compact,
-                  );
-                },
+                      selected: selected && !unavailable,
+                      onSelected:
+                          widget.enabled ? (_) => _selectTool(key) : null,
+                      selectedColor: AppColors.primary,
+                      visualDensity: VisualDensity.compact,
+                    );
+                    final shown = unavailable
+                        ? Opacity(
+                            key: ValueKey('tool_unavailable_$key'),
+                            opacity: 0.38,
+                            child: chip,
+                          )
+                        : chip;
+                    if (!pro) {
+                      return shown;
+                    }
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, right: 4),
+                          child: shown,
+                        ),
+                        const Positioned(
+                          top: 0,
+                          right: 0,
+                          child: _ProLockBadge(),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
-            ),
             SizedBox(
               height: 72,
               child: Row(
@@ -480,6 +511,19 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         ),
       ),
     );
+  }
+
+  /// Ferramenta paga sem plano: não selecciona, abre o aviso de planos.
+  void _selectTool(String key) {
+    if (widget.unavailableToolKeys.contains(key)) {
+      widget.onUnavailableTool?.call(key);
+      return;
+    }
+    if (BodyWarpChain.isPro(key) && !widget.proToolsAllowed) {
+      widget.onProToolLocked?.call(key);
+      return;
+    }
+    setState(() => _selectedKey = key);
   }
 
   /// 0 = Geral, 1 = esquerda da foto, 2 = direita da foto (convenção Meitu).
@@ -667,7 +711,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'lip_plump' ||
         key == 'lip_smile' ||
         key == BodyWarpChain.waistKey ||
-        key == BodyWarpChain.legsKey) {
+        key == BodyWarpChain.legsKey ||
+        key == BodyWarpChain.thighsKey) {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {
@@ -826,72 +871,22 @@ class _CategoryNavItem extends StatelessWidget {
   }
 }
 
-/// «Travar fundo» do corpo. Sem plano pago o switch fica desligado e o toque
-/// abre o aviso de planos.
-class _BackgroundLockRow extends StatelessWidget {
-  const _BackgroundLockRow({
-    required this.value,
-    required this.allowed,
-    required this.enabled,
-    required this.onChanged,
-    required this.onLocked,
-  });
-
-  final bool value;
-  final bool allowed;
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
-  final VoidCallback? onLocked;
+/// Cadeado rosa por cima das ferramentas do plano pago.
+class _ProLockBadge extends StatelessWidget {
+  const _ProLockBadge();
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
-      child: Row(
-        children: [
-          Icon(
-            allowed ? Icons.lock_outline_rounded : Icons.lock_rounded,
-            size: 18,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            BodyReshapeLabels.backgroundLock,
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: const Text(
-              BodyReshapeLabels.backgroundLockBadge,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const Spacer(),
-          Switch(
-            key: const ValueKey('body_bg_lock_switch'),
-            value: value,
-            onChanged: !enabled
-                ? null
-                : (on) {
-                    if (!allowed) {
-                      onLocked?.call();
-                      return;
-                    }
-                    onChanged(on);
-                  },
-          ),
-        ],
+    return Container(
+      key: const ValueKey('pro_lock_badge'),
+      width: 15,
+      height: 15,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFF4D8D),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1.2),
       ),
+      child: const Icon(Icons.lock_rounded, size: 8.5, color: Colors.white),
     );
   }
 }

@@ -21,7 +21,7 @@ O Meitu tem ainda Thighs, Calves e Straight legs na aba Pernas, e um selector Ge
 
 `lib/features/editor/beauty_engine/warp/v2/body_legs/body_legs_field.dart`
 
-- **Eixo por perna:** anca → tornozelo (landmarks 23→27 e 24→28). Sem tornozelo visível, prolonga-se anca→joelho ×2. Sem anca visível, não há campo. `n` é a perpendicular de cada perna, virada para a direita da foto.
+- **Eixo por perna:** anca → tornozelo (landmarks 23→27 e 24→28). Sem tornozelo visível, prolonga-se anca→joelho ×2. Sem anca visível, ou com o joelho fora da foto, não há campo. Como o MediaPipe também põe o joelho dentro do quadro, colado à borda, exige-se ainda o tornozelo dentro da foto ou canela à vista (`joelho + 0,6 · coxa` dentro da foto; era 0,2 e deixava passar a `body-p02`, que o Meitu não reconhece) e, com ombros visíveis, coxa ≥ 0,5 × tronco (ombros→ancas): o MediaPipe extrapola o joelho para fora do quadro com visibilidade alta, e numa foto cortada acima do joelho (`body-p02`) a faixa caía na anca, onde estão as mãos, e apertava mãos e pulseiras. `n` é a perpendicular de cada perna, virada para a direita da foto.
 - **Bordas** (64 amostras ao longo do eixo, alisadas com mediana de 5 e caixa ×2):
   - De fora: primeira saída da máscara entre `0.3×` e `1.8×` a estimativa `distânciaEntreAncas · lerp(0.50, 0.18, s)`.
   - De dentro: primeira saída até a meio caminho da outra perna. Se não sair, as coxas estão encostadas e o vão é 0. Se sair, o vão é a distância até a máscara voltar (a outra perna).
@@ -56,3 +56,8 @@ O Meitu tem ainda Thighs, Calves e Straight legs na aba Pernas, e um selector Ge
 - **Perna de perfil ou cruzada:** o eixo anca→tornozelo é recto. Com o joelho muito dobrado, a normal deixa de ser perpendicular à canela. Num corpo de pé está bem.
 - **Vão estreito** (menos de 0,8 meias-larguras): a perna afina mais para fora do que para dentro, por injectividade.
 - **Sem selector L/R** nem Thighs, Calves ou Straight legs.
+
+
+## Ferramenta indisponível (2026-10-01)
+
+Sem pernas reconhecidas (regra do joelho acima), o chip «Pernas» fica cinzento e não selecciona; o toque mostra sobre a foto «Falha ao reconhecer as linhas das pernas, não foi possível ajustar.» (`BodyWarpChain.unavailableKeys` → `BeautyAdjustmentsPanel.unavailableToolKeys`). Igual ao Meitu. As Coxas têm regra própria (`v2-body-thighs.md`).

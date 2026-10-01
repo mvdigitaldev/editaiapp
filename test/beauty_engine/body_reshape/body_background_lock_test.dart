@@ -74,9 +74,11 @@ Uint8List _scene(PersonMask mask) {
 bool _isPerson(Uint8List rgba, int i) =>
     rgba[i * 4] > 150 && rgba[i * 4 + 1] < 100 && rgba[i * 4 + 2] < 100;
 
-/// Pessoa (origem ou resultado) a até 3 px: aí a borda suave é legítima.
-bool _nearPerson(PersonMask mask, Uint8List out, int x, int y) {
-  for (var dx = -3; dx <= 3; dx++) {
+/// Pessoa (origem ou resultado) a até [radius] px: aí a borda suave e a faixa
+/// de guarda reconstruída são legítimas.
+bool _nearPerson(PersonMask mask, Uint8List out, int x, int y,
+    [int radius = 3]) {
+  for (var dx = -radius; dx <= radius; dx++) {
     final nx = x + dx;
     if (nx < 0 || nx >= _w) continue;
     final j = y * _w + nx;
@@ -170,6 +172,67 @@ void main() {
         }
       }
       expect(worst, lessThanOrEqualTo(2), reason: 't=$t');
+    }
+  });
+
+  test('máscara suave com halo largo: o fundo do halo não é arrastado', () {
+    // Como o segmentador real: confiança a cair 10 px para fora da pessoa,
+    // sempre abaixo de 0.5 no fundo.
+    final soft = Uint8List.fromList(mask.bytes);
+    for (var y = 50; y < 390; y++) {
+      for (var x = 0; x < _w; x++) {
+        final i = y * _w + x;
+        if (mask.bytes[i] == 255) continue;
+        final d = x < 70 ? 70 - x : x - 129;
+        final dy = y < 60 ? 60 - y : (y >= 380 ? y - 379 : 0);
+        final dist = d > dy ? d : dy;
+        if (dist <= 10) {
+          soft[i] = (120 * (1 - dist / 11)).round();
+        }
+      }
+    }
+    final softMask = PersonMask(bytes: soft, width: _w, height: _h);
+    for (final t in [1.0, -1.0]) {
+      final field = BodyWaistField.build(
+        pose: pose,
+        imageSize: _size,
+        mask: softMask,
+        t: t,
+      )!;
+      final out = _locked(source, softMask, field);
+      var worst = 0;
+      // A borda 0.5 da máscara suave cai 1 px para fora: guarda + 1.
+      final radius = BodyBackgroundLock.guardPx(_w, _h, softMask) + 1;
+      for (var y = 0; y < _h; y++) {
+        for (var x = 0; x < _w; x++) {
+          if (_nearPerson(mask, out, x, y, radius)) continue;
+          final d = _maxChannelDiff(out, source, y * _w + x);
+          if (d > worst) worst = d;
+        }
+      }
+      expect(worst, lessThanOrEqualTo(2), reason: 't=$t');
+    }
+  });
+
+  test('pessoa 2 px fora da máscara: afinar não deixa fantasma', () {
+    // O segmentador real erra a borda: a roupa passa um pouco da máscara.
+    final wide = Uint8List.fromList(mask.bytes);
+    for (var y = 60; y < 380; y++) {
+      for (var x = 68; x < 132; x++) {
+        wide[y * _w + x] = 255;
+      }
+    }
+    final scene = _scene(PersonMask(bytes: wide, width: _w, height: _h));
+    final field = waist(1);
+    final plain = _personWidth(_warp(scene, field), _waistRow);
+    final out = _locked(scene, mask, field);
+    expect(plain, lessThan(_personWidth(scene, _waistRow) - 3));
+    expect(_personWidth(out, _waistRow), lessThanOrEqualTo(plain + 1));
+    // O buraco é fundo inventado só com fundo: nem vermelho nem rosado.
+    for (var x = 0; x < _w; x++) {
+      final o = (_waistRow * _w + x) * 4;
+      if (_isPerson(out, _waistRow * _w + x)) continue;
+      expect(out[o] > 150 && out[o + 1] < 150, isFalse, reason: 'x=$x');
     }
   });
 

@@ -45,7 +45,8 @@ void main() {
   });
 
   group('TpsRefinementPass', () {
-    test('reduces high-frequency displacement energy within intensity limit', () {
+    test('reduces high-frequency displacement energy within intensity limit',
+        () {
       final field = _noisyField(imageSize);
       final beforeEnergy = _displacementEnergy(field);
       final refined = const TpsRefinementPass(lowPassBlend: 0.7).refine(

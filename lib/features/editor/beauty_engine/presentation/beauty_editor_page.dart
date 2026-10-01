@@ -27,6 +27,7 @@ import '../filters/body/body_filter_pipeline.dart';
 import '../filters/body/body_warp_chain.dart';
 import '../l10n/beauty_engine_labels.dart';
 import '../l10n/body_reshape_labels.dart';
+import 'widgets/body_background_lock_pill.dart';
 import '../models/beauty_image_loader.dart';
 import '../models/face_mesh_result.dart';
 import '../models/image_source.dart';
@@ -81,6 +82,8 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   PoseResult? _cachedPose;
   PersonMask? _cachedPersonMask;
   bool _landmarksReady = false;
+  String? _bodyNotice;
+  Timer? _bodyNoticeTimer;
   bool _processing = false;
   bool _saving = false;
   bool _showOriginal = false;
@@ -144,6 +147,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _bodyNoticeTimer?.cancel();
     _previewImage?.dispose();
     _viewerTransform.dispose();
     super.dispose();
@@ -192,10 +196,13 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   };
 
   static const _v2BodyLabAssets = {
-    'p01': 'test/beauty_engine/warp/fixtures/body/real/p01-woman-desert-full.png',
-    'p02': 'test/beauty_engine/warp/fixtures/body/real/p02-woman-indoor-hands.png',
+    'p01':
+        'test/beauty_engine/warp/fixtures/body/real/p01-woman-desert-full.png',
+    'p02':
+        'test/beauty_engine/warp/fixtures/body/real/p02-woman-indoor-hands.png',
     'p03': 'test/beauty_engine/warp/fixtures/body/real/p03-man-rooftop.png',
-    'p04': 'test/beauty_engine/warp/fixtures/body/real/p04-woman-window-full.png',
+    'p04':
+        'test/beauty_engine/warp/fixtures/body/real/p04-woman-window-full.png',
   };
 
   Map<String, String> get _labAssets =>
@@ -449,6 +456,20 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       );
     }
     _landmarksReady = true;
+    if (kDebugMode && widget.bodyOnly) {
+      final legPoints = pose == null
+          ? 'sem pose'
+          : [
+              for (final l in pose.landmarks)
+                if (const {11, 12, 23, 24, 25, 26, 27, 28}.contains(l.index))
+                  '${l.index}:(${l.normalized.dx.toStringAsFixed(3)},'
+                      '${l.normalized.dy.toStringAsFixed(3)}) '
+                      'v${l.visibility.toStringAsFixed(2)}',
+            ].join(' ');
+      debugPrint(
+        '[BodyLegs] $legPoints indisponível=$_unavailableBodyTools',
+      );
+    }
   }
 
   void _selectFace(int index) {
@@ -485,7 +506,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   }
 
   Map<String, double> _gatedParams(BeautyEngineController controller) {
-    final params = BodyWarpChain.gateBackgroundLock(
+    final params = BodyWarpChain.gatePaidFeatures(
       _params,
       allowed: widget.bodyOnly && ref.read(bodyBackgroundLockAllowedProvider),
     );
@@ -498,7 +519,43 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   bool get _warpDebugAvailable => widget.labMode || kDebugMode;
 
-  void _showBackgroundLockPaywall() {
+  void _showBackgroundLockPaywall() => _showPaidFeaturePaywall(
+        title: BodyReshapeLabels.backgroundLockPaywallTitle,
+        body: BodyReshapeLabels.backgroundLockPaywallBody,
+      );
+
+  /// Ferramentas de corpo que a pose detectada não deixa usar. Antes da
+  /// detecção acabar, nenhuma (o painel não pisca cinzento ao abrir).
+  Set<String> get _unavailableBodyTools {
+    final preview = _previewSource;
+    if (!widget.bodyOnly || !_landmarksReady || preview == null) {
+      return const {};
+    }
+    return BodyWarpChain.unavailableKeys(
+      pose: _cachedPose,
+      imageSize: Size(preview.width.toDouble(), preview.height.toDouble()),
+    );
+  }
+
+  void _showUnavailableTool(String key) {
+    if (!BodyWarpChain.isLegKey(key)) {
+      return;
+    }
+    _bodyNoticeTimer?.cancel();
+    setState(() => _bodyNotice = BodyReshapeLabels.legsNotRecognized);
+    _bodyNoticeTimer = Timer(const Duration(milliseconds: 2200), () {
+      if (mounted) {
+        setState(() => _bodyNotice = null);
+      }
+    });
+  }
+
+  void _showProToolPaywall(String key) => _showPaidFeaturePaywall(
+        title: BeautyEngineLabels.parameterLabel(key),
+        body: BodyReshapeLabels.proToolPaywallBody,
+      );
+
+  void _showPaidFeaturePaywall({required String title, required String body}) {
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -509,11 +566,11 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                BodyReshapeLabels.backgroundLockPaywallTitle,
+                title,
                 style: Theme.of(sheetContext).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              const Text(BodyReshapeLabels.backgroundLockPaywallBody),
+              Text(body),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -1302,6 +1359,32 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                       ),
                     ),
                   ),
+                if (widget.bodyOnly && _imageBytes != null && !_brushMode)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 10,
+                    child: Center(
+                      child: BodyBackgroundLockPill(
+                        value: BodyWarpChain.backgroundLockRequested(_params),
+                        allowed: ref.watch(bodyBackgroundLockAllowedProvider),
+                        enabled: _source != null,
+                        onChanged: (on) => _onParamChanged(
+                          BodyWarpChain.backgroundLockKey,
+                          on ? 1 : 0,
+                        ),
+                        onLocked: _showBackgroundLockPaywall,
+                      ),
+                    ),
+                  ),
+                if (_bodyNotice != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Center(
+                        child: _BodyNotice(message: _bodyNotice!),
+                      ),
+                    ),
+                  ),
                 if (_processing)
                   const Positioned(
                     left: 0,
@@ -1374,12 +1457,39 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                   : ref.watch(beautyEngineControllerProvider).lastToolGatePlan,
               onParamChanged: _onParamChanged,
               onLinkEyesChanged: _onLinkEyesChanged,
-              backgroundLockAllowed: widget.bodyOnly &&
+              proToolsAllowed: widget.bodyOnly &&
                   ref.watch(bodyBackgroundLockAllowedProvider),
-              onBackgroundLockLocked: _showBackgroundLockPaywall,
+              onProToolLocked: _showProToolPaywall,
+              unavailableToolKeys: _unavailableBodyTools,
+              onUnavailableTool: _showUnavailableTool,
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Aviso curto sobre a foto, como o do Meitu.
+class _BodyNotice extends StatelessWidget {
+  const _BodyNotice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('body_notice'),
+      constraints: const BoxConstraints(maxWidth: 260),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.3),
       ),
     );
   }

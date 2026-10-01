@@ -12,6 +12,7 @@ class BodyLegGeometry {
   const BodyLegGeometry({
     required this.hip,
     required this.ankle,
+    required this.kneeS,
     required this.normal,
     required this.innerSign,
     required this.sSamples,
@@ -22,6 +23,9 @@ class BodyLegGeometry {
 
   final Offset hip;
   final Offset ankle;
+
+  /// Joelho projectado no eixo anca→tornozelo (0..1). Sem joelho, 0.5.
+  final double kneeS;
 
   /// Perpendicular ao eixo, virada para a direita da foto.
   final Offset normal;
@@ -57,10 +61,78 @@ class BodyLegsGeometry {
   final bool fromMask;
 }
 
+/// Faixa ao longo de anca→tornozelo: sobe em `[start, start + rise]` e desce
+/// em `[end, end + fall]`. Com [kneeRelative], os valores são fracções da
+/// posição do joelho de cada perna.
+class BodyLegBand {
+  const BodyLegBand({
+    required this.start,
+    required this.rise,
+    required this.end,
+    required this.fall,
+    required this.gain,
+    this.kneeRelative = false,
+    this.requiresKnee = true,
+  });
+
+  final double start;
+  final double rise;
+  final double end;
+  final double fall;
+  final bool kneeRelative;
+
+  /// `α = gain · t`. Cada borda livre anda `≈ α · meia-largura`.
+  final double gain;
+
+  /// Sem joelho fiável na foto não há campo. Quando é `false`, o joelho que
+  /// falta estima-se pelo tronco.
+  final bool requiresKnee;
+
+  /// Pernas: da virilha ao tornozelo. Só com a perna à vista.
+  static const legs = BodyLegBand(
+    start: 0.08,
+    rise: 0.20,
+    end: 0.80,
+    fall: 0.15,
+    gain: 0.12,
+  );
+
+  /// Coxas: da virilha ao joelho, com cauda que acaba um pouco abaixo dele
+  /// (em `1.2 ×` o joelho) para o efeito não parar seco no joelho. Metade do
+  /// ganho das Pernas: a coxa de saia ou com a mão em cima pede um movimento
+  /// seguro, como o do Meitu.
+  static const thighs = BodyLegBand(
+    start: 0.16,
+    rise: 0.36,
+    end: 0.75,
+    fall: 0.45,
+    gain: 0.06,
+    kneeRelative: true,
+    requiresKnee: false,
+  );
+
+  ({double start, double rise, double end, double fall}) resolve(
+    double kneeS,
+  ) {
+    final k = kneeRelative ? kneeS : 1.0;
+    return (start: start * k, rise: rise * k, end: end * k, fall: fall * k);
+  }
+
+  double weight(double s, double kneeS) {
+    final r = resolve(kneeS);
+    if (s <= r.start || s >= r.end + r.fall) {
+      return 0;
+    }
+    return BodyLegsField._smoothstep((s - r.start) / r.rise) *
+        (1 - BodyLegsField._smoothstep((s - r.end) / r.fall));
+  }
+}
+
 /// Cache do campo unitário. O slider só entra em `α(t)`.
 class BodyLegsFieldRuntime {
   PoseResult? pose;
   PersonMask? mask;
+  BodyLegBand? band;
   int width = 0;
   int height = 0;
   Float32List? unitDx;
@@ -69,9 +141,16 @@ class BodyLegsFieldRuntime {
   DisplacementField? field;
   BodyLegsGeometry? geometry;
 
-  bool matches(PoseResult pose, PersonMask? mask, int width, int height) {
+  bool matches(
+    PoseResult pose,
+    PersonMask? mask,
+    BodyLegBand band,
+    int width,
+    int height,
+  ) {
     return identical(this.pose, pose) &&
         identical(this.mask, mask) &&
+        identical(this.band, band) &&
         this.width == width &&
         this.height == height &&
         unitDx != null &&
@@ -91,16 +170,6 @@ class BodyLegsFieldRuntime {
 abstract final class BodyLegsField {
   BodyLegsField._();
 
-  /// `α = gain · t`. Cada borda livre anda `≈ α · meia-largura`.
-  static const gain = 0.12;
-
-  /// Faixa ao longo de anca→tornozelo: sobe de 0.08 a 0.28, desce de 0.80 a
-  /// 0.95. Acima fica a anca/virilha; abaixo, o tornozelo e o pé.
-  static const bandIn = 0.08;
-  static const bandInSpan = 0.20;
-  static const bandOut = 0.80;
-  static const bandOutSpan = 0.15;
-
   static const falloffOuter = 0.55;
   static const falloffInnerGap = 0.45;
 
@@ -110,25 +179,54 @@ abstract final class BodyLegsField {
   static const sampleCount = 64;
   static const minVisibility = 0.5;
 
+  /// Canela que tem de se ver abaixo do joelho, em fracção da coxa, quando o
+  /// tornozelo não está na foto. As Pernas afinam até ao tornozelo: com só a
+  /// coxa à vista (saia, foto cortada) o Meitu também não as reconhece.
+  static const minBelowKnee = 0.6;
+
+  /// Coxa mínima (anca→joelho) em fracção do tronco (ombros→ancas).
+  static const minThighToTorso = 0.5;
+
   static const _sStart = 0.0;
   static const _sEnd = 1.0;
 
-  static double alphaOf(double t) => gain * t.clamp(-1.0, 1.0);
+  /// Coxa estimada (anca→joelho) em fracção do tronco, quando a faixa aceita
+  /// joelho fora da foto.
+  static const estimatedThighToTorso = 0.95;
+
+  /// Coxa que tem de se ver abaixo da anca, em fracção da coxa estimada.
+  static const minVisibleThigh = 0.3;
+
+  static double alphaOf(double t, [BodyLegBand band = BodyLegBand.legs]) =>
+      band.gain * t.clamp(-1.0, 1.0);
 
   /// Maior deslocamento de borda possível no extremo do slider (px).
-  static double maxEdgeShift(BodyLegsGeometry geometry) {
+  static double maxEdgeShift(
+    BodyLegsGeometry geometry, [
+    BodyLegBand band = BodyLegBand.legs,
+  ]) {
     var m = 0.0;
     for (final leg in geometry.legs) {
       m = math.max(m, 2 * leg.maxHalfWidth);
     }
-    return gain * m;
+    return band.gain * m;
   }
+
+  /// A ferramenta reconhece pernas nesta pose? Só pela pose, sem máscara:
+  /// o painel usa-o para desligar o botão, como o Meitu.
+  static bool isAvailable({
+    required PoseResult pose,
+    required Size imageSize,
+    BodyLegBand band = BodyLegBand.legs,
+  }) =>
+      measure(pose: pose, imageSize: imageSize, band: band) != null;
 
   static DisplacementField? build({
     required PoseResult pose,
     required Size imageSize,
     PersonMask? mask,
     double t = 0,
+    BodyLegBand band = BodyLegBand.legs,
     BodyLegsFieldRuntime? runtime,
   }) {
     final width = imageSize.width.round();
@@ -136,23 +234,30 @@ abstract final class BodyLegsField {
     if (width <= 0 || height <= 0) {
       return null;
     }
-    final alpha = alphaOf(t);
+    final alpha = alphaOf(t, band);
     if (alpha.abs() <= 1e-9) {
       return null;
     }
-    if (runtime != null && runtime.matches(pose, mask, width, height)) {
+    if (runtime != null && runtime.matches(pose, mask, band, width, height)) {
       _scaleActive(runtime, alpha);
       return runtime.field;
     }
-    final geometry = measure(pose: pose, imageSize: imageSize, mask: mask);
+    final geometry =
+        measure(pose: pose, imageSize: imageSize, mask: mask, band: band);
     if (geometry == null) {
       return null;
     }
-    final packed = _packUnits(width: width, height: height, geometry: geometry);
+    final packed = _packUnits(
+      width: width,
+      height: height,
+      geometry: geometry,
+      band: band,
+    );
     final target = runtime ?? BodyLegsFieldRuntime();
     target
       ..pose = pose
       ..mask = mask
+      ..band = band
       ..width = width
       ..height = height
       ..unitDx = packed.unitDx
@@ -168,16 +273,24 @@ abstract final class BodyLegsField {
     required PoseResult pose,
     required Size imageSize,
     PersonMask? mask,
+    BodyLegBand band = BodyLegBand.legs,
   }) {
-    final a = _legAxis(pose, imageSize, 23, 25, 27);
-    final b = _legAxis(pose, imageSize, 24, 26, 28);
-    if (a == null || b == null) {
-      return null;
+    var a = _legAxis(pose, imageSize, 23, 25, 27);
+    var b = _legAxis(pose, imageSize, 24, 26, 28);
+    if (a == null ||
+        b == null ||
+        (a.$1 - b.$1).distance < 2 ||
+        !_thighInFrame(pose, imageSize, a, b)) {
+      if (band.requiresKnee) {
+        return null;
+      }
+      final estimated = _estimatedAxes(pose, imageSize);
+      if (estimated == null) {
+        return null;
+      }
+      (a, b) = estimated;
     }
     final hipDistance = (a.$1 - b.$1).distance;
-    if (hipDistance < 2) {
-      return null;
-    }
     final hasMask = mask != null &&
         mask.width > 0 &&
         mask.height > 0 &&
@@ -189,8 +302,11 @@ abstract final class BodyLegsField {
     return BodyLegsGeometry(legs: legs, fromMask: hasMask);
   }
 
-  /// Anca e tornozelo. Sem tornozelo visível, prolonga-se anca→joelho.
-  static (Offset, Offset)? _legAxis(
+  /// Anca, tornozelo e joelho. Sem tornozelo visível, prolonga-se
+  /// anca→joelho ×2. O joelho tem de estar dentro da foto: o MediaPipe
+  /// extrapola-o fora do quadro com visibilidade alta, e sem coxa à vista a
+  /// faixa cairia na anca, onde costumam estar as mãos.
+  static (Offset, Offset, Offset?)? _legAxis(
     PoseResult pose,
     Size imageSize,
     int hipIndex,
@@ -198,23 +314,91 @@ abstract final class BodyLegsField {
     int ankleIndex,
   ) {
     final hip = _pixel(pose, hipIndex, imageSize);
-    if (hip == null) {
+    final knee = _pixel(pose, kneeIndex, imageSize);
+    if (hip == null || knee == null || !_inFrame(knee, imageSize)) {
       return null;
     }
     final ankle = _pixel(pose, ankleIndex, imageSize);
     if (ankle != null) {
-      return (hip, ankle);
+      return (hip, ankle, knee);
     }
-    final knee = _pixel(pose, kneeIndex, imageSize);
-    if (knee == null) {
+    return (hip, hip + (knee - hip) * 2, knee);
+  }
+
+  /// Joelhos estimados pelo tronco: coxa de `0.95 ×` ombros→ancas, na
+  /// perpendicular à linha das ancas, para longe dos ombros. Exige que se veja
+  /// pelo menos `0.3` dessa coxa abaixo das ancas.
+  static ((Offset, Offset, Offset?), (Offset, Offset, Offset?))? _estimatedAxes(
+      PoseResult pose, Size imageSize) {
+    final ha = _pixel(pose, 23, imageSize);
+    final hb = _pixel(pose, 24, imageSize);
+    final ls = _pixel(pose, 11, imageSize);
+    final rs = _pixel(pose, 12, imageSize);
+    if (ha == null || hb == null || ls == null || rs == null) {
       return null;
     }
-    return (hip, hip + (knee - hip) * 2);
+    final hips = ha - hb;
+    if (hips.distance < 2) {
+      return null;
+    }
+    final hipMid = (ha + hb) / 2;
+    final torso = hipMid - (ls + rs) / 2;
+    if (torso.distance < 2) {
+      return null;
+    }
+    var down = Offset(-hips.dy, hips.dx) / hips.distance;
+    if (down.dx * torso.dx + down.dy * torso.dy < 0) {
+      down = -down;
+    }
+    final thigh = down * (estimatedThighToTorso * torso.distance);
+    (Offset, Offset, Offset?)? axis(Offset hip) {
+      if (!_inFrame(hip + thigh * minVisibleThigh, imageSize)) {
+        return null;
+      }
+      return (hip, hip + thigh * 2, hip + thigh);
+    }
+
+    final a = axis(ha);
+    final b = axis(hb);
+    return a == null || b == null ? null : (a, b);
+  }
+
+  static bool _inFrame(Offset p, Size size) =>
+      p.dx >= 0 && p.dy >= 0 && p.dx <= size.width && p.dy <= size.height;
+
+  /// Numa foto cortada acima do joelho o MediaPipe também o põe dentro do
+  /// quadro, encostado à borda e com a coxa curta. Exige-se o tornozelo na foto
+  /// ou canela à vista e, com ombros, coxa de pelo menos metade do tronco.
+  static bool _thighInFrame(
+    PoseResult pose,
+    Size imageSize,
+    (Offset, Offset, Offset?) a,
+    (Offset, Offset, Offset?) b,
+  ) {
+    final ls = _pixel(pose, 11, imageSize);
+    final rs = _pixel(pose, 12, imageSize);
+    final torso = ls == null || rs == null
+        ? null
+        : ((ls + rs) / 2 - (a.$1 + b.$1) / 2).distance;
+    for (final (leg, ankleIndex) in [(a, 27), (b, 28)]) {
+      final hip = leg.$1;
+      final knee = leg.$3!;
+      final thigh = knee - hip;
+      final ankle = _pixel(pose, ankleIndex, imageSize);
+      final shinInFrame = ankle != null && _inFrame(ankle, imageSize);
+      if (!shinInFrame && !_inFrame(knee + thigh * minBelowKnee, imageSize)) {
+        return false;
+      }
+      if (torso != null && thigh.distance < minThighToTorso * torso) {
+        return false;
+      }
+    }
+    return true;
   }
 
   static BodyLegGeometry _measureLeg(
-    (Offset, Offset) leg,
-    (Offset, Offset) other,
+    (Offset, Offset, Offset?) leg,
+    (Offset, Offset, Offset?) other,
     double hipDistance,
     Size imageSize,
     PersonMask? mask,
@@ -224,10 +408,14 @@ abstract final class BodyLegsField {
     final axis = ankle - hip;
     final length = math.max(1.0, axis.distance);
     final e = axis / length;
-    final n = Offset(-e.dy, e.dx).dx >= 0
-        ? Offset(-e.dy, e.dx)
-        : Offset(e.dy, -e.dx);
+    final n =
+        Offset(-e.dy, e.dx).dx >= 0 ? Offset(-e.dy, e.dx) : Offset(e.dy, -e.dx);
     final otherAxis = other.$2 - other.$1;
+    final knee = leg.$3;
+    final kneeS = knee == null
+        ? 0.5
+        : (((knee - hip).dx * e.dx + (knee - hip).dy * e.dy) / length)
+            .clamp(0.25, 0.75);
 
     final sValues = Float64List(sampleCount);
     final outer = Float64List(sampleCount);
@@ -290,6 +478,7 @@ abstract final class BodyLegsField {
     return BodyLegGeometry(
       hip: hip,
       ankle: ankle,
+      kneeS: kneeS,
       normal: n,
       innerSign: innerSign,
       sSamples: sValues,
@@ -342,7 +531,8 @@ abstract final class BodyLegsField {
       p.dx >= 0 && p.dy >= 0 && p.dx < size.width && p.dy < size.height;
 
   static double _maskAt(PersonMask mask, Size imageSize, Offset p) {
-    return mask.sampleNormalized(p.dx / imageSize.width, p.dy / imageSize.height);
+    return mask.sampleNormalized(
+        p.dx / imageSize.width, p.dy / imageSize.height);
   }
 
   /// Mediana de 5 contra dentes da máscara, depois caixa ×2.
@@ -375,14 +565,6 @@ abstract final class BodyLegsField {
   static double _smoothstep(double x) {
     final q = x.clamp(0.0, 1.0);
     return q * q * (3 - 2 * q);
-  }
-
-  static double _band(double s) {
-    if (s <= bandIn || s >= bandOut + bandOutSpan) {
-      return 0;
-    }
-    return _smoothstep((s - bandIn) / bandInSpan) *
-        (1 - _smoothstep((s - bandOut) / bandOutSpan));
   }
 
   /// Deslocamento unitário ao longo de `normal` (antes de `−α · band`).
@@ -430,6 +612,7 @@ abstract final class BodyLegsField {
     required int width,
     required int height,
     required BodyLegsGeometry geometry,
+    required BodyLegBand band,
   }) {
     var minX = double.infinity;
     var minY = double.infinity;
@@ -437,7 +620,8 @@ abstract final class BodyLegsField {
     var maxY = -double.infinity;
     for (final leg in geometry.legs) {
       final reach = leg.maxHalfWidth * (2 + falloffOuter) + 2;
-      for (final s in [bandIn, bandOut + bandOutSpan]) {
+      final r = band.resolve(leg.kneeS);
+      for (final s in [r.start, r.end + r.fall]) {
         final c = leg.hip + (leg.ankle - leg.hip) * s;
         for (final side in [-1.0, 1.0]) {
           final p = c + leg.normal * (side * reach);
@@ -466,8 +650,8 @@ abstract final class BodyLegsField {
           final px = x + 0.5 - leg.hip.dx;
           final py = y + 0.5 - leg.hip.dy;
           final s = (px * axis.dx + py * axis.dy) / length2;
-          final band = _band(s);
-          if (band <= 0) {
+          final w = band.weight(s, leg.kneeS);
+          if (w <= 0) {
             continue;
           }
           final u = px * leg.normal.dx + py * leg.normal.dy;
@@ -475,8 +659,8 @@ abstract final class BodyLegsField {
           if (v == 0) {
             continue;
           }
-          dx -= band * v * leg.normal.dx;
-          dy -= band * v * leg.normal.dy;
+          dx -= w * v * leg.normal.dx;
+          dy -= w * v * leg.normal.dy;
         }
         if (dx.abs() < 1e-6 && dy.abs() < 1e-6) {
           continue;

@@ -36,6 +36,7 @@ abstract final class BeautyEngineLabels {
     'lip_smile': 'Sorriso',
     'waist': 'Cintura',
     'legs': 'Pernas',
+    'thighs': 'Coxas',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',

@@ -13,7 +13,8 @@ class PresetSyncBootstrap extends ConsumerStatefulWidget {
   final Widget child;
 
   @override
-  ConsumerState<PresetSyncBootstrap> createState() => _PresetSyncBootstrapState();
+  ConsumerState<PresetSyncBootstrap> createState() =>
+      _PresetSyncBootstrapState();
 }
 
 class _PresetSyncBootstrapState extends ConsumerState<PresetSyncBootstrap> {

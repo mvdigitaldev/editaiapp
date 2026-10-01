@@ -57,10 +57,22 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, color) = switch (item.status) {
-      ParityChecklistStatus.pass => (Icons.check_circle_outline, Colors.greenAccent),
-      ParityChecklistStatus.warn => (Icons.warning_amber_outlined, Colors.amberAccent),
-      ParityChecklistStatus.active => (Icons.play_circle_outline, Colors.lightBlueAccent),
-      ParityChecklistStatus.idle => (Icons.radio_button_unchecked, Colors.white38),
+      ParityChecklistStatus.pass => (
+          Icons.check_circle_outline,
+          Colors.greenAccent
+        ),
+      ParityChecklistStatus.warn => (
+          Icons.warning_amber_outlined,
+          Colors.amberAccent
+        ),
+      ParityChecklistStatus.active => (
+          Icons.play_circle_outline,
+          Colors.lightBlueAccent
+        ),
+      ParityChecklistStatus.idle => (
+          Icons.radio_button_unchecked,
+          Colors.white38
+        ),
     };
 
     return Padding(

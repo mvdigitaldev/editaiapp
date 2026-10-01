@@ -60,7 +60,8 @@ class PreviewCoordinateMapper {
     );
     final dx = (viewportSize.width - outputSize.width) * 0.5;
     final dy = (viewportSize.height - outputSize.height) * 0.5;
-    final imageRect = Rect.fromLTWH(dx, dy, outputSize.width, outputSize.height);
+    final imageRect =
+        Rect.fromLTWH(dx, dy, outputSize.width, outputSize.height);
 
     if (!imageRect.inflate(1.0).contains(localPosition)) {
       return null;

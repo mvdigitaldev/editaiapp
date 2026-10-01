@@ -12,11 +12,11 @@ Sem trava, o campo do corpo é um só para a pessoa e para o fundo. Para a cintu
 
 Os Fields não mudam. A trava é uma composição no fim de `applyBodyWarpChain`:
 
-1. **Alfa da pessoa (uma vez por foto):** a `PersonMask` amostrada no recorte e refinada por um guided filter sobre a luma (raio 2 px, `eps = 1e-3`). O guided filter só decide a ±1 px da borda da máscara (trimap); fora disso o alfa é o da máscara, 0 ou 1. Sem o trimap, num fundo com textura forte, o guided filter copiava as arestas da luma e espalhava alfa de 0,15 a 0,35 até 3 px dentro do fundo, e esse fundo era arrastado com o corpo.
-2. **Fundo limpo (uma vez por foto):** no recorte do suporte dos campos, preenche-se o fundo por dentro da pessoa, até `bandPx = ceil(gain · maior meia-largura) + 6` px. O preenchimento é por camadas, de fora para dentro: cada pixel recebe a média dos vizinhos 8-conexos já conhecidos. Depois uma caixa 3×3 só nos preenchidos tira o padrão dos anéis.
+1. **Alfa da pessoa (uma vez por foto):** a `PersonMask` amostrada no recorte, **binarizada no nível 0,5** e refinada por um guided filter sobre a luma (raio 2 px, `eps = 1e-3`). O guided filter só decide a ±1 px dessa borda (trimap); fora disso o alfa é 0 ou 1. A máscara do segmentador é confiança suave e ampliada, com uma rampa de vários px por cima do fundo: usada crua, todo esse halo contava como «meio pessoa», ficava acima de 0,04 e era arrastado (na `body-p02` a moldura da porta e a parede curvavam com a trava ligada; teste «máscara suave com halo largo», 220 níveis sem a binarização, ≤ 2 com ela). Sem o trimap, num fundo com textura forte, o guided filter copiava as arestas da luma e espalhava alfa de 0,15 a 0,35 até 3 px dentro do fundo, e esse fundo era arrastado com o corpo.
+2. **Fundo limpo (uma vez por foto):** no recorte do suporte dos campos, preenche-se o fundo na **faixa de guarda** à volta da borda 0,5 e por dentro da pessoa até `bandPx = ceil(gain · maior meia-largura) + 6` px. Guarda: `max(3, ceil(2 × ampliação da máscara), round(0,004 × lado maior))` px. Só conta como fundo conhecido o que fica fora da guarda, porque a borda 0,5 erra alguns px: a roupa que passa da máscara, se fosse fundo conhecido, ficava parada ao afinar (fantasma da saia) e semeava o preenchimento. O preenchimento é **pull-push**: pirâmide de médias ponderadas dos pixels conhecidos, depois subida bilinear. A média anel a anel antiga arrastava raios de cor da borda para dentro do buraco, o que se via como «queimado» na cortina e na parede da `body-p02`.
 3. **Remap:** cópia da origem com o alfa no canal A. O mesmo `BackwardBilinearWarp` deforma a cor e o alfa em conjunto, sem segundo remap. As fotos do editor são opacas, por isso o canal A está livre.
 4. **Composição:** `out = rgb' + λ · (1 − a') · (fundo − rgb')`.
-   - Onde a origem já era fundo seguro, `λ = 1`: o pixel volta exactamente à origem.
+   - Onde a origem já era fundo seguro (fora da guarda), `λ = 1`: o pixel volta exactamente à origem.
    - Onde o fundo foi inventado, `λ = smoothstep(|D| / 0.25 px)`: onde o campo não mexe, a borda da pessoa fica como estava, sem costura no fim da faixa.
    - No fim, A volta a 255 em toda a imagem.
 
@@ -32,8 +32,8 @@ hasActivePaidPlan(subscriptionTier, subscriptionEndsAt)
 ```
 
 - `bodyBackgroundLockAllowedProvider` (`di/body_background_lock_access_provider.dart`) lê `authStateProvider`.
-- `_gatedParams` no editor tira `body_bg_lock` com `BodyWarpChain.gateBackgroundLock` quando não é pago ou não é `bodyOnly`. Corre antes do atalho de lab e pré-produção, e é o mesmo ponto para o preview e para o `_saveBodyEdit` (export).
-- No painel, a linha «Travar fundo» com selo PRO só aparece na categoria corpo. Sem plano, o switch fica desligado e o toque abre uma folha com «Ver planos» → `/subscription`.
+- `_gatedParams` no editor tira `body_bg_lock` (e as ferramentas pagas, como `thighs`) com `BodyWarpChain.gatePaidFeatures` quando não é pago ou não é `bodyOnly`. Corre antes do atalho de lab e pré-produção, e é o mesmo ponto para o preview e para o `_saveBodyEdit` (export).
+- Na UI, a trava é uma **pílula sobre a foto**, centrada em baixo, como o «Bloqueio de fundo» do Meitu (`presentation/widgets/body_background_lock_pill.dart`): fundo preto a 62%, diamante rosa do plano pago, «Travar fundo» a 12,5 px e um switch de 34×20. Só aparece em Ajustar corpo, com foto e fora do modo pincel, e vale para todas as abas. Sem plano, o switch fica desligado e o toque abre uma folha com «Ver planos» → `/subscription`. Leonardo (2026-10-01): «troque agora so esse travar fundo, coloque igual no meitu, na imagem, mas pequeno e bonito». A linha antiga dentro do painel foi removida.
 - O rosto não tem trava.
 
 ## Ficheiros
@@ -42,8 +42,8 @@ hasActivePaidPlan(subscriptionTier, subscriptionEndsAt)
 - `filters/body/body_warp_chain.dart`: `backgroundLockKey`, `backgroundLockRequested`, `gateBackgroundLock`. A trava sozinha não activa a cadeia.
 - `controllers/beauty_engine_controller.dart`: `applyBodyWarpChain` (preview e export).
 - `warp/v2/body_waist/body_waist_field.dart`: `maxEdgeShift` para o `bandPx`.
-- `presentation/widgets/beauty_adjustments_panel.dart`: `_BackgroundLockRow`, `backgroundLockAllowed`, `onBackgroundLockLocked`.
-- `presentation/beauty_editor_page.dart`: gate em `_gatedParams` e `_showBackgroundLockPaywall`.
+- `presentation/widgets/body_background_lock_pill.dart`: `BodyBackgroundLockPill`.
+- `presentation/beauty_editor_page.dart`: gate em `_gatedParams`, a pílula no `Stack` da foto e `_showBackgroundLockPaywall`.
 
 ## Testes
 
@@ -60,7 +60,7 @@ hasActivePaidPlan(subscriptionTier, subscriptionEndsAt)
 
 - `free`, tier nulo e plano vencido não têm trava; um plano pago com data futura ou sem data tem;
 - `gateBackgroundLock` tira a chave e mantém o slider;
-- no painel, sem plano, o switch não liga e abre o aviso; com plano, grava a chave.
+- pílula: altura ≤ 36 px; sem plano não liga e abre o aviso; com plano, o toque liga e desliga.
 
 ## Limites
 
