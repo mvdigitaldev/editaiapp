@@ -25,6 +25,7 @@ abstract final class BeautyToolIcons {
     'lip_width',
     'lip_height',
     'lip_angle',
+    'lip_plump',
     'hairline',
     'jaw',
     'jaw_angle',
@@ -134,6 +135,8 @@ class _BeautyToolIconPainter extends CustomPainter {
         _paintLipHeight(canvas, paint);
       case 'lip_angle':
         _paintLipAngle(canvas, paint);
+      case 'lip_plump':
+        _paintLipPlump(canvas, paint);
       case 'hairline':
         _paintHairline(canvas, paint);
       case 'jaw':
@@ -523,6 +526,29 @@ class _BeautyToolIconPainter extends CustomPainter {
     canvas.drawPath(arc, paint);
     _arrow(canvas, paint, const Offset(16.2, 7.6), const Offset(17.4, 9.2),
         head: 1.4);
+  }
+
+  void _paintLipPlump(Canvas canvas, Paint paint) {
+    final upper = Path()
+      ..moveTo(5.2, 12.2)
+      ..cubicTo(7.4, 9.6, 10.2, 9.8, 12, 11.4)
+      ..cubicTo(13.8, 9.8, 16.6, 9.6, 18.8, 12.2);
+    final lower = Path()
+      ..moveTo(5.2, 12.2)
+      ..cubicTo(7.6, 16.8, 16.4, 16.8, 18.8, 12.2);
+    canvas.drawPath(upper, paint);
+    canvas.drawPath(lower, paint);
+    final dash = Paint()
+      ..color = paint.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = paint.strokeWidth
+      ..strokeCap = StrokeCap.round;
+    final halo = Path()
+      ..moveTo(4.2, 12.2)
+      ..cubicTo(6.8, 8.2, 10.0, 8.0, 12, 10.0)
+      ..cubicTo(14.0, 8.0, 17.2, 8.2, 19.8, 12.2)
+      ..cubicTo(17.4, 18.2, 6.6, 18.2, 4.2, 12.2);
+    canvas.drawPath(halo, dash);
   }
 
   void _paintEyebrowEnd(Canvas canvas, Paint paint) {

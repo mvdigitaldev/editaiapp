@@ -32,6 +32,7 @@ abstract final class BeautyEngineLabels {
     'lip_width': 'Largura',
     'lip_height': 'Altura',
     'lip_angle': 'Ângulo',
+    'lip_plump': 'Volume',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',
@@ -112,6 +113,9 @@ abstract final class BeautyEngineLabels {
   static const cheekboneSideBoth = 'Geral';
   static const cheekboneSideLeft = 'Esquerda';
   static const cheekboneSideRight = 'Direita';
+  static const lipBandBoth = 'Geral';
+  static const lipBandUpper = 'Apenas superior';
+  static const lipBandLower = 'Apenas inferior';
 
   static const filterCreatorTitle = 'Criar filtro custom';
   static const filterCreatorPersonalUseBanner =

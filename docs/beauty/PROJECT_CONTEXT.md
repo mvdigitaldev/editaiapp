@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-09-30 (Lip Angle)
+Última actualização: 2026-09-30 (Lip Plump)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -61,7 +61,8 @@ A IA actua como **arquitecto** do Facial Warp V2.
 | **Lip Size** | No editor para aprovação visual. Key `lip_size` («Tamanho»). Tab Lábios. Um slider, sem L/R. **Não** é `lip_thickness`. **Não** é Width / Height / Angle / Rotate / M-shaped. Sem B/C/E. Spec [`v2-lip-size.md`](./v2-lip-size.md). **Intacto** na Largura e na Altura. |
 | **Lip Width** | No editor para aprovação visual. Key `lip_width` («Largura»). Tab Lábios. Um slider, sem L/R. **Não** é Tamanho. **Não** é Height / Angle / Rotate / M-shaped. Sem B/C/E. Spec [`v2-lip-width.md`](./v2-lip-width.md). **Intacto** na Altura. |
 | **Lip Height** | No editor para aprovação visual. Key `lip_height` («Altura»). Tab Lábios. Um slider, sem L/R. **Não** é Tamanho nem Largura. **Não** é Angle / Rotate / M-shaped. Sem B/C/E. Spec [`v2-lip-height.md`](./v2-lip-height.md). **Intacto** no Ângulo. |
-| **Lip Angle** | No editor para aprovação visual. Key `lip_angle` («Ângulo»). Tab Lábios. Um slider, sem L/R. **Não** é Tamanho, Largura nem Altura. **Não** é Rotate / M-shaped. Sem B/C/E. Spec [`v2-lip-angle.md`](./v2-lip-angle.md). |
+| **Lip Angle** | No editor para aprovação visual. Key `lip_angle` («Ângulo»). Tab Lábios. Um slider, sem L/R. **Não** é Tamanho, Largura nem Altura. **Não** é Rotate / M-shaped. Sem B/C/E. Spec [`v2-lip-angle.md`](./v2-lip-angle.md). **Intacto** no Volume. |
+| **Lip Plump** | No editor para aprovação visual. Key `lip_plump` («Volume»). Tab Lábios. Geral / Apenas superior / Apenas inferior. **Não** é `lip_thickness`. **Não** é Tamanho, Largura, Altura nem Ângulo. **Não** é Rotate / M-shaped / Smile / Whiten. Sem B/C/E. Spec [`v2-lip-plump.md`](./v2-lip-plump.md). |
 
 Pipeline viva no produto:
 
@@ -69,11 +70,11 @@ Pipeline viva no produto:
 RGBA → applyFaceWarpChain → Body → Skin → Color
 ```
 
-`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → eye_height → eye_width → eye_length → eye_distance → nose_size → nose_lift → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Olheiras (`eye_puffy`) não entra nesta cadeia: clareia a pele no passe de pele. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
+`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → eye_height → eye_width → eye_length → eye_distance → nose_size → nose_lift → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → lip_plump → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Olheiras (`eye_puffy`) não entra nesta cadeia: clareia a pele no passe de pele. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
 
 Entre etapas os landmarks são **advectados** para a geometria já deformada (`warp/v2/landmark_advection.dart`). Sem isso o efeito a jusante recebia o RGBA deformado mas media a geometria da origem, e a crista caía 6–10 px fora da silhueta. Ver [`v2-composicao-cadeia.md`](./v2-composicao-cadeia.md).
 
-Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline, Eyebrow Height, Eyebrow Width e Eyebrow End estão na mesma cadeia, **aprovados**. V Shape, Jaw Angle, Eye Size, Eye Height, Eye Width, Eye Length, Eye Distance, Nose Size, Nose Lift, Nose Ala, Nose Bridge, Lip Size, Lip Width, Lip Height e Lip Angle estão na cadeia como inspecção. Eye Puffy está no tab Olhos como clareamento de pele, não como warp. Esses menus de Olhos, os de Nariz e os de Lábios esperam a assinatura visual.
+Cheekbones está na cadeia de preview/export como inspecção da hipótese H. **Não** é Sprint C/D aprovada. V Chin, Hairline, Eyebrow Height, Eyebrow Width e Eyebrow End estão na mesma cadeia, **aprovados**. V Shape, Jaw Angle, Eye Size, Eye Height, Eye Width, Eye Length, Eye Distance, Nose Size, Nose Lift, Nose Ala, Nose Bridge, Lip Size, Lip Width, Lip Height, Lip Angle e Lip Plump estão na cadeia como inspecção. Eye Puffy está no tab Olhos como clareamento de pele, não como warp. Esses menus de Olhos, os de Nariz e os de Lábios esperam a assinatura visual.
 
 ---
 
@@ -352,7 +353,7 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Campo: escala isotrópica em volta do centróide do hull `V2RegionCatalog.nose`. `s = 1 − 0.14 t`, `α = 1 − 1/s`, `D = α · w · (p − c)`. `t > 0` encolhe; `t < 0` aumenta. Ponta (1) e asas (98/327) andam juntas. Olhos, sobrancelha, boca e linha do cabelo ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Head nem os outros Fields. Um slider só, sem Geral / L / R.
 - Convenção: **esquerda aumenta**; **direita encolhe**. Igual à Cabeça. Contrária ao Tamanho dos olhos.
 - Runtime: o unitário é `w · (p − c)`; o slider só entra em `α(t)`.
-- Cadeia: depois da Distância (`… → eye_distance → nose_size → nose_lift → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → jaw → …`). Tab **Nariz**, ícone Tamanho.
+- Cadeia: depois da Distância (`… → eye_distance → nose_size → nose_lift → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → lip_plump → jaw → …`). Tab **Nariz**, ícone Tamanho.
 - Spec: [`v2-nose-size.md`](./v2-nose-size.md).
 
 ### Nose Lift — inspecção no editor
@@ -362,7 +363,7 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Campo: só Δy. `dx = 0`. `dy = −t · 0.045 · faceWidth · w · perfil`. `perfil` é 0 na raiz (168) até `u = 0.08` do eixo 168→1, e 1 a partir de `u = 0.48` (ponta 1, asas 98/327, columela). `t > 0` sobe; `t < 0` desce. Hull pad `0.090` e rampa `0.105` para o extremo que desce não dobrar no lábio. Olhos, sobrancelha, boca e linha do cabelo ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Tamanho nem os outros Fields. Um slider só, sem Geral / L / R.
 - Convenção: **esquerda desce**; **direita sobe**.
 - Runtime: o unitário é `w · perfil`; o slider só escala `dy`.
-- Cadeia: depois do Tamanho (`… → nose_size → nose_lift → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → jaw → …`). Tab **Nariz**, ícone Elevação à direita de Tamanho.
+- Cadeia: depois do Tamanho (`… → nose_size → nose_lift → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → lip_plump → jaw → …`). Tab **Nariz**, ícone Elevação à direita de Tamanho.
 - Spec: [`v2-nose-lift.md`](./v2-nose-lift.md).
 
 ### Nose Ala — inspecção no editor
@@ -372,7 +373,7 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Campo: só Δx. `dy = 0`. `s = 1 − 0.24 t`, `α = 1 − 1/s`, `dx = α · w · perfil · midGate · (x − x_mid)`. `x_mid` é a média do x de 168 e 1. `midGate` segura a ponta. `perfil` é 0 na raiz até `u = 0.12` e 1 a partir de `u = 0.42`. `t > 0` afina; `t < 0` alarga. Foto esquerda = asa **98**; foto direita = **327**. Olhos, ponta em x, raiz, boca e sobrancelha ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Tamanho, Elevação nem os outros Fields. Geral / L / R da foto.
 - Convenção: **esquerda alarga**; **direita afina**. L/R da foto.
 - Runtime: o unitário é `w · perfil · midGate · (x − x_mid)` por lado; o slider só entra em `α(t_lado)`.
-- Cadeia: depois da Elevação (`… → nose_lift → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → jaw → …`). Tab **Nariz**, ícone Largura à direita de Elevação.
+- Cadeia: depois da Elevação (`… → nose_lift → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → lip_plump → jaw → …`). Tab **Nariz**, ícone Largura à direita de Elevação.
 - Spec: [`v2-nose-ala.md`](./v2-nose-ala.md).
 
 ### Nose Bridge — inspecção no editor
@@ -382,7 +383,7 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Campo: só Δx. `dy = 0`. `s = 1 − 0.28 t`, `α = 1 − 1/s`, `dx = α · w · perfil · midGate · (x − x_mid)`. `perfil` é uma banda no terço do meio (`0.18–0.70`, cheia em `0.32–0.50`). `t > 0` afina o dorso; `t < 0` alarga. Raiz (168), asas (98/327) e ponta (1) ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Tamanho, Elevação, Largura nem os outros Fields. Um slider só, sem Geral / L / R.
 - Convenção: **esquerda alarga**; **direita afina**.
 - Runtime: o unitário é `w · perfil · midGate · (x − x_mid)`; o slider só entra em `α(t)`.
-- Cadeia: depois da Largura (`… → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → jaw → …`). Tab **Nariz**, ícone Ponte à direita de Largura.
+- Cadeia: depois da Largura (`… → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → lip_plump → jaw → …`). Tab **Nariz**, ícone Ponte à direita de Largura.
 - Spec: [`v2-nose-bridge.md`](./v2-nose-bridge.md).
 
 ### Lip Size — inspecção no editor
@@ -392,7 +393,7 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Campo: escala isotrópica em volta do centróide do hull `V2RegionCatalog.lips`. `s = 1 − 0.12 t`, `α = 1 − 1/s`, `D = α · w · (p − c)`. `t > 0` encolhe; `t < 0` aumenta. Detalhe suave. Nariz, queixo, olhos e sobrancelha ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Nariz nem os outros Fields. Um slider só, sem Geral / L / R.
 - Convenção: **esquerda aumenta**; **direita encolhe**. Igual à Cabeça e ao Tamanho do nariz.
 - Runtime: o unitário é `w · (p − c)`; o slider só entra em `α(t)`.
-- Cadeia: depois da Ponte (`… → nose_bridge → lip_size → lip_width → lip_height → lip_angle → jaw → …`). Tab **Lábios**, ícone Tamanho.
+- Cadeia: depois da Ponte (`… → nose_bridge → lip_size → lip_width → lip_height → lip_angle → lip_plump → jaw → …`). Tab **Lábios**, ícone Tamanho.
 - Spec: [`v2-lip-size.md`](./v2-lip-size.md).
 
 ### Lip Width — inspecção no editor
@@ -402,7 +403,7 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Campo: escala só em x em volta do centróide do hull `V2RegionCatalog.lips`. `s = 1 − 0.12 t`, `α = 1 − 1/s`, `dx = α · w · (x − c.x)`, `dy = 0`. `t > 0` afina; `t < 0` alarga. Praticamente o Tamanho, só em x. Nariz, queixo, olhos e sobrancelha ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Tamanho nem os outros Fields. Um slider só, sem Geral / L / R.
 - Convenção: **esquerda alarga**; **direita afina**.
 - Runtime: o unitário é `w · (x − c.x)`; o slider só entra em `α(t)`.
-- Cadeia: depois do Tamanho (`… → lip_size → lip_width → lip_height → lip_angle → jaw → …`). Tab **Lábios**, ícone Largura à direita de Tamanho.
+- Cadeia: depois do Tamanho (`… → lip_size → lip_width → lip_height → lip_angle → lip_plump → jaw → …`). Tab **Lábios**, ícone Largura à direita de Tamanho.
 - Spec: [`v2-lip-width.md`](./v2-lip-width.md).
 
 ### Lip Height — inspecção no editor
@@ -412,18 +413,28 @@ Aprovação de C é escrita. Sem ela, D não existe.
 - Campo: só Δy. `dx = 0`. `dy = −t · 0.024 · faceWidth · w`. A boca sobe ou desce como um bloco. `t > 0` sobe; `t < 0` desce. Hull pad `0.040` e rampa `0.055` para a pele à volta viajar com a boca. Nariz, queixo, olhos e sobrancelha ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Tamanho, Largura nem os outros Fields. Um slider só, sem Geral / L / R.
 - Convenção: **esquerda desce**; **direita sobe**.
 - Runtime: o unitário é `w`; o slider só escala `dy`.
-- Cadeia: depois da Largura (`… → lip_width → lip_height → lip_angle → jaw → …`). Tab **Lábios**, ícone Altura à direita de Largura.
+- Cadeia: depois da Largura (`… → lip_width → lip_height → lip_angle → lip_plump → jaw → …`). Tab **Lábios**, ícone Altura à direita de Largura.
 - Spec: [`v2-lip-height.md`](./v2-lip-height.md).
 
 ### Lip Angle — inspecção no editor
 
 - Key: `lip_angle` («Ângulo»). **Não** é `lip_size`, `lip_width` nem `lip_height`. **Não** é Rotate / M-shaped. **Não** é `lip_thickness`.
-- No editor (2026-09-30) para o Leonardo aprovar o menu. Sem B escrita. Sem C assinada. Sem E. Tamanho, Largura, Altura e os Fields vivos intactos. Rotate / M-shaped ainda não existem.
+- No editor (2026-09-30) para o Leonardo aprovar o menu. Sem B escrita. Sem C assinada. Sem E. Tamanho, Largura, Altura e os Fields vivos intactos. **Intacto** no Volume. Rotate / M-shaped ainda não existem.
 - Campo: rotação em volta do centróide. `θ = 0.12 t`, `dx = θ · w · (y − c.y)`, `dy = −θ · w · (x − c.x)`. Os cantos andam na diagonal. `t > 0` canto esquerdo da foto desce / direito sobe; `t < 0` o contrário. Hull pad `0.040` e rampa `0.055`. Nariz, queixo, olhos e sobrancelha ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Tamanho, Largura, Altura nem os outros Fields. Um slider só, sem Geral / L / R.
 - Convenção: **esquerda = `\`** (canto esquerdo sobe); **direita = `/`** (canto esquerdo desce).
 - Runtime: o unitário é `w · (y − c.y)` e `w · −(x − c.x)`; o slider só entra em `θ(t)`.
-- Cadeia: depois da Altura (`… → lip_height → lip_angle → jaw → …`). Tab **Lábios**, ícone Ângulo à direita de Altura.
+- Cadeia: depois da Altura (`… → lip_height → lip_angle → lip_plump → jaw → …`). Tab **Lábios**, ícone Ângulo à direita de Altura.
 - Spec: [`v2-lip-angle.md`](./v2-lip-angle.md).
+
+### Lip Plump — inspecção no editor
+
+- Key: `lip_plump` («Volume»). **Não** é `lip_size`, `lip_width`, `lip_height` nem `lip_angle`. **Não** é `lip_thickness`. **Não** é Rotate / M-shaped / Smile / Whiten.
+- No editor (2026-09-30) para o Leonardo aprovar o menu. Sem B escrita. Sem C assinada. Sem E. Tamanho, Largura, Altura, Ângulo e os Fields vivos intactos. Rotate / M-shaped / Smile / Whiten ainda não existem.
+- Campo: só Δy. Abre o beiço a partir da fenda (média em y de 13 e 14). `s = 1 + 0.22 t`, `α = 1 − 1/s`, `dy = α · w · (y − y_fenda)`. `t > 0` engrossa; `t < 0` afina sem cruzar a fenda. Menu Geral / Apenas superior / Apenas inferior. Cantos, nariz, queixo, olhos e sobrancelha ficam. Sem `RidgeWeight`. Sem `PersonMask`. Sem importar Tamanho, Largura, Altura, Ângulo nem os outros Fields.
+- Convenção: **esquerda afina**; **direita engrossa**.
+- Runtime: o unitário é `wUpper` e `wLower`; o slider só escala `dy`.
+- Cadeia: depois do Ângulo (`… → lip_angle → lip_plump → jaw → …`). Tab **Lábios**, ícone Volume à direita de Ângulo.
+- Spec: [`v2-lip-plump.md`](./v2-lip-plump.md).
 
 ### Eyebrow End — Sprint D
 
@@ -468,6 +479,8 @@ Aprovação de C é escrita. Sem ela, D não existe.
 **Adenda 2026-08-26 (V Chin encerrado).** Leonardo fechou o V Chin no editor. Aprovado. Vivo (`v_chin`). Não alterar. Documento [`v2-v-chin.md`](./v2-v-chin.md).
 
 **Adenda 2026-08-26 (V Chin aberto).** Leonardo abriu o menu V Chin (`v_chin`, «V do queixo»): forma da ponta, Δx, L/R da foto. Superado pelo fecho no mesmo dia.
+
+**Adenda 2026-09-30 (Lip Plump).** Leonardo, com o Meitu em Lábios → Plump, menu Geral / Apenas superior / Apenas inferior: «vamos para o  plump   tem a opcao de geral, apenas inferior e apenas superior, basicamente aumenta o beico». Só Δy a partir da fenda. `k = 0.22`. Tab **Lábios**, key `lip_plump`, cadeia depois de `lip_angle`. Ângulo intacto. Sem Rotate / M-shaped / Smile / Whiten. Sem B/C/E. Spec [`v2-lip-plump.md`](./v2-lip-plump.md).
 
 **Adenda 2026-09-30 (Lip Angle).** Leonardo, com o Meitu em Lábios → Angle, slider ao centro, à direita e à esquerda: «agora faca o angle  ele movimenta na diagonal». Rotação em volta do centróide, `θ = 0.12 t`. Direita: canto esquerdo da foto desce, direito sobe. Esquerda: o contrário. Tab **Lábios**, key `lip_angle`, cadeia depois de `lip_height`. Tamanho, Largura e Altura intactos. Sem Rotate / M-shaped. Sem B/C/E. Spec [`v2-lip-angle.md`](./v2-lip-angle.md).
 

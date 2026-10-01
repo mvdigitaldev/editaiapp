@@ -41,6 +41,7 @@ class FaceFilterPipeline {
     'lip_width',
     'lip_height',
     'lip_angle',
+    'lip_plump',
   ];
 
   static const faceWarpParameterKeys = [
@@ -104,6 +105,9 @@ class FaceFilterPipeline {
     final lipWidth = parameters['lip_width'] ?? 0;
     final lipHeight = parameters['lip_height'] ?? 0;
     final lipAngle = parameters['lip_angle'] ?? 0;
+    final lipPlump = parameters['lip_plump'] ?? 0;
+    final lipPlumpU = parameters['lip_plump_upper'] ?? 0;
+    final lipPlumpL = parameters['lip_plump_lower'] ?? 0;
     return head.abs() > 1e-6 ||
         brow.abs() > 1e-6 ||
         browL.abs() > 1e-6 ||
@@ -139,6 +143,9 @@ class FaceFilterPipeline {
         lipWidth.abs() > 1e-6 ||
         lipHeight.abs() > 1e-6 ||
         lipAngle.abs() > 1e-6 ||
+        lipPlump.abs() > 1e-6 ||
+        lipPlumpU.abs() > 1e-6 ||
+        lipPlumpL.abs() > 1e-6 ||
         hairline.abs() > 1e-6 ||
         jaw > 0 ||
         jawAngle.abs() > 1e-6 ||

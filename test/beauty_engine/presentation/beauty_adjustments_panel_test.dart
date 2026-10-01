@@ -457,6 +457,26 @@ void main() {
     );
     expect(find.text('Geral'), findsNothing);
 
+    await tester.tap(find.text('Volume'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-lip_plump')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Volume',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+    expect(find.text('Geral'), findsWidgets);
+
     await tester.tap(find.text('Pele'));
     await tester.pumpAndSettle();
     expect(
@@ -609,6 +629,12 @@ void main() {
     expect(params.containsKey('lip_angle_left'), isFalse);
     expect(params.containsKey('lip_angle_right'), isFalse);
     expect(params.containsKey('lip_angle_side'), isFalse);
+    expect(params.containsKey('lip_plump'), isTrue);
+    expect(params.containsKey('lip_plump_upper'), isTrue);
+    expect(params.containsKey('lip_plump_lower'), isTrue);
+    expect(params.containsKey('lip_plump_side'), isTrue);
+    expect(params.containsKey('lip_plump_left'), isFalse);
+    expect(params.containsKey('lip_plump_right'), isFalse);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);

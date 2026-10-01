@@ -176,6 +176,9 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       'nose_ala_left': 0,
       'nose_ala_right': 0,
       'nose_ala_side': 0,
+      'lip_plump_upper': 0,
+      'lip_plump_lower': 0,
+      'lip_plump_side': 0,
     };
     return params;
   }
@@ -255,6 +258,10 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     'nose_ala',
   };
 
+  static const _lipBandKeys = {
+    'lip_plump',
+  };
+
   bool _isChanged(String key) {
     bool nonzero(String k) => (widget.params[k] ?? 0).abs() > 1e-6;
     if (nonzero(key)) {
@@ -262,6 +269,9 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     }
     if (_sideWarpKeys.contains(key)) {
       return nonzero('${key}_left') || nonzero('${key}_right');
+    }
+    if (_lipBandKeys.contains(key)) {
+      return nonzero('${key}_upper') || nonzero('${key}_lower');
     }
     return false;
   }
@@ -272,9 +282,12 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     final isDark = theme.brightness == Brightness.dark;
     final activeKey = _activeParamKey;
     final isSideWarp = _sideWarpKeys.contains(activeKey);
+    final isLipBand = _lipBandKeys.contains(activeKey);
     final activeValue = isSideWarp
         ? _sideSliderValue(activeKey)
-        : (widget.params[activeKey] ?? 0);
+        : isLipBand
+            ? _lipBandSliderValue(activeKey)
+            : (widget.params[activeKey] ?? 0);
     final isBody = _category == BeautyAdjustmentCategory.corpo;
     final sliderRange = _sliderRangeForKey(activeKey);
     final gate = widget.gatePlan?.decisionFor(activeKey);
@@ -315,12 +328,17 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                 divisions: sliderRange.divisions,
                 bipolar: sliderRange.bipolar,
                 enabled: paramEnabled,
-                trailing:
-                    isSideWarp ? _sideMenu(activeKey, paramEnabled) : null,
+                trailing: isSideWarp
+                    ? _sideMenu(activeKey, paramEnabled)
+                    : isLipBand
+                        ? _lipBandMenu(activeKey, paramEnabled)
+                        : null,
                 onChanged: paramEnabled
                     ? (value) => isSideWarp
                         ? _onSideSliderChanged(activeKey, value)
-                        : widget.onParamChanged(activeKey, value)
+                        : isLipBand
+                            ? _onLipBandSliderChanged(activeKey, value)
+                            : widget.onParamChanged(activeKey, value)
                     : null,
               ),
             ),
@@ -440,6 +458,85 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
     }
   }
 
+  /// 0 = Geral, 1 = apenas superior, 2 = apenas inferior.
+  int _lipBandFor(String key) => (widget.params['${key}_side'] ?? 0).round();
+
+  double _lipBandSliderValue(String key) {
+    switch (_lipBandFor(key)) {
+      case 1:
+        return widget.params['${key}_upper'] ?? widget.params[key] ?? 0;
+      case 2:
+        return widget.params['${key}_lower'] ?? widget.params[key] ?? 0;
+      default:
+        return widget.params[key] ?? 0;
+    }
+  }
+
+  void _onLipBandSliderChanged(String key, double value) {
+    switch (_lipBandFor(key)) {
+      case 1:
+        widget.onParamChanged('${key}_upper', value);
+        return;
+      case 2:
+        widget.onParamChanged('${key}_lower', value);
+        return;
+      default:
+        widget.onParamChanged(key, value);
+        widget.onParamChanged('${key}_upper', value);
+        widget.onParamChanged('${key}_lower', value);
+    }
+  }
+
+  Widget _lipBandMenu(String key, bool enabled) {
+    const items = <({int side, String label})>[
+      (side: 0, label: BeautyEngineLabels.lipBandBoth),
+      (side: 1, label: BeautyEngineLabels.lipBandUpper),
+      (side: 2, label: BeautyEngineLabels.lipBandLower),
+    ];
+    final current = items.firstWhere(
+      (item) => item.side == _lipBandFor(key),
+      orElse: () => items.first,
+    );
+    return PopupMenuButton<int>(
+      enabled: enabled,
+      tooltip: current.label,
+      onSelected: (side) =>
+          widget.onParamChanged('${key}_side', side.toDouble()),
+      itemBuilder: (context) => [
+        for (final item in items)
+          PopupMenuItem<int>(
+            value: item.side,
+            child: Text(item.label),
+          ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              current.label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: enabled
+                    ? Theme.of(context).colorScheme.onSurface
+                    : Theme.of(context).disabledColor,
+              ),
+            ),
+            Icon(
+              Icons.arrow_drop_up,
+              size: 18,
+              color: enabled
+                  ? Theme.of(context).colorScheme.onSurface
+                  : Theme.of(context).disabledColor,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _sideMenu(String key, bool enabled) {
     const items = <({int side, String label})>[
       (side: 0, label: BeautyEngineLabels.cheekboneSideBoth),
@@ -513,7 +610,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'lip_size' ||
         key == 'lip_width' ||
         key == 'lip_height' ||
-        key == 'lip_angle') {
+        key == 'lip_angle' ||
+        key == 'lip_plump') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

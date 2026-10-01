@@ -71,7 +71,7 @@ Hull de `V2RegionCatalog.lips`, dilatado `0.030 × faceWidth`. Nariz, queixo, ol
 ## 4. Pipeline e menu
 
 ```
-… → nose_bridge → lip_size → lip_width → lip_height → lip_angle → jaw → …
+… → nose_bridge → lip_size → lip_width → lip_height → lip_angle → lip_plump → jaw → …
 ```
 
 Tab **Lábios**, ícone Tamanho. Preview e export partilham `applyFaceWarpChain`.
