@@ -72,6 +72,8 @@ import '../warp/v2/lip_angle/lip_angle_field.dart';
 import '../warp/v2/lip_plump/lip_plump_field.dart';
 import '../warp/v2/lip_smile/lip_smile_field.dart';
 import '../warp/v2/body_background/body_background_lock.dart';
+import '../warp/v2/body_arms/body_arms_field.dart';
+import '../warp/v2/body_chest/body_chest_field.dart';
 import '../warp/v2/body_legs/body_legs_field.dart';
 import '../warp/v2/body_waist/body_waist_field.dart';
 import '../warp/v2/eye_size/eye_size_field.dart';
@@ -155,6 +157,8 @@ class BeautyEngineController {
   final BodyLegsFieldRuntime _bodyLegsRuntime = BodyLegsFieldRuntime();
   final BodyLegsFieldRuntime _bodyThighsRuntime = BodyLegsFieldRuntime();
   final BodyLegsFieldRuntime _bodyCalvesRuntime = BodyLegsFieldRuntime();
+  final BodyArmsFieldRuntime _bodyArmsRuntime = BodyArmsFieldRuntime();
+  final BodyChestFieldRuntime _bodyChestRuntime = BodyChestFieldRuntime();
   final BodyBackgroundLockRuntime _bodyBackgroundLockRuntime =
       BodyBackgroundLockRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
@@ -550,6 +554,31 @@ class BeautyEngineController {
         maxShift,
         BodyLegsField.maxEdgeShift(calvesGeometry, BodyLegBand.calves),
       );
+    }
+
+    final arms = BodyArmsField.build(
+      pose: pose,
+      imageSize: imageSize,
+      mask: personMask,
+      t: (parameters[BodyWarpChain.armsKey] ?? 0).clamp(-1.0, 1.0),
+      runtime: _bodyArmsRuntime,
+    );
+    final armsGeometry = _bodyArmsRuntime.geometry;
+    if (arms != null && armsGeometry != null) {
+      fields.add(arms);
+      maxShift = math.max(maxShift, BodyArmsField.maxEdgeShift(armsGeometry));
+    }
+
+    final chest = BodyChestField.build(
+      pose: pose,
+      imageSize: imageSize,
+      t: (parameters[BodyWarpChain.chestKey] ?? 0).clamp(-1.0, 1.0),
+      runtime: _bodyChestRuntime,
+    );
+    final chestGeometry = _bodyChestRuntime.geometry;
+    if (chest != null && chestGeometry != null) {
+      fields.add(chest);
+      maxShift = math.max(maxShift, BodyChestField.maxEdgeShift(chestGeometry));
     }
 
     if (fields.isEmpty) {

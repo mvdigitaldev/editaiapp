@@ -461,7 +461,8 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
           ? 'sem pose'
           : [
               for (final l in pose.landmarks)
-                if (const {11, 12, 23, 24, 25, 26, 27, 28}.contains(l.index))
+                if (const {11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28}
+                    .contains(l.index))
                   '${l.index}:(${l.normalized.dx.toStringAsFixed(3)},'
                       '${l.normalized.dy.toStringAsFixed(3)}) '
                       'v${l.visibility.toStringAsFixed(2)}',
@@ -538,11 +539,17 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   }
 
   void _showUnavailableTool(String key) {
-    if (!BodyWarpChain.isLegKey(key)) {
+    final message = switch (key) {
+      BodyWarpChain.armsKey => BodyReshapeLabels.armsNotRecognized,
+      BodyWarpChain.chestKey => BodyReshapeLabels.chestNotRecognized,
+      _ when BodyWarpChain.isLegKey(key) => BodyReshapeLabels.legsNotRecognized,
+      _ => null,
+    };
+    if (message == null) {
       return;
     }
     _bodyNoticeTimer?.cancel();
-    setState(() => _bodyNotice = BodyReshapeLabels.legsNotRecognized);
+    setState(() => _bodyNotice = message);
     _bodyNoticeTimer = Timer(const Duration(milliseconds: 2200), () {
       if (mounted) {
         setState(() => _bodyNotice = null);

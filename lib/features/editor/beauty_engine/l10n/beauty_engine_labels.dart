@@ -39,6 +39,8 @@ abstract final class BeautyEngineLabels {
     'legs': 'Pernas',
     'thighs': 'Coxas',
     'calves': 'Canelas',
+    'arms': 'Braços',
+    'chest': 'Peito',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',
@@ -109,6 +111,8 @@ abstract final class BeautyEngineLabels {
   static const sectionBodySlim = 'Magro';
   static const sectionBodyCurves = 'Curvas';
   static const sectionBodyLegs = 'Pernas';
+  static const sectionBodyArms = 'Braços';
+  static const sectionBodyChest = 'Busto';
 
   static const beautyEditorTitle = 'Retoque beauty';
   static const beautyEditorEmptyHint =

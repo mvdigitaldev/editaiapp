@@ -21,6 +21,10 @@ abstract final class BodyReshapeLabels {
       'Ferramenta dos planos pagos. Assine para ajustar com ela.';
   static const legsNotRecognized =
       'Falha ao reconhecer as linhas das pernas, não foi possível ajustar.';
+  static const armsNotRecognized =
+      'Falha ao reconhecer as linhas dos braços, não foi possível ajustar.';
+  static const chestNotRecognized =
+      'Falha ao reconhecer o busto, não foi possível ajustar.';
   static const limitedByOcclusion = 'Ajuste limitado por oclusão';
   static const limitedByConfidence = 'Ajuste limitado por confiança baixa';
   static const limitedByCapability = 'Ajuste limitado — evidência insuficiente';

@@ -24,6 +24,8 @@ enum BeautyAdjustmentCategory {
   corpo,
   pernas,
   curvas,
+  bracos,
+  busto,
   pele,
   cor,
 }
@@ -33,6 +35,8 @@ const _bodyCategories = {
   BeautyAdjustmentCategory.corpo,
   BeautyAdjustmentCategory.pernas,
   BeautyAdjustmentCategory.curvas,
+  BeautyAdjustmentCategory.bracos,
+  BeautyAdjustmentCategory.busto,
 };
 
 /// Definição de uma categoria com ícone e parâmetros associados.
@@ -147,6 +151,18 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       icon: Icons.woman_outlined,
       label: BeautyEngineLabels.sectionBodyCurves,
       parameterKeys: BodyWarpChain.curveParameterKeys,
+    ),
+    BeautyAdjustmentCategoryDef(
+      category: BeautyAdjustmentCategory.bracos,
+      icon: Icons.sports_gymnastics_outlined,
+      label: BeautyEngineLabels.sectionBodyArms,
+      parameterKeys: BodyWarpChain.armParameterKeys,
+    ),
+    BeautyAdjustmentCategoryDef(
+      category: BeautyAdjustmentCategory.busto,
+      icon: Icons.checkroom_outlined,
+      label: BeautyEngineLabels.sectionBodyChest,
+      parameterKeys: BodyWarpChain.chestParameterKeys,
     ),
     BeautyAdjustmentCategoryDef(
       category: BeautyAdjustmentCategory.pele,
@@ -722,7 +738,9 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == BodyWarpChain.hipsKey ||
         key == BodyWarpChain.legsKey ||
         key == BodyWarpChain.thighsKey ||
-        key == BodyWarpChain.calvesKey) {
+        key == BodyWarpChain.calvesKey ||
+        key == BodyWarpChain.armsKey ||
+        key == BodyWarpChain.chestKey) {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

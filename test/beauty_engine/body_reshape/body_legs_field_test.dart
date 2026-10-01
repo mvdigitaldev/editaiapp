@@ -366,12 +366,15 @@ void main() {
         isTrue,
       );
       expect(
-        BodyWarpChain.unavailableKeys(pose: pose, imageSize: cropped),
+        BodyWarpChain.unavailableKeys(
+          pose: pose,
+          imageSize: cropped,
+        ).intersection(BodyWarpChain.legParameterKeys.toSet()),
         {'legs', 'calves'},
       );
       expect(
         BodyWarpChain.unavailableKeys(pose: null, imageSize: cropped),
-        {'legs', 'thighs', 'calves'},
+        {'legs', 'thighs', 'calves', 'arms', 'chest'},
       );
     });
 
