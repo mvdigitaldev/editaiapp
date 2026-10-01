@@ -1,7 +1,7 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-10-01 (Lip Smile)
+Última actualização: 2026-10-01 (corpo: Cintura no editor)
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -64,11 +64,13 @@ A IA actua como **arquitecto** do Facial Warp V2.
 | **Lip Angle** | No editor para aprovação visual. Key `lip_angle` («Ângulo»). Tab Lábios. Um slider, sem L/R. **Não** é Tamanho, Largura nem Altura. **Não** é Rotate / M-shaped. Sem B/C/E. Spec [`v2-lip-angle.md`](./v2-lip-angle.md). **Intacto** no Volume. |
 | **Lip Plump** | No editor para aprovação visual. Key `lip_plump` («Volume»). Tab Lábios. Geral / Apenas superior / Apenas inferior. **Não** é `lip_thickness`. **Não** é Tamanho, Largura, Altura nem Ângulo. **Não** é Rotate / M-shaped / Smile / Whiten. Sem B/C/E. Spec [`v2-lip-plump.md`](./v2-lip-plump.md). **Intacto** no Sorriso. |
 | **Lip Smile** | No editor para aprovação visual. Key `lip_smile` («Sorriso»). Tab Lábios. Um slider, sem L/R. **Não** é a key antiga `smile`. **Não** é Tamanho, Largura, Altura, Ângulo nem Volume. **Não** é Rotate / M-shaped / Whiten. Sem B/C/E. Spec [`v2-lip-smile.md`](./v2-lip-smile.md). |
+| **Rosto** | **Congelado por agora.** Leonardo (2026-10-01): «nao vamos mexer mais em rosto, ja esta finalizado por enquanto». Não abrir menu facial novo. Não recalibrar Fields vivos. |
+| **Body** | **Cintura no editor para inspecção** (`docs/beauty/v2-body-waist.md`; key `waist`): Field V2 em CPU, só Δ perpendicular ao eixo ombro→quadril, faixa `t = 0.66 ± 0.30`, borda pela `PersonMask` (com tecto pela pose), `α = 0.10 t`, direita afina / esquerda alarga. Cadeia `applyBodyWarpChain` depois do rosto, preview e export. Antes disso, **menu zerado.** Leonardo (2026-10-01): «todos os submenus de corpo podem ser apagados… vamos começar do zero». Sem sliders legados (`supportedParameterKeys` vazio). Sem filtros MLS (`waist_slim`, `hip`, `body_slim`, `leg_length`, `leg_slim`, `arm_slim`, `neck_slim`, `shoulder_width`) nem estratégias V2 (`Waist`/`Hip`/`Belly`/`Butt`/`Chest`/`Height`/`LimbSlim`/`Neck`/`Shoulder`). O compose de corpo é identidade. Ajustar corpo (`bodyOnly`) e o lab `body-p01`…`body-p04` ficam. Pose, person mask e brush ficam. Sem Field novo. Spec [`v2-body-lab.md`](./v2-body-lab.md). |
 
 Pipeline viva no produto:
 
 ```
-RGBA → applyFaceWarpChain → Body → Skin → Color
+RGBA → applyFaceWarpChain → applyBodyWarpChain → Body → Skin → Color
 ```
 
 `applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → eye_height → eye_width → eye_length → eye_distance → nose_size → nose_lift → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → lip_plump → lip_smile → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Olheiras (`eye_puffy`) não entra nesta cadeia: clareia a pele no passe de pele. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
@@ -490,6 +492,14 @@ Aprovação de C é escrita. Sem ela, D não existe.
 **Adenda 2026-08-26 (V Chin encerrado).** Leonardo fechou o V Chin no editor. Aprovado. Vivo (`v_chin`). Não alterar. Documento [`v2-v-chin.md`](./v2-v-chin.md).
 
 **Adenda 2026-08-26 (V Chin aberto).** Leonardo abriu o menu V Chin (`v_chin`, «V do queixo»): forma da ponta, Δx, L/R da foto. Superado pelo fecho no mesmo dia.
+
+**Adenda 2026-10-01 (Cintura).** Leonardo: «vamos comecar com o primeiro menu, waist ele emagrece um pouco a linha da cintura, pesquise como aplciativos fazem isso de forma excepcional, se temos q fazer as mascaras do corpo igual fizemos do rosto etc». Referência Meitu Waist, bipolar. No corpo não há polígonos de landmarks como no rosto (a pose tem 33 pontos): a silhueta vem da `PersonMask`, e a pose dá o eixo, a faixa e o tecto. `BodyWaistField` + `BodyWaistFieldRuntime`; `applyBodyWarpChain` no controller (preview e export), depois de `applyFaceWarpChain`. Limites: braço colado ao tronco é puxado (falta segmentação de partes); o fundo estica na banda de queda (sem «Bloqueio de fundo»). Spec [`v2-body-waist.md`](./v2-body-waist.md).
+
+**Adenda 2026-10-01 (menu de corpo zerado).** Leonardo: «certo, agora todos os submenus de corpo podem ser apagados com seus respectivos codigos, vamos coemcar do zero.». Sliders, filtros MLS e estratégias regionais apagados. Pipeline de corpo = identidade. Casca Ajustar corpo + lab `p01`…`p04` + pose/máscara/brush intactos. Rosto intacto. Sem Field novo. Spec [`v2-body-lab.md`](./v2-body-lab.md).
+
+**Adenda 2026-10-01 (Body lab no editor).** Leonardo, em Ajustar corpo: «quando vou em editar corpo, aparece o lab de rosto..». O `bodyOnly` lia `_v2LabAssets` do rosto (`p01`/`p05`/`p12`/`p15`). Passou a `_v2BodyLabAssets` (`p01`…`p04` de corpo). O retoque facial continua com o lab antigo. Spec [`v2-body-lab.md`](./v2-body-lab.md).
+
+**Adenda 2026-10-01 (Body lab).** Leonardo: «agora preciso q facamos a parte de editar o corpo, o menu ajustar corpo  nao vamos mexer mais em rosto, ja esta finalizado por enquanto... nosso menu de corpo esta todo errado.  crie ou altere os labs atuais com esses 4 fotos». Rosto congelado. Labs faciais (`real-p01` / `p05` / `p12`) intactos. Catálogo de corpo novo: `body-p01` mulher deserto corpo inteiro, `body-p02` mulher indoor mãos na cintura, `body-p03` homem terraço, `body-p04` mulher janela. Sem pose JSON. Sem redesenho do menu. Spec [`v2-body-lab.md`](./v2-body-lab.md).
 
 **Adenda 2026-10-01 (Lip Smile).** Leonardo, com o Meitu em Lábios → Smile: «conseguimos fazer o smile agora?». Cantos 61/291 sobem à direita e descem à esquerda. Perfil em U no eixo da boca. `0.030 × faceWidth` em y, `0.010` em x. Tab **Lábios**, key `lip_smile`, cadeia depois de `lip_plump`. Volume intacto. Sem Rotate / M-shaped / Whiten. Sem B/C/E. Spec [`v2-lip-smile.md`](./v2-lip-smile.md).
 

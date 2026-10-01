@@ -1,11 +1,9 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_adjustment.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_frame_assets.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_joint.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/person_matte.dart';
-import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/warp_plan.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/providers/body_vision_coordinator.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/providers/fake_vision_providers.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/providers/mediapipe_body_joint_mapper.dart';
@@ -13,7 +11,6 @@ import 'package:editaiapp/features/editor/beauty_engine/body_reshape/providers/m
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/providers/mediapipe_person_matte_provider.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/providers/unavailable_vision_providers.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/providers/vision_capabilities.dart';
-import 'package:editaiapp/features/editor/beauty_engine/body_reshape/providers/vision_capability_gate.dart';
 import 'package:editaiapp/features/editor/beauty_engine/filters/body/body_filter_pipeline.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/image_source.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/pose_landmark.dart';
@@ -141,82 +138,18 @@ void main() {
   });
 
   group('VisionCapabilityGate', () {
-    const gate = VisionCapabilityGate(missingOcclusionScale: 0.55);
     const pipeline = BodyFilterPipeline();
 
-    test('rejects rejectAdjustment when occlusion/parts are missing', () {
-      final plan = pipeline.createReshapePlan(
-        imageSize: const Size(400, 800),
-        parameters: const {'leg_length': 0.8},
-        capabilities: VisionCapabilities.mediapipePoseAndMatte,
-      );
-
-      expect(plan.adjustmentOfType(BodyAdjustmentType.legLength), isNull);
-      expect(plan.ignoredParameters, contains('leg_length'));
-      expect(
-        plan.capabilityDecisions.any(
-          (decision) =>
-              decision.parameter == 'leg_length' &&
-              decision.action == CapabilityGateAction.rejected,
-        ),
-        isTrue,
-      );
-    });
-
-    test('reduces preserveOccluder adjustments without silent fallback', () {
-      final raw = pipeline.createReshapePlan(
-        imageSize: const Size(400, 800),
-        parameters: const {'waist_slim': 0.8},
-      );
-      final gated = gate.apply(
-        plan: raw,
-        capabilities: VisionCapabilities.mediapipePoseAndMatte,
-      );
-
-      final waist = gated.adjustmentOfType(BodyAdjustmentType.waistSlim);
-      expect(waist, isNotNull);
-      expect(waist!.weight, closeTo(0.55, 1e-9));
-      expect(
-        gated.capabilityDecisions.any(
-          (decision) =>
-              decision.parameter == 'waist_slim' &&
-              decision.action == CapabilityGateAction.reduced &&
-              decision.reason == 'occlusion_or_parts_unavailable',
-        ),
-        isTrue,
-      );
-    });
-
-    test('allows adjustments when occlusion capability is present', () {
+    test('reset body menu produces identity plans', () {
       final plan = pipeline.createReshapePlan(
         imageSize: const Size(400, 800),
         parameters: const {'leg_length': 0.8, 'waist_slim': 0.5},
-        capabilities: const VisionCapabilities(
-          poseLandmarks: true,
-          personMatte: true,
-          occlusionMap: true,
-        ),
-      );
-
-      expect(plan.adjustmentOfType(BodyAdjustmentType.legLength), isNotNull);
-      expect(plan.adjustmentOfType(BodyAdjustmentType.waistSlim)?.weight, 1);
-      expect(
-        plan.capabilityDecisions.every(
-          (decision) => decision.action == CapabilityGateAction.allowed,
-        ),
-        isTrue,
-      );
-    });
-
-    test('rejects entire plan when pose landmarks are unavailable', () {
-      final plan = pipeline.createReshapePlan(
-        imageSize: const Size(400, 800),
-        parameters: const {'waist_slim': 0.5},
-        capabilities: VisionCapabilities.none,
+        capabilities: VisionCapabilities.mediapipePoseAndMatte,
       );
 
       expect(plan.isIdentity, isTrue);
-      expect(plan.ignoredParameters, contains('waist_slim'));
+      expect(plan.adjustments, isEmpty);
+      expect(plan.ignoredParameters, isEmpty);
     });
   });
 }

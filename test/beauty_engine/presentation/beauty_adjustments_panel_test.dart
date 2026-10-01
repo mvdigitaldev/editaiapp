@@ -673,7 +673,7 @@ void main() {
     expect(params.containsKey('v_shape_right'), isTrue);
     expect(params.containsKey('v_shape_side'), isTrue);
     expect(params.containsKey('face_slim'), isFalse);
-    expect(params.containsKey('waist_slim'), isTrue);
+    expect(params.containsKey('waist_slim'), isFalse);
     expect(params.containsKey('skin_smooth'), isTrue);
     expect(params['link_eyes'], 1);
   });

@@ -23,6 +23,7 @@ import '../diagnostics/beauty_engine_error_reporter.dart';
 import '../config/face_warp_v3_rollout.dart';
 import '../filters/face/face_filter_pipeline.dart';
 import '../filters/body/body_filter_pipeline.dart';
+import '../filters/body/body_warp_chain.dart';
 import '../l10n/beauty_engine_labels.dart';
 import '../models/beauty_image_loader.dart';
 import '../models/face_mesh_result.dart';
@@ -181,12 +182,22 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     }
   }
 
-  static const _v2LabAssets = {
+  static const _v2FaceLabAssets = {
     'p01': 'test/beauty_engine/warp/fixtures/phase12/p01-man-5021469.png',
     'p05': 'test/beauty_engine/warp/fixtures/phase12/p05-young-woman.png',
     'p12': 'test/beauty_engine/warp/fixtures/phase12/p12.jpg',
     'p15': 'test/beauty_engine/warp/fixtures/phase12/p15-office-blazer.png',
   };
+
+  static const _v2BodyLabAssets = {
+    'p01': 'test/beauty_engine/warp/fixtures/body/real/p01-woman-desert-full.png',
+    'p02': 'test/beauty_engine/warp/fixtures/body/real/p02-woman-indoor-hands.png',
+    'p03': 'test/beauty_engine/warp/fixtures/body/real/p03-man-rooftop.png',
+    'p04': 'test/beauty_engine/warp/fixtures/body/real/p04-woman-window-full.png',
+  };
+
+  Map<String, String> get _labAssets =>
+      widget.bodyOnly ? _v2BodyLabAssets : _v2FaceLabAssets;
 
   Future<void> _pickImage() async {
     final picker = image_picker.ImagePicker();
@@ -199,7 +210,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   }
 
   Future<void> _loadV2LabPhoto(String id) async {
-    final asset = _v2LabAssets[id];
+    final asset = _labAssets[id];
     if (asset == null) {
       return;
     }
@@ -490,7 +501,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         child: Wrap(
           spacing: 4,
           children: [
-            for (final id in _v2LabAssets.keys)
+            for (final id in _labAssets.keys)
               TextButton(
                 onPressed: () => unawaited(_loadV2LabPhoto(id)),
                 child: Text(
@@ -613,7 +624,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   }
 
   bool _hasActiveBodyWarp(Map<String, double> params) {
-    if (_brushHistory.strokes.isNotEmpty) {
+    if (_brushHistory.strokes.isNotEmpty || BodyWarpChain.hasActive(params)) {
       return true;
     }
     for (final key in BodyFilterPipeline.bodyWarpParameterKeys) {
@@ -1081,14 +1092,18 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
-                            BeautyEngineLabels.beautyEditorEmptyHint,
+                          Text(
+                            widget.bodyOnly
+                                ? BeautyEngineLabels.beautyEditorBodyEmptyHint
+                                : BeautyEngineLabels.beautyEditorEmptyHint,
                             textAlign: TextAlign.center,
                           ),
                           if (kDebugMode) ...[
                             const SizedBox(height: 20),
-                            const Text(
-                              'Device Lab V2 — fotos de teste',
+                            Text(
+                              widget.bodyOnly
+                                  ? 'Lab de corpo — fotos de teste'
+                                  : 'Device Lab V2 — fotos de teste',
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 8),
@@ -1097,7 +1112,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                               runSpacing: 8,
                               alignment: WrapAlignment.center,
                               children: [
-                                for (final id in _v2LabAssets.keys)
+                                for (final id in _labAssets.keys)
                                   FilledButton(
                                     onPressed: () =>
                                         unawaited(_loadV2LabPhoto(id)),

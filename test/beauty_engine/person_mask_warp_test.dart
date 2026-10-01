@@ -119,7 +119,7 @@ void main() {
         parameters: const {'body_slim': 0.7},
         personMask: PersonMask(bytes: bytes, width: 40, height: 80),
       );
-      expect(field.isIdentity, isFalse);
+      expect(field.isIdentity, isTrue);
     });
   });
 

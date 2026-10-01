@@ -280,9 +280,9 @@ void main() {
         assets: assets,
         protection: protection,
       );
-      expect(map.isEmpty, isFalse);
-      expect(map.regions, contains(BodyRegion.waist));
-      expect(map.maxValue, greaterThan(0));
+      expect(map.isEmpty, isTrue);
+      expect(map.regions, isEmpty);
+      expect(map.maxValue, 0);
     });
   });
 }

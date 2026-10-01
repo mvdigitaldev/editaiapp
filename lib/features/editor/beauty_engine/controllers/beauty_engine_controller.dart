@@ -16,6 +16,7 @@ import '../body_reshape/providers/body_vision_coordinator.dart';
 import '../body_reshape/providers/mediapipe_body_joint_mapper.dart';
 import '../body_reshape/providers/vision_capabilities.dart';
 import '../filters/body/body_filter_pipeline.dart';
+import '../filters/body/body_warp_chain.dart';
 import '../filters/color/color_filter_pipeline.dart';
 import '../filters/face/face_filter_pipeline.dart';
 import '../filters/face/face_warp_utils.dart';
@@ -69,6 +70,7 @@ import '../warp/v2/lip_height/lip_height_field.dart';
 import '../warp/v2/lip_angle/lip_angle_field.dart';
 import '../warp/v2/lip_plump/lip_plump_field.dart';
 import '../warp/v2/lip_smile/lip_smile_field.dart';
+import '../warp/v2/body_waist/body_waist_field.dart';
 import '../warp/v2/eye_size/eye_size_field.dart';
 import '../warp/v2/eye_width/eye_width_field.dart';
 import '../warp/v2/eyebrow_width/eyebrow_width_field.dart';
@@ -145,6 +147,7 @@ class BeautyEngineController {
   final LipAngleFieldRuntime _lipAngleRuntime = LipAngleFieldRuntime();
   final LipPlumpFieldRuntime _lipPlumpRuntime = LipPlumpFieldRuntime();
   final LipSmileFieldRuntime _lipSmileRuntime = LipSmileFieldRuntime();
+  final BodyWaistFieldRuntime _bodyWaistRuntime = BodyWaistFieldRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
   final JawAngleFieldRuntime _jawAngleRuntime = JawAngleFieldRuntime();
   final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
@@ -441,7 +444,42 @@ class BeautyEngineController {
   }
 
   bool _shouldDetectPersonMask(Map<String, double> parameters) {
-    return bodyFilterPipeline.hasActiveBodyWarp(parameters);
+    return bodyFilterPipeline.hasActiveBodyWarp(parameters) ||
+        BodyWarpChain.hasActive(parameters);
+  }
+
+  /// Menu Corpo V2: um remap por Field, depois do rosto. Sem pose, identidade.
+  Uint8List applyBodyWarpChain({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required PoseResult? pose,
+    required PersonMask? personMask,
+    required Map<String, double> parameters,
+  }) {
+    if (pose == null ||
+        !BodyWarpChain.hasActive(parameters) ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final field = BodyWaistField.build(
+      pose: pose,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      mask: personMask,
+      t: (parameters[BodyWarpChain.waistKey] ?? 0).clamp(-1.0, 1.0),
+      runtime: _bodyWaistRuntime,
+    );
+    if (field == null) {
+      return sourceRgba;
+    }
+    return v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: field,
+      ),
+    ).rgba;
   }
 
   bool _shouldDetectFaceParts(Map<String, double> parameters) {
@@ -2443,11 +2481,19 @@ class BeautyEngineController {
       return output;
     }
 
-    final cheekRgba = applyFaceWarpChain(
+    final faceRgba = applyFaceWarpChain(
       sourceRgba: rgbaSource.bytes,
       width: rgbaSource.width,
       height: rgbaSource.height,
       face: face,
+      parameters: params,
+    );
+    final cheekRgba = applyBodyWarpChain(
+      sourceRgba: faceRgba,
+      width: rgbaSource.width,
+      height: rgbaSource.height,
+      pose: pose,
+      personMask: personMask,
       parameters: params,
     );
 

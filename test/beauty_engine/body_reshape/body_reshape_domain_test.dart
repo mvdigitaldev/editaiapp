@@ -1,7 +1,7 @@
 import 'dart:ui';
 
-import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_adjustment.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_frame_assets.dart';
+import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/warp_plan.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_joint.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_region.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_reshape_request.dart';
@@ -69,84 +69,27 @@ void main() {
   group('LegacyBodyParameterAdapter', () {
     const adapter = LegacyBodyParameterAdapter();
 
-    test('maps legacy parameters to semantic adjustments', () {
+    test('reset body menu produces an identity plan', () {
       final plan = adapter.buildPlan(
         const BodyReshapeRequest(
           imageSize: Size(400, 800),
           parameters: {
             'waist_slim': 0.6,
-            'armSlim': 0.4,
-            'leg_slim': 0.5,
-            'head_size': 1,
-          },
-        ),
-      );
-
-      expect(plan.adjustments, hasLength(3));
-      expect(
-        plan.adjustmentOfType(BodyAdjustmentType.waistSlim)?.regions,
-        const {BodyRegion.waist},
-      );
-      expect(
-        plan.adjustmentOfType(BodyAdjustmentType.armSlim)?.regions,
-        containsAll(const {
-          BodyRegion.leftArm,
-          BodyRegion.rightArm,
-          BodyRegion.leftForearm,
-          BodyRegion.rightForearm,
-        }),
-      );
-      expect(
-        plan.adjustmentOfType(BodyAdjustmentType.legSlim)?.regions,
-        contains(BodyRegion.leftCalf),
-      );
-      expect(
-        plan.adjustmentOfType(BodyAdjustmentType.torsoSlim),
-        isNull,
-      );
-    });
-
-    test('maps new Sprint 12 controls with region, limit, direction and occlusion',
-        () {
-      final plan = adapter.buildPlan(
-        const BodyReshapeRequest(
-          imageSize: Size(400, 800),
-          parameters: {
             'chest_expand': 0.5,
-            'belly_reduce': 0.4,
-            'butt_expand': 0.3,
-            'height': 0.6,
-            'shoulder_reduce': 0.2,
-            'arm_upper_slim': 0.5,
-            'leg_calf_slim': 0.4,
+            'height': 1,
           },
         ),
       );
 
-      expect(plan.adjustments.length, greaterThanOrEqualTo(7));
-
-      final chest = plan.adjustmentOfType(BodyAdjustmentType.chestExpand)!;
-      expect(chest.regions, const {BodyRegion.chest});
-      expect(chest.direction, BodyAdjustmentDirection.outward);
-      expect(chest.maxIntensity, 0.75);
-      expect(chest.occlusionPolicy, BodyOcclusionPolicy.preserveOccluder);
-
-      final height = plan.adjustmentOfType(BodyAdjustmentType.height)!;
-      expect(height.direction, BodyAdjustmentDirection.verticalStretch);
-      expect(
-        height.occlusionPolicy,
-        BodyOcclusionPolicy.rejectAdjustment,
-      );
-
-      expect(
-        LegacyBodyParameterAdapter.controlSpecs,
-        hasLength(LegacyBodyParameterAdapter.supportedParameterKeys.length),
-      );
+      expect(plan.adjustments, isEmpty);
+      expect(plan.isIdentity, isTrue);
+      expect(LegacyBodyParameterAdapter.supportedParameterKeys, isEmpty);
+      expect(LegacyBodyParameterAdapter.controlSpecs, isEmpty);
       expect(
         LegacyBodyParameterAdapter.requiresV2Mesh(
           const {'chest_expand': 0.1},
         ),
-        isTrue,
+        isFalse,
       );
     });
 
@@ -186,15 +129,12 @@ void main() {
       parameters: const {'shoulder_width': 0.5},
     );
 
-    expect(plan.isIdentity, isFalse);
+    expect(plan.isIdentity, isTrue);
     expect(plan.qualityProfile, same(WarpQualityProfile.preview));
-    expect(
-      plan.adjustmentOfType(BodyAdjustmentType.shoulderExpand)?.direction,
-      BodyAdjustmentDirection.horizontalExpand,
-    );
+    expect(plan.adjustments, isEmpty);
     expect(
       pipeline.hasActiveBodyWarp(const {'shoulder_width': 0.5}),
-      isTrue,
+      isFalse,
     );
   });
 }

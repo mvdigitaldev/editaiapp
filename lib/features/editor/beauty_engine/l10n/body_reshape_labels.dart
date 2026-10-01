@@ -2,41 +2,25 @@ import '../body_reshape/models/body_adjustment.dart';
 import '../body_reshape/models/legacy_body_parameter_adapter.dart';
 import '../body_reshape/models/warp_plan.dart';
 
-/// Labels e mensagens do Body Reshape V2 (Sprint 12).
+/// Labels e mensagens do Body Reshape V2.
+///
+/// Menu zerado (2026-10-01). Sem sliders até existirem Fields novos.
 abstract final class BodyReshapeLabels {
-  static const parameterLabelPt = <String, String>{
-    'waist_slim': 'Afinar cintura',
-    'hip': 'Quadril',
-    'body_slim': 'Afinar corpo',
-    'leg_length': 'Alongar pernas',
-    'leg_slim': 'Afinar pernas',
-    'arm_slim': 'Afinar braços',
-    'neck_slim': 'Afinar pescoço',
-    'shoulder_width': 'Alargar ombros',
-    'chest_expand': 'Expandir peito',
-    'belly_reduce': 'Reduzir barriga',
-    'butt_expand': 'Expandir glúteo',
-    'height': 'Altura',
-    'shoulder_reduce': 'Estreitar ombros',
-    'arm_upper_slim': 'Afinar braço (superior)',
-    'arm_forearm_slim': 'Afinar antebraço',
-    'leg_thigh_slim': 'Afinar coxa',
-    'leg_calf_slim': 'Afinar panturrilha',
-  };
+  static const parameterLabelPt = <String, String>{};
 
   static String parameterLabel(String key) => parameterLabelPt[key] ?? key;
 
+  static const emptyToolsHint = 'Sem ferramentas ainda.';
   static const limitedByOcclusion = 'Ajuste limitado por oclusão';
   static const limitedByConfidence = 'Ajuste limitado por confiança baixa';
   static const limitedByCapability = 'Ajuste limitado — evidência insuficiente';
   static const rejectedByOcclusion = 'Ajuste bloqueado por oclusão';
 
-  /// Mensagem curta para exibir sob o slider quando o plano V2 limitou o param.
   static String? limitationHint({
     required String parameterKey,
     WarpPlan? plan,
   }) {
-    if (plan == null) {
+    if (plan == null || parameterKey.isEmpty) {
       return null;
     }
 
@@ -75,8 +59,10 @@ abstract final class BodyReshapeLabels {
     return null;
   }
 
-  /// Limite semântico do controle (região / max / oclusão).
   static String? controlLimitHint(String parameterKey) {
+    if (parameterKey.isEmpty) {
+      return null;
+    }
     final spec = LegacyBodyParameterAdapter.specFor(parameterKey);
     if (spec == null) {
       return null;

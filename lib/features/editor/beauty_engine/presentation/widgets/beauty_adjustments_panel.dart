@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../body_reshape/models/warp_plan.dart';
 import '../../filters/body/body_filter_pipeline.dart';
+import '../../filters/body/body_warp_chain.dart';
 import '../../filters/face/face_filter_pipeline.dart';
 import '../../filters/color/color_filter_pipeline.dart';
 import '../../filters/face/skin_filter_pipeline.dart';
@@ -108,7 +109,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       category: BeautyAdjustmentCategory.corpo,
       icon: Icons.accessibility_new_outlined,
       label: BeautyEngineLabels.sectionBody,
-      parameterKeys: BodyFilterPipeline.bodyWarpParameterKeys,
+      parameterKeys: BodyWarpChain.parameterKeys,
     ),
     BeautyAdjustmentCategoryDef(
       category: BeautyAdjustmentCategory.pele,
@@ -134,6 +135,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       for (final key in FaceFilterPipeline.lipParameterKeys) key: 0,
       for (final key in FaceFilterPipeline.faceWarpParameterKeys) key: 0,
       for (final key in BodyFilterPipeline.bodyWarpParameterKeys) key: 0,
+      for (final key in BodyWarpChain.parameterKeys) key: 0,
       for (final key in SkinFilterPipeline.skinParameterKeys) key: 0,
       for (final key in ColorFilterPipeline.colorParameterKeys) key: 0,
       'link_eyes': linkEyes ? 1 : 0,
@@ -233,6 +235,9 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
 
   String get _activeParamKey {
     final keys = _activeCategoryDef.parameterKeys;
+    if (keys.isEmpty) {
+      return '';
+    }
     if (_selectedKey != null && keys.contains(_selectedKey)) {
       return _selectedKey!;
     }
@@ -318,31 +323,45 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: BeautyAccessibleSlider(
-                label: BeautyEngineLabels.parameterLabel(activeKey),
-                value: activeValue,
-                min: sliderRange.min,
-                max: sliderRange.max,
-                divisions: sliderRange.divisions,
-                bipolar: sliderRange.bipolar,
-                enabled: paramEnabled,
-                trailing: isSideWarp
-                    ? _sideMenu(activeKey, paramEnabled)
-                    : isLipBand
-                        ? _lipBandMenu(activeKey, paramEnabled)
-                        : null,
-                onChanged: paramEnabled
-                    ? (value) => isSideWarp
-                        ? _onSideSliderChanged(activeKey, value)
-                        : isLipBand
-                            ? _onLipBandSliderChanged(activeKey, value)
-                            : widget.onParamChanged(activeKey, value)
-                    : null,
+            if (activeKey.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    BodyReshapeLabels.emptyToolsHint,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: BeautyAccessibleSlider(
+                  label: BeautyEngineLabels.parameterLabel(activeKey),
+                  value: activeValue,
+                  min: sliderRange.min,
+                  max: sliderRange.max,
+                  divisions: sliderRange.divisions,
+                  bipolar: sliderRange.bipolar,
+                  enabled: paramEnabled,
+                  trailing: isSideWarp
+                      ? _sideMenu(activeKey, paramEnabled)
+                      : isLipBand
+                          ? _lipBandMenu(activeKey, paramEnabled)
+                          : null,
+                  onChanged: paramEnabled
+                      ? (value) => isSideWarp
+                          ? _onSideSliderChanged(activeKey, value)
+                          : isLipBand
+                              ? _onLipBandSliderChanged(activeKey, value)
+                              : widget.onParamChanged(activeKey, value)
+                      : null,
+                ),
               ),
-            ),
-            if (hintText != null)
+            if (activeKey.isNotEmpty && hintText != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
                 child: Align(
@@ -357,7 +376,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                   ),
                 ),
               ),
-            SizedBox(
+            if (activeKey.isNotEmpty)
+              SizedBox(
               height: _usesToolIcons ? 78 : 40,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
@@ -612,7 +632,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'lip_height' ||
         key == 'lip_angle' ||
         key == 'lip_plump' ||
-        key == 'lip_smile') {
+        key == 'lip_smile' ||
+        key == BodyWarpChain.waistKey) {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

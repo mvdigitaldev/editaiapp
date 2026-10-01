@@ -1,14 +1,5 @@
 export 'deformation/body_mesh_deformer.dart';
 export 'deformation/body_region_deformation_strategy.dart';
-export 'deformation/belly_strategy.dart';
-export 'deformation/butt_strategy.dart';
-export 'deformation/chest_strategy.dart';
-export 'deformation/height_strategy.dart';
-export 'deformation/hip_strategy.dart';
-export 'deformation/limb_slim_strategy.dart';
-export 'deformation/neck_strategy.dart';
-export 'deformation/shoulder_strategy.dart';
-export 'deformation/waist_strategy.dart';
 export 'maps/influence_map.dart';
 export 'maps/influence_map_builder.dart';
 export 'maps/matte_preprocessor.dart';

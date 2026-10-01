@@ -34,6 +34,7 @@ abstract final class BeautyEngineLabels {
     'lip_angle': 'Ângulo',
     'lip_plump': 'Volume',
     'lip_smile': 'Sorriso',
+    'waist': 'Cintura',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',
@@ -105,6 +106,8 @@ abstract final class BeautyEngineLabels {
   static const beautyEditorTitle = 'Retoque beauty';
   static const beautyEditorEmptyHint =
       'Selecione uma foto e use os ajustes abaixo para afinar rosto, nariz, corpo e pele.';
+  static const beautyEditorBodyEmptyHint =
+      'Selecione uma foto de corpo e use os ajustes abaixo.';
   static const faceNotDetectedHint =
       'Rosto não detectado nesta foto. Use uma foto com rosto visível de frente.';
   static String multiFaceSelectHint(int count) =>

@@ -3,9 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/deformation/body_mesh_deformer.dart';
-import 'package:editaiapp/features/editor/beauty_engine/body_reshape/mesh/adaptive_body_mesh.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/mesh/adaptive_mesh_generator.dart';
-import 'package:editaiapp/features/editor/beauty_engine/body_reshape/mesh/mesh_constraints.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/mesh/mesh_optimizer.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_adjustment.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_frame_assets.dart';
@@ -23,423 +21,80 @@ void main() {
   const generator = AdaptiveMeshGenerator();
   const deformer = BodyMeshDeformer();
 
-  AdaptiveBodyMesh _mesh() {
+  test('reset body menu has no deformation strategies', () {
+    expect(BodyMeshDeformer.defaultStrategies, isEmpty);
+    expect(BodyFilterPipeline.bodyWarpParameterKeys, isEmpty);
+  });
+
+  test('deformer stays identity after the body menu reset', () {
     final assets = _standingPersonAssets(imageSize);
-    return generator.generate(
+    final mesh = generator.generate(
       assets: assets,
       imageSize: imageSize,
       qualityProfile: WarpQualityProfile.preview,
     );
-  }
+    final plan = WarpPlan(
+      imageSize: imageSize,
+      adjustments: const [
+        BodyAdjustment(
+          type: BodyAdjustmentType.waistSlim,
+          regions: {BodyRegion.waist},
+          intensity: 1,
+          maxIntensity: 1,
+          weight: 1,
+          direction: BodyAdjustmentDirection.inward,
+          influence: 0.7,
+          minimumConfidence: 0.5,
+          occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
+          sourceParameter: 'waist_slim',
+        ),
+      ],
+      qualityProfile: WarpQualityProfile.preview,
+    );
 
-  group('BodyMeshDeformer', () {
-    test('produces vertex displacements without control points', () {
-      final assets = _standingPersonAssets(imageSize);
-      final mesh = _mesh();
-      final plan = WarpPlan(
-        imageSize: imageSize,
-        adjustments: [
-          const BodyAdjustment(
-            type: BodyAdjustmentType.waistSlim,
-            regions: {BodyRegion.waist},
-            intensity: 0.8,
-            maxIntensity: 0.85,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 0.7,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'waist_slim',
-          ),
-        ],
-        qualityProfile: WarpQualityProfile.preview,
-      );
+    final result = deformer.deform(mesh: mesh, assets: assets, plan: plan);
+    expect(result.displacements.isIdentity, isTrue);
+    expect(result.hasInvertedTriangles, isFalse);
 
-      final result = deformer.deform(mesh: mesh, assets: assets, plan: plan);
-
-      expect(result.displacements.isIdentity, isFalse);
-      expect(result.displacements.vertexCount, mesh.vertexCount);
-      expect(result.mesh.vertexCount, mesh.vertexCount);
-      expect(result.hasInvertedTriangles, isFalse);
-    });
-
-    test('waist slim moves left side rightward and right side leftward', () {
-      final assets = _standingPersonAssets(imageSize);
-      final mesh = _mesh();
-      final plan = WarpPlan(
-        imageSize: imageSize,
-        adjustments: [
-          const BodyAdjustment(
-            type: BodyAdjustmentType.waistSlim,
-            regions: {BodyRegion.waist},
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 0.7,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'waist_slim',
-          ),
-        ],
-        qualityProfile: WarpQualityProfile.preview,
-      );
-
-      final field = deformer.computeDisplacements(
-        mesh: mesh,
-        assets: assets,
-        plan: plan,
-      );
-
-      final midline = imageSize.width * 0.5;
-      var leftDx = 0.0;
-      var leftCount = 0;
-      var rightDx = 0.0;
-      var rightCount = 0;
-
-      for (var i = 0; i < mesh.vertexCount; i++) {
-        if (mesh.regionAtVertex(i) != BodyRegion.waist) {
-          continue;
-        }
-        final x = mesh.vertices[i * 2];
-        final dx = field.deltas[i * 2];
-        if (dx.abs() < 1e-4) {
-          continue;
-        }
-        if (x < midline) {
-          leftDx += dx;
-          leftCount++;
-        } else {
-          rightDx += dx;
-          rightCount++;
-        }
-      }
-
-      expect(leftCount, greaterThan(0));
-      expect(rightCount, greaterThan(0));
-      expect(leftDx / leftCount, greaterThan(0)); // para dentro
-      expect(rightDx / rightCount, lessThan(0));
-    });
-
-    test('hip expand moves sides outward', () {
-      final assets = _standingPersonAssets(imageSize);
-      final mesh = _mesh();
-      final plan = WarpPlan(
-        imageSize: imageSize,
-        adjustments: [
-          const BodyAdjustment(
-            type: BodyAdjustmentType.hipExpand,
-            regions: {BodyRegion.hip},
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.outward,
-            influence: 0.7,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'hip',
-          ),
-        ],
-        qualityProfile: WarpQualityProfile.preview,
-      );
-
-      final field = deformer.computeDisplacements(
-        mesh: mesh,
-        assets: assets,
-        plan: plan,
-      );
-
-      final midline = imageSize.width * 0.5;
-      var leftDx = 0.0;
-      var leftCount = 0;
-      var rightDx = 0.0;
-      var rightCount = 0;
-
-      for (var i = 0; i < mesh.vertexCount; i++) {
-        if (mesh.regionAtVertex(i) != BodyRegion.hip) {
-          continue;
-        }
-        final x = mesh.vertices[i * 2];
-        final dx = field.deltas[i * 2];
-        // Ignora miolo (quase zero) — só vértices com movimento claro.
-        if (dx.abs() < 0.05) {
-          continue;
-        }
-        if ((x - midline).abs() < imageSize.width * 0.04) {
-          continue;
-        }
-        if (x < midline) {
-          leftDx += dx;
-          leftCount++;
-        } else {
-          rightDx += dx;
-          rightCount++;
-        }
-      }
-
-      expect(leftCount + rightCount, greaterThan(0));
-      // Pelo menos um lado move para fora de forma dominante.
-      final leftMean = leftCount > 0 ? leftDx / leftCount : 0.0;
-      final rightMean = rightCount > 0 ? rightDx / rightCount : 0.0;
-      if (leftCount > 0 && rightCount > 0) {
-        expect(leftMean, lessThan(0));
-        expect(rightMean, greaterThan(0));
-      } else if (leftCount > 0) {
-        expect(leftMean, lessThan(0));
-      } else {
-        expect(rightMean, greaterThan(0));
-      }
-    });
-
-    test('chest expand and belly reduce produce non-identity fields', () {
-      final assets = _standingPersonAssets(imageSize);
-      final mesh = _mesh();
-      final plan = WarpPlan(
-        imageSize: imageSize,
-        adjustments: [
-          const BodyAdjustment(
-            type: BodyAdjustmentType.chestExpand,
-            regions: {BodyRegion.chest},
-            intensity: 0.9,
-            maxIntensity: 0.9,
-            weight: 1,
-            direction: BodyAdjustmentDirection.outward,
-            influence: 0.65,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.preserveOccluder,
-            sourceParameter: 'chest_expand',
-          ),
-          const BodyAdjustment(
-            type: BodyAdjustmentType.bellyReduce,
-            regions: {BodyRegion.waist, BodyRegion.torso},
-            intensity: 0.8,
-            maxIntensity: 0.8,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 0.7,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.preserveOccluder,
-            sourceParameter: 'belly_reduce',
-          ),
-        ],
-        qualityProfile: WarpQualityProfile.preview,
-      );
-
-      final field = deformer.computeDisplacements(
-        mesh: mesh,
-        assets: assets,
-        plan: plan,
-      );
-
-      expect(field.isIdentity, isFalse);
-    });
-
-    test('limb slim produces non-zero arm displacements', () {
-      final assets = _standingPersonAssets(imageSize);
-      final mesh = _mesh();
-      final plan = WarpPlan(
-        imageSize: imageSize,
-        adjustments: [
-          const BodyAdjustment(
-            type: BodyAdjustmentType.armSlim,
-            regions: {
-              BodyRegion.leftArm,
-              BodyRegion.rightArm,
-              BodyRegion.leftForearm,
-              BodyRegion.rightForearm,
-            },
-            intensity: 0.9,
-            maxIntensity: 0.9,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 0.55,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'arm_slim',
-          ),
-        ],
-        qualityProfile: WarpQualityProfile.preview,
-      );
-
-      final field = deformer.computeDisplacements(
-        mesh: mesh,
-        assets: assets,
-        plan: plan,
-      );
-
-      var limbMoved = 0;
-      for (var i = 0; i < mesh.vertexCount; i++) {
-        final region = mesh.regionAtVertex(i);
-        if (region != BodyRegion.leftArm &&
-            region != BodyRegion.rightArm &&
-            region != BodyRegion.leftForearm &&
-            region != BodyRegion.rightForearm) {
-          continue;
-        }
-        if (field.magnitudeAt(i) > 1e-3) {
-          limbMoved++;
-        }
-      }
-      expect(limbMoved, greaterThan(0));
-    });
-
-    test('max intensity fixtures do not invert triangles', () {
-      final assets = _standingPersonAssets(imageSize);
-      final mesh = _mesh();
-      final plan = WarpPlan(
-        imageSize: imageSize,
-        adjustments: [
-          const BodyAdjustment(
-            type: BodyAdjustmentType.waistSlim,
-            regions: {BodyRegion.waist},
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 1,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'waist_slim',
-          ),
-          const BodyAdjustment(
-            type: BodyAdjustmentType.hipExpand,
-            regions: {BodyRegion.hip},
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.outward,
-            influence: 1,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'hip',
-          ),
-          const BodyAdjustment(
-            type: BodyAdjustmentType.armSlim,
-            regions: {
-              BodyRegion.leftArm,
-              BodyRegion.rightArm,
-              BodyRegion.leftForearm,
-              BodyRegion.rightForearm,
-            },
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 1,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'arm_slim',
-          ),
-          const BodyAdjustment(
-            type: BodyAdjustmentType.legSlim,
-            regions: {
-              BodyRegion.leftThigh,
-              BodyRegion.rightThigh,
-              BodyRegion.leftCalf,
-              BodyRegion.rightCalf,
-            },
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 1,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'leg_slim',
-          ),
-        ],
-        qualityProfile: WarpQualityProfile.preview,
-      );
-
-      final result = deformer.deform(mesh: mesh, assets: assets, plan: plan);
-      expect(result.hasInvertedTriangles, isFalse);
-      expect(result.mesh.hasDegenerateTriangles(), isFalse);
-    });
-
-    test('respects per-region displacement limits', () {
-      final assets = _standingPersonAssets(imageSize);
-      final mesh = _mesh();
-      const constraints = MeshConstraints();
-      final local = BodyMeshDeformer(constraints: constraints);
-      final plan = WarpPlan(
-        imageSize: imageSize,
-        adjustments: [
-          const BodyAdjustment(
-            type: BodyAdjustmentType.waistSlim,
-            regions: {BodyRegion.waist},
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 1,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'waist_slim',
-          ),
-        ],
-        qualityProfile: WarpQualityProfile.preview,
-      );
-
-      final field = local.computeDisplacements(
-        mesh: mesh,
-        assets: assets,
-        plan: plan,
-      );
-
-      final maxAllowed =
-          constraints.maxDisplacementPx(BodyRegion.waist, imageSize);
-      for (var i = 0; i < mesh.vertexCount; i++) {
-        if (mesh.regionAtVertex(i) != BodyRegion.waist) {
-          continue;
-        }
-        expect(field.magnitudeAt(i), lessThanOrEqualTo(maxAllowed + 1e-4));
-      }
-    });
-
-    test('pins low-weight boundary vertices', () {
-      final assets = _standingPersonAssets(imageSize);
-      final mesh = _mesh();
-      // Força um delta bruto absurdo e confia no optimizer.
-      final raw = Float32List(mesh.vertexCount * 2);
-      for (var i = 0; i < mesh.vertexCount; i++) {
-        raw[i * 2] = 40;
-        raw[i * 2 + 1] = -25;
-      }
-      final optimized = const MeshOptimizer().optimize(
-        source: mesh,
-        rawDeltas: raw,
-      );
-
-      const pinThreshold = 0.05; // MeshConstraints.boundaryPinWeightThreshold
-      for (var i = 0; i < mesh.vertexCount; i++) {
-        if (mesh.weights[i] > pinThreshold) {
-          continue;
-        }
-        expect(optimized.displacements.magnitudeAt(i), lessThan(1e-6));
-      }
-    });
+    const pipeline = BodyFilterPipeline();
+    final emptyPlan = pipeline.createReshapePlan(
+      imageSize: imageSize,
+      parameters: const {'waist_slim': 0.7, 'hip': 0.5},
+    );
+    expect(emptyPlan.isIdentity, isTrue);
+    expect(
+      pipeline
+          .deformAdaptiveMesh(mesh: mesh, assets: assets, plan: emptyPlan)
+          .displacements
+          .isIdentity,
+      isTrue,
+    );
   });
 
-  group('BodyFilterPipeline V2 deform', () {
-    test('deformAdaptiveMesh uses reshape plan without control points', () {
-      const pipeline = BodyFilterPipeline();
-      final assets = _standingPersonAssets(imageSize);
-      final mesh = _mesh();
-      final plan = pipeline.createReshapePlan(
-        imageSize: imageSize,
-        parameters: const {'waist_slim': 0.7, 'hip': 0.5},
-      );
+  test('pins low-weight boundary vertices', () {
+    final assets = _standingPersonAssets(imageSize);
+    final mesh = generator.generate(
+      assets: assets,
+      imageSize: imageSize,
+      qualityProfile: WarpQualityProfile.preview,
+    );
+    final raw = Float32List(mesh.vertexCount * 2);
+    for (var i = 0; i < mesh.vertexCount; i++) {
+      raw[i * 2] = 40;
+      raw[i * 2 + 1] = -25;
+    }
+    final optimized = const MeshOptimizer().optimize(
+      source: mesh,
+      rawDeltas: raw,
+    );
 
-      final result = pipeline.deformAdaptiveMesh(
-        mesh: mesh,
-        assets: assets,
-        plan: plan,
-      );
-
-      expect(plan.adjustments, isNotEmpty);
-      expect(result.displacements.isIdentity, isFalse);
-      expect(result.hasInvertedTriangles, isFalse);
-    });
+    const pinThreshold = 0.05;
+    for (var i = 0; i < mesh.vertexCount; i++) {
+      if (mesh.weights[i] > pinThreshold) {
+        continue;
+      }
+      expect(optimized.displacements.magnitudeAt(i), lessThan(1e-6));
+    }
   });
 }
 

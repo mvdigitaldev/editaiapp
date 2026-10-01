@@ -6,6 +6,7 @@ import '../body_reshape/rendering/memory_budget.dart';
 import '../body_reshape/rendering/method_channel_native_export_backend.dart';
 import '../body_reshape/rendering/native_export_backend.dart';
 import '../controllers/beauty_engine_controller.dart';
+import '../filters/body/body_warp_chain.dart';
 import '../models/image_source.dart';
 import '../models/image_source_rgba.dart';
 import '../models/processing_pipeline.dart';
@@ -90,8 +91,9 @@ class TiledExportEngine {
     final face = await controller.detectFace(rgbaSource);
     final pose = await controller.detectPose(rgbaSource);
     final personMask = controller.bodyFilterPipeline.hasActiveBodyWarp(
-      pipeline.effectiveParameters,
-    )
+              pipeline.effectiveParameters,
+            ) ||
+            BodyWarpChain.hasActive(pipeline.effectiveParameters)
         ? await controller.detectPersonMask(rgbaSource)
         : null;
     final params = pipeline.effectiveParameters;
@@ -112,11 +114,19 @@ class TiledExportEngine {
       rgbaSource.height.toDouble(),
     );
 
-    final cheekRgba = controller.applyFaceWarpChain(
+    final faceRgba = controller.applyFaceWarpChain(
       sourceRgba: rgbaSource.bytes,
       width: rgbaSource.width,
       height: rgbaSource.height,
       face: face,
+      parameters: params,
+    );
+    final cheekRgba = controller.applyBodyWarpChain(
+      sourceRgba: faceRgba,
+      width: rgbaSource.width,
+      height: rgbaSource.height,
+      pose: pose,
+      personMask: personMask,
       parameters: params,
     );
     final bodyField = controller.composeBodyField(

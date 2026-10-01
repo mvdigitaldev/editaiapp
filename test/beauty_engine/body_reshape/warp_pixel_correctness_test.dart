@@ -42,7 +42,7 @@ void main() {
   });
 
   group('Inverse mesh warp (pixel)', () {
-    test('belly reduce narrows silhouette width in remapped bitmap', () {
+    test('reset body menu rasterizes an identity field', () {
       final assets = _standingAssets(imageSize);
       final mesh = generator.generate(
         assets: assets,
@@ -64,24 +64,13 @@ void main() {
             occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
             sourceParameter: 'belly_reduce',
           ),
-          BodyAdjustment(
-            type: BodyAdjustmentType.waistSlim,
-            regions: {BodyRegion.waist},
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 0.7,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'waist_slim',
-          ),
         ],
         qualityProfile: WarpQualityProfile.preview,
       );
 
-      final optimized =
-          deformer.deform(mesh: mesh, assets: assets, plan: plan);
+      final optimized = deformer.deform(mesh: mesh, assets: assets, plan: plan);
+      expect(optimized.displacements.isIdentity, isTrue);
+
       final protection = preprocessor.buildProtectionMaps(
         assets.personMatte!,
         imageSize: imageSize,
@@ -97,36 +86,7 @@ void main() {
         gridHeight: 48,
         protectionMaps: protection,
       );
-
-      expect(field.isIdentity, isFalse);
-
-      final rgba = _syntheticPersonOnStripes(imageSize);
-      final widthBefore = _measureSilhouetteWidth(
-        rgba,
-        imageSize.width.round(),
-        imageSize.height.round(),
-        sampleY: 0.40,
-      );
-
-      const remapper = WarpCpuRemap();
-      final out = remapper.apply(
-        rgba: rgba,
-        width: imageSize.width.round(),
-        height: imageSize.height.round(),
-        field: field,
-      );
-      final widthAfter = _measureSilhouetteWidth(
-        out,
-        imageSize.width.round(),
-        imageSize.height.round(),
-        sampleY: 0.40,
-      );
-
-      // Correção do sinal: afinar DEVE reduzir a largura.
-      expect(widthAfter, lessThan(widthBefore),
-          reason: 'before=$widthBefore after=$widthAfter '
-              'maxDisp=${field.maxDisplacementMagnitude}');
-      expect(widthBefore - widthAfter, greaterThanOrEqualTo(0.5));
+      expect(field.isIdentity, isTrue);
     });
 
     test('far background stripes stay byte-identical', () {

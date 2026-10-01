@@ -144,8 +144,8 @@ void main() {
       );
     });
 
-    test('declares insufficient evidence reason without silent fallback', () {
-      final assets = _baseAssets(); // sem oclusão/partes
+    test('reset body menu has no adjustments to gate', () {
+      final assets = _baseAssets();
       final plan = const BodyFilterPipeline().createReshapePlan(
         imageSize: imageSize,
         parameters: const {'waist_slim': 0.6, 'leg_length': 0.7},
@@ -153,18 +153,10 @@ void main() {
 
       final result = engine.evaluate(plan: plan, assets: assets);
 
-      expect(result.usedInsufficientEvidenceFallback, isTrue);
-      expect(
-        result.decisions.every(
-          (d) => d.reason == 'occlusion_evidence_insufficient',
-        ),
-        isTrue,
-      );
-      expect(result.plan.ignoredParameters, contains('leg_length'));
-      expect(
-        result.plan.adjustmentOfType(BodyAdjustmentType.waistSlim)?.weight,
-        lessThan(1),
-      );
+      expect(plan.isIdentity, isTrue);
+      expect(result.plan.isIdentity, isTrue);
+      expect(result.plan.adjustments, isEmpty);
+      expect(result.plan.ignoredParameters, isEmpty);
     });
 
     test('part segmentation hand label covers waist ROI', () {

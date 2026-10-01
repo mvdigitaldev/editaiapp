@@ -1,0 +1,48 @@
+{
+  "photos": [
+    {
+      "id": "body-p01",
+      "dumpId": "p01",
+      "label": "woman-desert-full",
+      "image": "test/beauty_engine/warp/fixtures/body/real/p01-woman-desert-full.png",
+      "width": 640,
+      "height": 800,
+      "sex": "female",
+      "framing": "full",
+      "notes": "Corpo inteiro, braços no ar, outdoor. Cintura, quadril, pernas, braços e altura."
+    },
+    {
+      "id": "body-p02",
+      "dumpId": "p02",
+      "label": "woman-indoor-hands",
+      "image": "test/beauty_engine/warp/fixtures/body/real/p02-woman-indoor-hands.png",
+      "width": 665,
+      "height": 1024,
+      "sex": "female",
+      "framing": "mid_thigh",
+      "notes": "Mãos na cintura. Cintura, quadril, peito, barriga e braços. Pernas parciais."
+    },
+    {
+      "id": "body-p03",
+      "dumpId": "p03",
+      "label": "man-rooftop",
+      "image": "test/beauty_engine/warp/fixtures/body/real/p03-man-rooftop.png",
+      "width": 682,
+      "height": 1024,
+      "sex": "male",
+      "framing": "mid_thigh",
+      "notes": "Homem, mãos juntas. Peito, ombros, braços e cintura. Pernas parciais."
+    },
+    {
+      "id": "body-p04",
+      "dumpId": "p04",
+      "label": "woman-window-full",
+      "image": "test/beauty_engine/warp/fixtures/body/real/p04-woman-window-full.png",
+      "width": 682,
+      "height": 1024,
+      "sex": "female",
+      "framing": "knees",
+      "notes": "Um braço no ar. Cintura, quadril, glúteo, peito e braços. Gémeos e pés fora."
+    }
+  ]
+}

@@ -2,19 +2,14 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'package:editaiapp/features/editor/beauty_engine/body_reshape/deformation/belly_strategy.dart';
-import 'package:editaiapp/features/editor/beauty_engine/body_reshape/deformation/body_mesh_deformer.dart';
-import 'package:editaiapp/features/editor/beauty_engine/body_reshape/deformation/body_region_deformation_strategy.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/maps/person_mask_bridge.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/maps/torso_contour_extractor.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/mesh/adaptive_mesh_generator.dart';
-import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_adjustment.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_frame_assets.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_joint.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_region.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/body_reshape_request.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/person_matte.dart';
-import 'package:editaiapp/features/editor/beauty_engine/body_reshape/models/warp_plan.dart';
 import 'package:editaiapp/features/editor/beauty_engine/body_reshape/providers/vision_capabilities.dart';
 import 'package:editaiapp/features/editor/beauty_engine/segment/person_mask.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,7 +18,6 @@ void main() {
   const imageSize = Size(160, 320);
   const extractor = TorsoContourExtractor(bandCount: 20);
   const generator = AdaptiveMeshGenerator();
-  const deformer = BodyMeshDeformer();
 
   group('PersonMask → PersonMatte bridge', () {
     test('toPersonMatte preserves dimensions and alpha', () {
@@ -95,219 +89,6 @@ void main() {
       }
       expect(samples, greaterThan(0));
       expect(waistHits / samples, greaterThan(0.6));
-    });
-
-    test('belly reduce peaking near t≈0.56 moves silhouette edges inward', () {
-      final assets = _standingAssets(imageSize);
-      final mesh = generator.generate(
-        assets: assets,
-        imageSize: imageSize,
-        qualityProfile: WarpQualityProfile.preview,
-      );
-      final plan = WarpPlan(
-        imageSize: imageSize,
-        adjustments: const [
-          BodyAdjustment(
-            type: BodyAdjustmentType.bellyReduce,
-            regions: {BodyRegion.waist, BodyRegion.torso},
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 0.7,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'belly_reduce',
-          ),
-        ],
-        qualityProfile: WarpQualityProfile.preview,
-      );
-
-      final field = deformer.computeDisplacements(
-        mesh: mesh,
-        assets: assets,
-        plan: plan,
-      );
-
-      final midline = imageSize.width * 0.5;
-      final shoulderY = imageSize.height * 0.24;
-      final hipY = imageSize.height * 0.48;
-      final span = hipY - shoulderY;
-      var leftDx = 0.0;
-      var leftCount = 0;
-      var rightDx = 0.0;
-      var rightCount = 0;
-
-      for (var i = 0; i < mesh.vertexCount; i++) {
-        final y = mesh.vertices[i * 2 + 1];
-        final t = ((y - shoulderY) / span).clamp(0.0, 1.0);
-        if (t < 0.48 || t > 0.66) {
-          continue;
-        }
-        final x = mesh.vertices[i * 2];
-        final dx = field.deltas[i * 2];
-        if (dx.abs() < 1e-4) {
-          continue;
-        }
-        if (x < midline) {
-          leftDx += dx;
-          leftCount++;
-        } else {
-          rightDx += dx;
-          rightCount++;
-        }
-      }
-
-      expect(leftCount, greaterThan(0));
-      expect(rightCount, greaterThan(0));
-      expect(leftDx / leftCount, greaterThan(0));
-      expect(rightDx / rightCount, lessThan(0));
-    });
-
-    test('shift magnitude scales with local silhouette half-width', () {
-      final assets = _standingAssets(imageSize);
-      final contour = extractor.extract(assets: assets, imageSize: imageSize)!;
-      final band = contour.sampleAt(0.55)!;
-
-      const strategy = BellyStrategy(maxShiftFraction: 0.05);
-      final mesh = generator.generate(
-        assets: assets,
-        imageSize: imageSize,
-        qualityProfile: WarpQualityProfile.interactive,
-      );
-      final deltas = Float32List(mesh.vertexCount * 2);
-      strategy.apply(
-        context: RegionDeformationContext(
-          mesh: mesh,
-          assets: assets,
-          adjustment: const BodyAdjustment(
-            type: BodyAdjustmentType.bellyReduce,
-            regions: {BodyRegion.waist},
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 0.7,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'belly_reduce',
-          ),
-          imageSize: imageSize,
-          torsoContour: contour,
-          safetyScale: 1,
-        ),
-        deltas: deltas,
-      );
-
-      var maxMag = 0.0;
-      for (var i = 0; i < mesh.vertexCount; i++) {
-        final mag = Offset(deltas[i * 2], deltas[i * 2 + 1]).distance;
-        if (mag > maxMag) {
-          maxMag = mag;
-        }
-      }
-
-      final expectedCap = band.halfWidth * 0.05 + 1.0;
-      expect(maxMag, greaterThan(0.05));
-      expect(maxMag, lessThan(expectedCap));
-    });
-  });
-
-  group('Safety gates', () {
-    test('missing matte reduces deformation intensity', () {
-      final withMatte = _standingAssets(imageSize);
-      final withoutMatte = _standingAssets(imageSize, withMatte: false);
-      final mesh = generator.generate(
-        assets: withMatte,
-        imageSize: imageSize,
-        qualityProfile: WarpQualityProfile.preview,
-      );
-      final plan = WarpPlan(
-        imageSize: imageSize,
-        adjustments: const [
-          BodyAdjustment(
-            type: BodyAdjustmentType.waistSlim,
-            regions: {BodyRegion.waist},
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 0.7,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'waist_slim',
-          ),
-        ],
-        qualityProfile: WarpQualityProfile.preview,
-      );
-
-      double maxMag(BodyFrameAssets assets) {
-        final field = deformer.computeDisplacements(
-          mesh: mesh,
-          assets: assets,
-          plan: plan,
-        );
-        var max = 0.0;
-        for (var i = 0; i < mesh.vertexCount; i++) {
-          final mag = field.magnitudeAt(i);
-          if (mag > max) {
-            max = mag;
-          }
-        }
-        return max;
-      }
-
-      expect(maxMag(withoutMatte), lessThan(maxMag(withMatte)));
-    });
-
-    test('background samples far outside matte stay nearly still', () {
-      final assets = _standingAssets(imageSize);
-      final mesh = generator.generate(
-        assets: assets,
-        imageSize: imageSize,
-        qualityProfile: WarpQualityProfile.preview,
-      );
-      final plan = WarpPlan(
-        imageSize: imageSize,
-        adjustments: const [
-          BodyAdjustment(
-            type: BodyAdjustmentType.bellyReduce,
-            regions: {BodyRegion.waist, BodyRegion.torso},
-            intensity: 1,
-            maxIntensity: 1,
-            weight: 1,
-            direction: BodyAdjustmentDirection.inward,
-            influence: 0.7,
-            minimumConfidence: 0.5,
-            occlusionPolicy: BodyOcclusionPolicy.reduceIntensity,
-            sourceParameter: 'belly_reduce',
-          ),
-        ],
-        qualityProfile: WarpQualityProfile.preview,
-      );
-      final field = deformer.computeDisplacements(
-        mesh: mesh,
-        assets: assets,
-        plan: plan,
-      );
-      final matte = assets.personMatte!;
-
-      var outsideMax = 0.0;
-      for (var i = 0; i < mesh.vertexCount; i++) {
-        final nx = mesh.uvs[i * 2];
-        final ny = mesh.uvs[i * 2 + 1];
-        if (matte.sampleNormalized(nx, ny) > 0.15) {
-          continue;
-        }
-        if (mesh.weights[i] > 0.05) {
-          continue;
-        }
-        final mag = field.magnitudeAt(i);
-        if (mag > outsideMax) {
-          outsideMax = mag;
-        }
-      }
-      expect(outsideMax, lessThan(0.35));
     });
   });
 }
