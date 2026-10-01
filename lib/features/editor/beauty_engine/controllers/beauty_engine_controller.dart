@@ -64,6 +64,9 @@ import '../warp/v2/nose_lift/nose_lift_field.dart';
 import '../warp/v2/nose_ala/nose_ala_field.dart';
 import '../warp/v2/nose_bridge/nose_bridge_field.dart';
 import '../warp/v2/lip_size/lip_size_field.dart';
+import '../warp/v2/lip_width/lip_width_field.dart';
+import '../warp/v2/lip_height/lip_height_field.dart';
+import '../warp/v2/lip_angle/lip_angle_field.dart';
 import '../warp/v2/eye_size/eye_size_field.dart';
 import '../warp/v2/eye_width/eye_width_field.dart';
 import '../warp/v2/eyebrow_width/eyebrow_width_field.dart';
@@ -135,6 +138,9 @@ class BeautyEngineController {
   final NoseAlaFieldRuntime _noseAlaRuntime = NoseAlaFieldRuntime();
   final NoseBridgeFieldRuntime _noseBridgeRuntime = NoseBridgeFieldRuntime();
   final LipSizeFieldRuntime _lipSizeRuntime = LipSizeFieldRuntime();
+  final LipWidthFieldRuntime _lipWidthRuntime = LipWidthFieldRuntime();
+  final LipHeightFieldRuntime _lipHeightRuntime = LipHeightFieldRuntime();
+  final LipAngleFieldRuntime _lipAngleRuntime = LipAngleFieldRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
   final JawAngleFieldRuntime _jawAngleRuntime = JawAngleFieldRuntime();
   final VChinFieldRuntime _vChinRuntime = VChinFieldRuntime();
@@ -1492,6 +1498,108 @@ class BeautyEngineController {
     return warped.rgba;
   }
 
+  /// LipWidthField + remap bilinear. Não é `lip_size`. t=0 não chama o renderer.
+  Uint8List applyLipWidthWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['lip_width'] ?? 0).clamp(-1.0, 1.0);
+    if (face == null ||
+        t.abs() <= 1e-6 ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = LipWidthField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      computeMetrics: false,
+      runtime: _lipWidthRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_lip_width';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
+  /// LipHeightField + remap bilinear. Não é `lip_size`. t=0 não chama o renderer.
+  Uint8List applyLipHeightWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['lip_height'] ?? 0).clamp(-1.0, 1.0);
+    if (face == null ||
+        t.abs() <= 1e-6 ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = LipHeightField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      computeMetrics: false,
+      runtime: _lipHeightRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_lip_height';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
+  /// LipAngleField + remap bilinear. Não é `lip_height`. t=0 não chama o renderer.
+  Uint8List applyLipAngleWarp({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required Map<String, double> parameters,
+  }) {
+    final t = (parameters['lip_angle'] ?? 0).clamp(-1.0, 1.0);
+    if (face == null ||
+        t.abs() <= 1e-6 ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final built = LipAngleField.build(
+      face: face,
+      imageSize: Size(width.toDouble(), height.toDouble()),
+      t: t,
+      computeMetrics: false,
+      runtime: _lipAngleRuntime,
+    );
+    final warped = v2.BackwardBilinearWarp.apply(
+      v2.WarpRequest(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        field: built.field,
+      ),
+    );
+    lastFaceWarpBackend = 'v2_lip_angle';
+    lastFaceWarpField = null;
+    return warped.rgba;
+  }
+
   /// Olheiras não deforma o olho. O slider clareia a pele escura por baixo,
   /// no passe de pele. Este método fica para o teste da cadeia isolada.
   Uint8List applyEyePuffyWarp({
@@ -1802,6 +1910,9 @@ class BeautyEngineController {
     ),
     (backend: 'v2_nose_bridge', parameters: ['nose_bridge']),
     (backend: 'v2_lip_size', parameters: ['lip_size']),
+    (backend: 'v2_lip_width', parameters: ['lip_width']),
+    (backend: 'v2_lip_height', parameters: ['lip_height']),
+    (backend: 'v2_lip_angle', parameters: ['lip_angle']),
     (backend: 'v2_jaw', parameters: ['jaw']),
     (
       backend: 'v2_jaw_angle',
@@ -2051,6 +2162,30 @@ class BeautyEngineController {
           t: general,
           computeMetrics: false,
           runtime: _lipSizeRuntime,
+        ).field;
+      case 'v2_lip_width':
+        return LipWidthField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          computeMetrics: false,
+          runtime: _lipWidthRuntime,
+        ).field;
+      case 'v2_lip_height':
+        return LipHeightField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          computeMetrics: false,
+          runtime: _lipHeightRuntime,
+        ).field;
+      case 'v2_lip_angle':
+        return LipAngleField.build(
+          face: face,
+          imageSize: imageSize,
+          t: general,
+          computeMetrics: false,
+          runtime: _lipAngleRuntime,
         ).field;
       case 'v2_jaw':
         final t = general.clamp(0.0, 1.0);

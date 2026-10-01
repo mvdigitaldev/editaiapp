@@ -397,6 +397,66 @@ void main() {
     );
     expect(find.text('Geral'), findsNothing);
 
+    await tester.tap(find.text('Largura'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-lip_width')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Largura',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+    expect(find.text('Geral'), findsNothing);
+
+    await tester.tap(find.text('Altura'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-lip_height')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Altura',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+    expect(find.text('Geral'), findsNothing);
+
+    await tester.tap(find.text('Ângulo'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('beauty-tool-icon-lip_angle')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .label,
+      'Ângulo',
+    );
+    expect(
+      tester
+          .widget<BeautyAccessibleSlider>(find.byType(BeautyAccessibleSlider))
+          .bipolar,
+      isTrue,
+    );
+    expect(find.text('Geral'), findsNothing);
+
     await tester.tap(find.text('Pele'));
     await tester.pumpAndSettle();
     expect(
@@ -537,6 +597,18 @@ void main() {
     expect(params.containsKey('lip_size_left'), isFalse);
     expect(params.containsKey('lip_size_right'), isFalse);
     expect(params.containsKey('lip_size_side'), isFalse);
+    expect(params.containsKey('lip_width'), isTrue);
+    expect(params.containsKey('lip_width_left'), isFalse);
+    expect(params.containsKey('lip_width_right'), isFalse);
+    expect(params.containsKey('lip_width_side'), isFalse);
+    expect(params.containsKey('lip_height'), isTrue);
+    expect(params.containsKey('lip_height_left'), isFalse);
+    expect(params.containsKey('lip_height_right'), isFalse);
+    expect(params.containsKey('lip_height_side'), isFalse);
+    expect(params.containsKey('lip_angle'), isTrue);
+    expect(params.containsKey('lip_angle_left'), isFalse);
+    expect(params.containsKey('lip_angle_right'), isFalse);
+    expect(params.containsKey('lip_angle_side'), isFalse);
     expect(params.containsKey('hairline'), isTrue);
     expect(params.containsKey('chin'), isTrue);
     expect(params.containsKey('cheekbone'), isTrue);

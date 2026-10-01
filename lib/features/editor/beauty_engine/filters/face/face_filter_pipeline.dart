@@ -38,6 +38,9 @@ class FaceFilterPipeline {
   /// Tab Lábios. Não é `lip_thickness`.
   static const lipParameterKeys = [
     'lip_size',
+    'lip_width',
+    'lip_height',
+    'lip_angle',
   ];
 
   static const faceWarpParameterKeys = [
@@ -98,6 +101,9 @@ class FaceFilterPipeline {
     final noseAlaR = parameters['nose_ala_right'] ?? 0;
     final noseBridge = parameters['nose_bridge'] ?? 0;
     final lipSize = parameters['lip_size'] ?? 0;
+    final lipWidth = parameters['lip_width'] ?? 0;
+    final lipHeight = parameters['lip_height'] ?? 0;
+    final lipAngle = parameters['lip_angle'] ?? 0;
     return head.abs() > 1e-6 ||
         brow.abs() > 1e-6 ||
         browL.abs() > 1e-6 ||
@@ -130,6 +136,9 @@ class FaceFilterPipeline {
         noseAlaR.abs() > 1e-6 ||
         noseBridge.abs() > 1e-6 ||
         lipSize.abs() > 1e-6 ||
+        lipWidth.abs() > 1e-6 ||
+        lipHeight.abs() > 1e-6 ||
+        lipAngle.abs() > 1e-6 ||
         hairline.abs() > 1e-6 ||
         jaw > 0 ||
         jawAngle.abs() > 1e-6 ||

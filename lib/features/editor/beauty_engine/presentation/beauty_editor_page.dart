@@ -690,6 +690,15 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     if ((_params['lip_size'] ?? 0).abs() > 0.001) {
       return 'lip_size';
     }
+    if ((_params['lip_width'] ?? 0).abs() > 0.001) {
+      return 'lip_width';
+    }
+    if ((_params['lip_height'] ?? 0).abs() > 0.001) {
+      return 'lip_height';
+    }
+    if ((_params['lip_angle'] ?? 0).abs() > 0.001) {
+      return 'lip_angle';
+    }
     for (final key in FaceFilterPipeline.faceWarpParameterKeys) {
       if ((_params[key] ?? 0).abs() > 0.001) {
         return key;
@@ -731,6 +740,9 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       'nose_ala',
       'nose_bridge',
       'lip_size',
+      'lip_width',
+      'lip_height',
+      'lip_angle',
       'hairline',
       'jaw',
       'jaw_angle',

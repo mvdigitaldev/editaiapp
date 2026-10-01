@@ -510,7 +510,10 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == 'nose_lift' ||
         key == 'nose_ala' ||
         key == 'nose_bridge' ||
-        key == 'lip_size') {
+        key == 'lip_size' ||
+        key == 'lip_width' ||
+        key == 'lip_height' ||
+        key == 'lip_angle') {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {
