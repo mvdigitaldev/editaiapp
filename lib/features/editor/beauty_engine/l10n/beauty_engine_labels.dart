@@ -35,8 +35,10 @@ abstract final class BeautyEngineLabels {
     'lip_plump': 'Volume',
     'lip_smile': 'Sorriso',
     'waist': 'Cintura',
+    'hips': 'Quadris',
     'legs': 'Pernas',
     'thighs': 'Coxas',
+    'calves': 'Canelas',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',
@@ -105,6 +107,7 @@ abstract final class BeautyEngineLabels {
   static const sectionSkin = 'Pele';
   static const sectionBody = 'Corpo';
   static const sectionBodySlim = 'Magro';
+  static const sectionBodyCurves = 'Curvas';
   static const sectionBodyLegs = 'Pernas';
 
   static const beautyEditorTitle = 'Retoque beauty';

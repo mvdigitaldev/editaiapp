@@ -32,10 +32,47 @@ class BodyWaistGeometry {
   final bool fromMask;
 }
 
+/// Faixa ao longo do eixo ombro→quadril (0 = ombros, 1 = ancas) e ganho.
+class BodyTorsoBand {
+  const BodyTorsoBand({
+    required this.centerT,
+    required this.halfSpanT,
+    required this.gain,
+    this.skipCenterGap = false,
+  });
+
+  final double centerT;
+  final double halfSpanT;
+
+  /// `α = gain · t`, com sinal: positivo afina à direita do slider.
+  final double gain;
+
+  /// Abaixo das ancas o eixo pode cair no vão entre as pernas: a borda é a
+  /// saída da silhueta depois de entrar nela, em vez de desistir.
+  final bool skipCenterGap;
+
+  double get t0 => centerT - halfSpanT;
+  double get t1 => centerT + halfSpanT;
+
+  /// Cintura: direita afina, esquerda alarga.
+  static const waist =
+      BodyTorsoBand(centerT: 0.66, halfSpanT: 0.30, gain: 0.10);
+
+  /// Quadris (Meitu Curvas → Hips): ancas e topo da coxa; ao contrário da
+  /// Cintura, como no Meitu, direita alarga e esquerda afina.
+  static const hips = BodyTorsoBand(
+    centerT: 1.02,
+    halfSpanT: 0.32,
+    gain: -0.14,
+    skipCenterGap: true,
+  );
+}
+
 /// Cache do campo unitário. O slider só entra em `α(t)`.
 class BodyWaistFieldRuntime {
   PoseResult? pose;
   PersonMask? mask;
+  BodyTorsoBand? band;
   int width = 0;
   int height = 0;
   Float32List? unitDx;
@@ -44,9 +81,16 @@ class BodyWaistFieldRuntime {
   DisplacementField? field;
   BodyWaistGeometry? geometry;
 
-  bool matches(PoseResult pose, PersonMask? mask, int width, int height) {
+  bool matches(
+    PoseResult pose,
+    PersonMask? mask,
+    BodyTorsoBand band,
+    int width,
+    int height,
+  ) {
     return identical(this.pose, pose) &&
         identical(this.mask, mask) &&
+        identical(this.band, band) &&
         this.width == width &&
         this.height == height &&
         unitDx != null &&
@@ -54,22 +98,16 @@ class BodyWaistFieldRuntime {
   }
 }
 
-/// Cintura (Meitu Waist). Só Δ perpendicular ao eixo do tronco.
+/// Cintura (Meitu Waist) e Quadris (Meitu Hips): só Δ perpendicular ao eixo
+/// do tronco, numa [BodyTorsoBand].
 ///
-/// Direita do slider afina, esquerda alarga. Dentro da silhueta o tronco é
+/// Cintura: direita do slider afina, esquerda alarga (Quadris ao contrário). Dentro da silhueta o tronco é
 /// comprimido em direcção ao eixo, proporcional à distância (`D = −α·u`), para
 /// a textura da roupa encolher por igual. Fora, o deslocamento da borda decai
 /// por smoothstep numa banda de fundo `falloffEdge × meia-largura`: é o fundo
 /// que estica para fechar o espaço, como nos apps.
 abstract final class BodyWaistField {
   BodyWaistField._();
-
-  /// `α = gain · t`. A borda anda `≈ α · meia-largura`.
-  static const gain = 0.10;
-
-  /// Centro e meia-altura da faixa, em fracção do eixo ombro→quadril.
-  static const centerT = 0.66;
-  static const halfSpanT = 0.30;
 
   /// Banda de fundo que acompanha a borda, em fracção da meia-largura.
   /// Injectividade: `1 − α · 1.5 / falloffEdge > 0` ⇒ folga 0,73 no extremo.
@@ -83,10 +121,14 @@ abstract final class BodyWaistField {
   static const _leftHip = 23;
   static const _rightHip = 24;
 
-  static double alphaOf(double t) => gain * t.clamp(-1.0, 1.0);
+  static double alphaOf(double t, [BodyTorsoBand band = BodyTorsoBand.waist]) =>
+      band.gain * t.clamp(-1.0, 1.0);
 
   /// Maior deslocamento da borda possível no extremo do slider (px).
-  static double maxEdgeShift(BodyWaistGeometry geometry) {
+  static double maxEdgeShift(
+    BodyWaistGeometry geometry, [
+    BodyTorsoBand band = BodyTorsoBand.waist,
+  ]) {
     var edge = 0.0;
     for (var k = 0; k < geometry.edgeLeft.length; k++) {
       edge = math.max(
@@ -94,7 +136,7 @@ abstract final class BodyWaistField {
         math.max(geometry.edgeLeft[k], geometry.edgeRight[k]),
       );
     }
-    return gain * edge;
+    return band.gain.abs() * edge;
   }
 
   /// Campo, ou `null` sem pose fiável / slider em zero.
@@ -103,6 +145,7 @@ abstract final class BodyWaistField {
     required Size imageSize,
     PersonMask? mask,
     double t = 0,
+    BodyTorsoBand band = BodyTorsoBand.waist,
     BodyWaistFieldRuntime? runtime,
   }) {
     final width = imageSize.width.round();
@@ -110,17 +153,18 @@ abstract final class BodyWaistField {
     if (width <= 0 || height <= 0) {
       return null;
     }
-    final alpha = alphaOf(t);
+    final alpha = alphaOf(t, band);
     if (alpha.abs() <= 1e-9) {
       return null;
     }
 
-    if (runtime != null && runtime.matches(pose, mask, width, height)) {
+    if (runtime != null && runtime.matches(pose, mask, band, width, height)) {
       _scaleActive(runtime, alpha);
       return runtime.field;
     }
 
-    final geometry = measure(pose: pose, imageSize: imageSize, mask: mask);
+    final geometry =
+        measure(pose: pose, imageSize: imageSize, mask: mask, band: band);
     if (geometry == null) {
       return null;
     }
@@ -128,11 +172,13 @@ abstract final class BodyWaistField {
       width: width,
       height: height,
       geometry: geometry,
+      band: band,
     );
     final target = runtime ?? BodyWaistFieldRuntime();
     target
       ..pose = pose
       ..mask = mask
+      ..band = band
       ..width = width
       ..height = height
       ..unitDx = packed.unitDx
@@ -144,11 +190,12 @@ abstract final class BodyWaistField {
     return target.field;
   }
 
-  /// Eixo do tronco e bordas da silhueta ao longo da faixa da cintura.
+  /// Eixo do tronco e bordas da silhueta ao longo da faixa.
   static BodyWaistGeometry? measure({
     required PoseResult pose,
     required Size imageSize,
     PersonMask? mask,
+    BodyTorsoBand band = BodyTorsoBand.waist,
   }) {
     final ls = _pixel(pose, _leftShoulder, imageSize);
     final rs = _pixel(pose, _rightShoulder, imageSize);
@@ -165,9 +212,8 @@ abstract final class BodyWaistField {
       return null;
     }
     final e = axis / length;
-    final n = Offset(-e.dy, e.dx).dx >= 0
-        ? Offset(-e.dy, e.dx)
-        : Offset(e.dy, -e.dx);
+    final n =
+        Offset(-e.dy, e.dx).dx >= 0 ? Offset(-e.dy, e.dx) : Offset(e.dy, -e.dx);
 
     double halfAcross(Offset a, Offset b) =>
         ((b - a).dx * n.dx + (b - a).dy * n.dy).abs() * 0.5;
@@ -183,7 +229,7 @@ abstract final class BodyWaistField {
         mask.bytes.length >= mask.width * mask.height;
 
     for (var k = 0; k < sampleCount; k++) {
-      final t = centerT - halfSpanT + 2 * halfSpanT * k / (sampleCount - 1);
+      final t = band.t0 + 2 * band.halfSpanT * k / (sampleCount - 1);
       tValues[k] = t;
       final c = s + axis * t;
       final estimate = math.max(
@@ -191,10 +237,10 @@ abstract final class BodyWaistField {
         _lerp(0.90 * shoulderHalf, 1.75 * hipHalf, t.clamp(0.0, 1.0)),
       );
       left[k] = hasMask
-          ? _searchEdge(mask, imageSize, c, -n, estimate)
+          ? _searchEdge(mask, imageSize, c, -n, estimate, band.skipCenterGap)
           : estimate;
       right[k] = hasMask
-          ? _searchEdge(mask, imageSize, c, n, estimate)
+          ? _searchEdge(mask, imageSize, c, n, estimate, band.skipCenterGap)
           : estimate;
     }
     _smooth(left);
@@ -212,17 +258,34 @@ abstract final class BodyWaistField {
 
   /// Primeira saída da máscara a partir do eixo. Braço colado ao tronco
   /// continua a máscara; o tecto em volta da estimativa da pose segura-o.
+  /// Com [skipCenterGap], um eixo fora da máscara (vão entre as pernas) anda
+  /// até entrar na silhueta e mede a saída a partir daí.
   static double _searchEdge(
     PersonMask mask,
     Size imageSize,
     Offset center,
     Offset dir,
     double estimate,
+    bool skipCenterGap,
   ) {
-    final floor = 0.45 * estimate;
+    var floor = 0.45 * estimate;
     final cap = 1.35 * estimate;
     if (_maskAt(mask, imageSize, center) < 0.5) {
-      return estimate;
+      if (!skipCenterGap) {
+        return estimate;
+      }
+      var entry = -1.0;
+      for (var u = 1.0; u <= floor; u += 1.0) {
+        final p = center + dir * u;
+        if (_inside(imageSize, p) && _maskAt(mask, imageSize, p) >= 0.5) {
+          entry = u;
+          break;
+        }
+      }
+      if (entry < 0) {
+        return estimate;
+      }
+      floor = math.max(floor, entry);
     }
     for (var u = floor; u <= cap; u += 1.0) {
       final p = center + dir * u;
@@ -239,8 +302,12 @@ abstract final class BodyWaistField {
     return cap;
   }
 
+  static bool _inside(Size size, Offset p) =>
+      p.dx >= 0 && p.dy >= 0 && p.dx < size.width && p.dy < size.height;
+
   static double _maskAt(PersonMask mask, Size imageSize, Offset p) {
-    return mask.sampleNormalized(p.dx / imageSize.width, p.dy / imageSize.height);
+    return mask.sampleNormalized(
+        p.dx / imageSize.width, p.dy / imageSize.height);
   }
 
   /// Mediana de 5 contra dentes da máscara, depois caixa ×2.
@@ -275,17 +342,17 @@ abstract final class BodyWaistField {
     required int width,
     required int height,
     required BodyWaistGeometry geometry,
+    required BodyTorsoBand band,
   }) {
     final s = geometry.shoulderMid;
     final axis = geometry.hipMid - s;
     final length = axis.distance;
     final e = axis / length;
-    final n = Offset(-e.dy, e.dx).dx >= 0
-        ? Offset(-e.dy, e.dx)
-        : Offset(e.dy, -e.dx);
+    final n =
+        Offset(-e.dy, e.dx).dx >= 0 ? Offset(-e.dy, e.dx) : Offset(e.dy, -e.dx);
 
-    const t0 = centerT - halfSpanT;
-    const t1 = centerT + halfSpanT;
+    final t0 = band.t0;
+    final t1 = band.t1;
     var maxReach = 0.0;
     for (var k = 0; k < sampleCount; k++) {
       maxReach = math.max(
@@ -321,11 +388,11 @@ abstract final class BodyWaistField {
       for (var x = x0; x <= x1; x++) {
         final px = x + 0.5 - s.dx;
         final t = (px * e.dx + py * e.dy) / length;
-        final z = (t - centerT) / halfSpanT;
+        final z = (t - band.centerT) / band.halfSpanT;
         if (z <= -1 || z >= 1) {
           continue;
         }
-        final band = (1 - z * z) * (1 - z * z);
+        final weight = (1 - z * z) * (1 - z * z);
         final u = px * n.dx + py * n.dy;
         final edge = _edgeAt(
           geometry,
@@ -336,7 +403,7 @@ abstract final class BodyWaistField {
         if (profile <= 1e-6) {
           continue;
         }
-        final magnitude = band * profile * (u >= 0 ? 1.0 : -1.0);
+        final magnitude = weight * profile * (u >= 0 ? 1.0 : -1.0);
         active.add(y * width + x);
         dxs.add(-magnitude * n.dx);
         dys.add(-magnitude * n.dy);

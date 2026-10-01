@@ -71,6 +71,7 @@ void main() {
         BeautyAdjustmentCategory.boca,
         BeautyAdjustmentCategory.corpo,
         BeautyAdjustmentCategory.pernas,
+        BeautyAdjustmentCategory.curvas,
         BeautyAdjustmentCategory.pele,
         BeautyAdjustmentCategory.cor,
       ],

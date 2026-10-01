@@ -151,8 +151,10 @@ class BeautyEngineController {
   final LipPlumpFieldRuntime _lipPlumpRuntime = LipPlumpFieldRuntime();
   final LipSmileFieldRuntime _lipSmileRuntime = LipSmileFieldRuntime();
   final BodyWaistFieldRuntime _bodyWaistRuntime = BodyWaistFieldRuntime();
+  final BodyWaistFieldRuntime _bodyHipsRuntime = BodyWaistFieldRuntime();
   final BodyLegsFieldRuntime _bodyLegsRuntime = BodyLegsFieldRuntime();
   final BodyLegsFieldRuntime _bodyThighsRuntime = BodyLegsFieldRuntime();
+  final BodyLegsFieldRuntime _bodyCalvesRuntime = BodyLegsFieldRuntime();
   final BodyBackgroundLockRuntime _bodyBackgroundLockRuntime =
       BodyBackgroundLockRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
@@ -486,6 +488,23 @@ class BeautyEngineController {
       maxShift = math.max(maxShift, BodyWaistField.maxEdgeShift(waistGeometry));
     }
 
+    final hips = BodyWaistField.build(
+      pose: pose,
+      imageSize: imageSize,
+      mask: personMask,
+      t: (parameters[BodyWarpChain.hipsKey] ?? 0).clamp(-1.0, 1.0),
+      band: BodyTorsoBand.hips,
+      runtime: _bodyHipsRuntime,
+    );
+    final hipsGeometry = _bodyHipsRuntime.geometry;
+    if (hips != null && hipsGeometry != null) {
+      fields.add(hips);
+      maxShift = math.max(
+        maxShift,
+        BodyWaistField.maxEdgeShift(hipsGeometry, BodyTorsoBand.hips),
+      );
+    }
+
     final legs = BodyLegsField.build(
       pose: pose,
       imageSize: imageSize,
@@ -513,6 +532,23 @@ class BeautyEngineController {
       maxShift = math.max(
         maxShift,
         BodyLegsField.maxEdgeShift(thighsGeometry, BodyLegBand.thighs),
+      );
+    }
+
+    final calves = BodyLegsField.build(
+      pose: pose,
+      imageSize: imageSize,
+      mask: personMask,
+      t: (parameters[BodyWarpChain.calvesKey] ?? 0).clamp(-1.0, 1.0),
+      band: BodyLegBand.calves,
+      runtime: _bodyCalvesRuntime,
+    );
+    final calvesGeometry = _bodyCalvesRuntime.geometry;
+    if (calves != null && calvesGeometry != null) {
+      fields.add(calves);
+      maxShift = math.max(
+        maxShift,
+        BodyLegsField.maxEdgeShift(calvesGeometry, BodyLegBand.calves),
       );
     }
 

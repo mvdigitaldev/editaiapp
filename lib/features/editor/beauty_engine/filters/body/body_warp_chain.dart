@@ -9,20 +9,31 @@ abstract final class BodyWarpChain {
   BodyWarpChain._();
 
   static const waistKey = 'waist';
+  static const hipsKey = 'hips';
   static const legsKey = 'legs';
   static const thighsKey = 'thighs';
+  static const calvesKey = 'calves';
 
   /// Aba «Magro» (Meitu Magro).
   static const slimParameterKeys = <String>[waistKey];
 
-  /// Aba «Pernas» (Meitu Pernas).
-  static const legParameterKeys = <String>[legsKey, thighsKey];
+  /// Aba «Curvas» (Meitu Curvas).
+  static const curveParameterKeys = <String>[hipsKey];
 
-  /// Ordem da cadeia: cintura → pernas → coxas.
-  static const parameterKeys = <String>[waistKey, legsKey, thighsKey];
+  /// Aba «Pernas» (Meitu Pernas).
+  static const legParameterKeys = <String>[legsKey, thighsKey, calvesKey];
+
+  /// Ordem da cadeia: cintura → quadris → pernas → coxas → canelas.
+  static const parameterKeys = <String>[
+    waistKey,
+    hipsKey,
+    legsKey,
+    thighsKey,
+    calvesKey,
+  ];
 
   /// Ferramentas só do plano pago.
-  static const proParameterKeys = <String>{thighsKey};
+  static const proParameterKeys = <String>{thighsKey, calvesKey};
 
   /// Trava de fundo (0 / 1). Não é slider: sozinha não activa nada, e só
   /// chega aqui com plano pago (o editor tira-a nos outros casos).
@@ -67,7 +78,7 @@ abstract final class BodyWarpChain {
     required Size imageSize,
   }) {
     if (pose == null) {
-      return {legsKey, thighsKey};
+      return {legsKey, thighsKey, calvesKey};
     }
     return {
       if (!BodyLegsField.isAvailable(pose: pose, imageSize: imageSize)) legsKey,
@@ -77,6 +88,12 @@ abstract final class BodyWarpChain {
         band: BodyLegBand.thighs,
       ))
         thighsKey,
+      if (!BodyLegsField.isAvailable(
+        pose: pose,
+        imageSize: imageSize,
+        band: BodyLegBand.calves,
+      ))
+        calvesKey,
     };
   }
 

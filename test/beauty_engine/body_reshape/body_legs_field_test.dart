@@ -270,7 +270,11 @@ void main() {
     );
     final bytes = Uint8List(300 * 330)..setRange(0, 300 * 330, mask.bytes);
     final croppedMask = PersonMask(bytes: bytes, width: 300, height: 330);
-    for (final band in [BodyLegBand.legs, BodyLegBand.thighs]) {
+    for (final band in [
+      BodyLegBand.legs,
+      BodyLegBand.thighs,
+      BodyLegBand.calves,
+    ]) {
       expect(
         BodyLegsField.build(
           pose: crop,
@@ -363,11 +367,11 @@ void main() {
       );
       expect(
         BodyWarpChain.unavailableKeys(pose: pose, imageSize: cropped),
-        {'legs'},
+        {'legs', 'calves'},
       );
       expect(
         BodyWarpChain.unavailableKeys(pose: null, imageSize: cropped),
-        {'legs', 'thighs'},
+        {'legs', 'thighs', 'calves'},
       );
     });
 
@@ -590,6 +594,83 @@ void main() {
       }
       final again = thighs(-0.3, runtime);
       expect(identical(again, cached), isTrue);
+    });
+  });
+
+  group('Canelas', () {
+    DisplacementField calves(double t, [BodyLegsFieldRuntime? runtime]) =>
+        BodyLegsField.build(
+          pose: pose,
+          imageSize: _size,
+          mask: mask,
+          t: t,
+          band: BodyLegBand.calves,
+          runtime: runtime,
+        )!;
+
+    /// Joelho s = 0.5 (y = 395), tornozelo s = 1 (y = 540).
+    /// Barriga da perna s ≈ 0.71 (y = 455), no máximo da faixa.
+    const calfRow = 455;
+
+    test('a faixa vai da barriga da perna e pára antes do tornozelo', () {
+      final f = calves(1);
+      // Coxa, tornozelo e pé parados.
+      for (final y in [_openRow - 60, 360, 530, 560]) {
+        for (var x = 0; x < _w; x++) {
+          expect(f.dx[y * _w + x], 0, reason: 'y=$y x=$x');
+          expect(f.dy[y * _w + x], 0, reason: 'y=$y x=$x');
+        }
+      }
+      expect(f.dx[calfRow * _w + 100].abs(), greaterThan(0.5));
+    });
+
+    test('direita afina a canela, esquerda engrossa', () {
+      final slim = _warp(source, calves(1));
+      final wide = _warp(source, calves(-1));
+      for (final probe in [120, 180]) {
+        final before = _legEdges(source, calfRow, probe);
+        final a = _legEdges(slim, calfRow, probe);
+        final b = _legEdges(wide, calfRow, probe);
+        expect(a.right - a.left, lessThan(before.right - before.left - 1.5),
+            reason: 'perna $probe afina');
+        expect(b.right - b.left, greaterThan(before.right - before.left + 1.5),
+            reason: 'perna $probe engrossa');
+      }
+    });
+
+    test('natural: as duas bordas andam o mesmo e pouco', () {
+      final f = calves(1);
+      for (final (lo, hi) in [(100, 139), (160, 199)]) {
+        final a = f.dx[calfRow * _w + lo];
+        final b = f.dx[calfRow * _w + hi];
+        expect(a.sign, -b.sign);
+        expect((a.abs() - b.abs()).abs(), lessThan(0.1 * a.abs()));
+        // Cada borda anda ≈ 0.07 × meia-largura (20 px): ≈ 1.4 px.
+        expect(a.abs(), lessThan(2.0));
+      }
+    });
+
+    test('não dobra nos dois extremos', () {
+      for (final t in [-1.0, 1.0]) {
+        expect(_minDetJ(calves(t)), greaterThan(0.3), reason: 't=$t');
+      }
+    });
+
+    test('o slider só reescala e o cache não se mistura com as Coxas', () {
+      final runtime = BodyLegsFieldRuntime();
+      BodyLegsField.build(
+        pose: pose,
+        imageSize: _size,
+        mask: mask,
+        t: 0.5,
+        band: BodyLegBand.thighs,
+        runtime: runtime,
+      );
+      final cached = calves(0.8, runtime);
+      final fresh = calves(0.8);
+      for (var i = 0; i < _w * _h; i++) {
+        expect(cached.dx[i], closeTo(fresh.dx[i], 1e-5));
+      }
     });
   });
 }

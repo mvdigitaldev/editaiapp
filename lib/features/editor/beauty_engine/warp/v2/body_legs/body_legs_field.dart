@@ -63,7 +63,8 @@ class BodyLegsGeometry {
 
 /// Faixa ao longo de anca→tornozelo: sobe em `[start, start + rise]` e desce
 /// em `[end, end + fall]`. Com [kneeRelative], os valores são fracções da
-/// posição do joelho de cada perna.
+/// posição do joelho de cada perna; com [shinRelative], fracções da canela
+/// (0 no joelho, 1 no tornozelo).
 class BodyLegBand {
   const BodyLegBand({
     required this.start,
@@ -72,6 +73,7 @@ class BodyLegBand {
     required this.fall,
     required this.gain,
     this.kneeRelative = false,
+    this.shinRelative = false,
     this.requiresKnee = true,
   });
 
@@ -80,6 +82,7 @@ class BodyLegBand {
   final double end;
   final double fall;
   final bool kneeRelative;
+  final bool shinRelative;
 
   /// `α = gain · t`. Cada borda livre anda `≈ α · meia-largura`.
   final double gain;
@@ -111,9 +114,30 @@ class BodyLegBand {
     requiresKnee: false,
   );
 
+  /// Canelas (Meitu Pernas → Calves): da barriga da perna, com cauda curta
+  /// acima do joelho e paragem antes do tornozelo. Movimento natural, pouco
+  /// acima do das Coxas porque a canela é mais estreita.
+  static const calves = BodyLegBand(
+    start: -0.08,
+    rise: 0.38,
+    end: 0.55,
+    fall: 0.30,
+    gain: 0.07,
+    shinRelative: true,
+  );
+
   ({double start, double rise, double end, double fall}) resolve(
     double kneeS,
   ) {
+    if (shinRelative) {
+      final shin = 1 - kneeS;
+      return (
+        start: kneeS + start * shin,
+        rise: rise * shin,
+        end: kneeS + end * shin,
+        fall: fall * shin,
+      );
+    }
     final k = kneeRelative ? kneeS : 1.0;
     return (start: start * k, rise: rise * k, end: end * k, fall: fall * k);
   }

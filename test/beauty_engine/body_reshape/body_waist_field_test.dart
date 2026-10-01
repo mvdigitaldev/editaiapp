@@ -202,4 +202,108 @@ void main() {
     final f = BodyWaistField.build(pose: pose, imageSize: _size, t: 1)!;
     expect(f.isZero, isFalse);
   });
+
+  group('Quadris', () {
+    /// Tronco 78–122 até y=200, ancas 72–128 até y=250, depois duas pernas
+    /// 70–98 e 102–130 com vão no eixo (x = 100).
+    PersonMask hipsMask() {
+      final bytes = Uint8List(_w * _h);
+      void fill(int x0, int x1, int y0, int y1) {
+        for (var y = y0; y < y1; y++) {
+          for (var x = x0; x < x1; x++) {
+            bytes[y * _w + x] = 255;
+          }
+        }
+      }
+
+      fill(78, 122, 60, 200);
+      fill(72, 128, 200, 250);
+      fill(70, 98, 250, 380);
+      fill(102, 130, 250, 380);
+      return PersonMask(bytes: bytes, width: _w, height: _h);
+    }
+
+    final hMask = hipsMask();
+    final hRgba = _rgba(hMask);
+    const hipRow = 222; // t = 1.02
+    const waistRowT = 160; // t = 0.5, fora da faixa
+    const thighRow = 300; // t ≈ 1.67, fora da faixa
+
+    DisplacementField hips(double t, [BodyWaistFieldRuntime? runtime]) =>
+        BodyWaistField.build(
+          pose: pose,
+          imageSize: _size,
+          mask: hMask,
+          t: t,
+          band: BodyTorsoBand.hips,
+          runtime: runtime,
+        )!;
+
+    Uint8List warp(DisplacementField f) => BackwardBilinearWarp.apply(
+          WarpRequest(sourceRgba: hRgba, width: _w, height: _h, field: f),
+        ).rgba;
+
+    test('direita alarga os quadris, esquerda afina (como o Meitu)', () {
+      final before = _rowWidth(hRgba, hipRow);
+      expect(
+          _rowWidth(warp(hips(1)), hipRow), greaterThanOrEqualTo(before + 5));
+      expect(_rowWidth(warp(hips(-1)), hipRow), lessThanOrEqualTo(before - 5));
+    });
+
+    test('alarga por igual dos dois lados', () {
+      final f = hips(1);
+      final left = f.dx[hipRow * _w + 72];
+      final right = f.dx[hipRow * _w + 127];
+      // source = dest − D: alargar vai buscar conteúdo mais para dentro.
+      expect(left, lessThan(0));
+      expect(right, greaterThan(0));
+      expect((left.abs() - right.abs()).abs(), lessThan(0.1 * left.abs()));
+    });
+
+    test('com o vão entre as pernas no eixo mede a borda de fora', () {
+      final g = BodyWaistField.measure(
+        pose: pose,
+        imageSize: _size,
+        mask: hMask,
+        band: BodyTorsoBand.hips,
+      )!;
+      final last = g.tSamples.length - 1;
+      // t = 1.34 ⇒ y ≈ 261, já nas pernas separadas (borda de fora a 30 px).
+      expect(g.edgeLeft[last], closeTo(30, 1.5));
+      expect(g.edgeRight[last], closeTo(30, 1.5));
+    });
+
+    test('cintura, coxa e ombros não se mexem', () {
+      final f = hips(1);
+      for (final y in [100, waistRowT, thighRow]) {
+        for (var x = 0; x < _w; x++) {
+          expect(f.dx[y * _w + x], 0, reason: 'y=$y x=$x');
+          expect(f.dy[y * _w + x], 0, reason: 'y=$y x=$x');
+        }
+      }
+    });
+
+    test('não dobra nos dois extremos', () {
+      for (final t in [-1.0, 1.0]) {
+        expect(_minDetJ(hips(t)), greaterThan(0.5), reason: 't=$t');
+      }
+    });
+
+    test('cache separado por faixa e o slider só reescala', () {
+      final runtime = BodyWaistFieldRuntime();
+      BodyWaistField.build(
+        pose: pose,
+        imageSize: _size,
+        mask: hMask,
+        t: 0.5,
+        runtime: runtime,
+      );
+      final cached = hips(0.8, runtime);
+      final fresh = hips(0.8);
+      for (var i = 0; i < _w * _h; i++) {
+        expect(cached.dx[i], closeTo(fresh.dx[i], 1e-5));
+        expect(cached.dy[i], closeTo(fresh.dy[i], 1e-5));
+      }
+    });
+  });
 }

@@ -72,6 +72,7 @@ void main() {
     final params = {
       BodyWarpChain.waistKey: 0.6,
       BodyWarpChain.thighsKey: -0.4,
+      BodyWarpChain.calvesKey: 0.5,
       BodyWarpChain.backgroundLockKey: 1.0,
     };
 
@@ -79,6 +80,7 @@ void main() {
       final gated = BodyWarpChain.gatePaidFeatures(params, allowed: false);
       expect(gated.containsKey(BodyWarpChain.backgroundLockKey), isFalse);
       expect(gated.containsKey(BodyWarpChain.thighsKey), isFalse);
+      expect(gated.containsKey(BodyWarpChain.calvesKey), isFalse);
       expect(gated[BodyWarpChain.waistKey], 0.6);
       expect(BodyWarpChain.backgroundLockRequested(gated), isFalse);
       expect(params.containsKey(BodyWarpChain.backgroundLockKey), isTrue);
@@ -90,13 +92,18 @@ void main() {
       expect(gated[BodyWarpChain.thighsKey], -0.4);
     });
 
-    test('Coxas é a ferramenta paga do corpo', () {
+    test('Coxas e Canelas são as ferramentas pagas do corpo', () {
       expect(BodyWarpChain.isPro(BodyWarpChain.thighsKey), isTrue);
+      expect(BodyWarpChain.isPro(BodyWarpChain.calvesKey), isTrue);
       expect(BodyWarpChain.isPro(BodyWarpChain.legsKey), isFalse);
       expect(BodyWarpChain.isPro(BodyWarpChain.waistKey), isFalse);
       expect(
         BodyWarpChain.legParameterKeys,
-        [BodyWarpChain.legsKey, BodyWarpChain.thighsKey],
+        [
+          BodyWarpChain.legsKey,
+          BodyWarpChain.thighsKey,
+          BodyWarpChain.calvesKey,
+        ],
       );
     });
 
@@ -278,7 +285,8 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey('pro_lock_badge')), findsOneWidget);
+      // Coxas e Canelas.
+      expect(find.byKey(const ValueKey('pro_lock_badge')), findsNWidgets(2));
     });
 
     testWidgets('free: tocar nas Coxas abre o aviso e não muda de ferramenta',
