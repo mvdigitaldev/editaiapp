@@ -43,9 +43,9 @@ class BodyChestFieldRuntime {
 abstract final class BodyChestField {
   BodyChestField._();
 
-  /// `α = gain · t`. No centro, `1 / (1 − α)` ≈ 1.22× no extremo; a borda
-  /// do busto anda ≈ `0.29 · R · α`.
-  static const gain = 0.18;
+  /// `α = gain · t`. No centro, `1 / (1 − α)` ≈ 1.11× no extremo. A largura
+  /// da silhueta vem de `BodyTorsoBand.chest`, encadeada antes deste campo.
+  static const gain = 0.10;
 
   /// Raio de cada seio em fracção da largura dos ombros.
   static const radiusToShoulders = 0.30;

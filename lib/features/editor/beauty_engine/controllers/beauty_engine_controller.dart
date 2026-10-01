@@ -158,6 +158,7 @@ class BeautyEngineController {
   final BodyLegsFieldRuntime _bodyThighsRuntime = BodyLegsFieldRuntime();
   final BodyLegsFieldRuntime _bodyCalvesRuntime = BodyLegsFieldRuntime();
   final BodyArmsFieldRuntime _bodyArmsRuntime = BodyArmsFieldRuntime();
+  final BodyWaistFieldRuntime _bodyChestWidthRuntime = BodyWaistFieldRuntime();
   final BodyChestFieldRuntime _bodyChestRuntime = BodyChestFieldRuntime();
   final BodyBackgroundLockRuntime _bodyBackgroundLockRuntime =
       BodyBackgroundLockRuntime();
@@ -567,6 +568,23 @@ class BeautyEngineController {
     if (arms != null && armsGeometry != null) {
       fields.add(arms);
       maxShift = math.max(maxShift, BodyArmsField.maxEdgeShift(armsGeometry));
+    }
+
+    final chestWidth = BodyWaistField.build(
+      pose: pose,
+      imageSize: imageSize,
+      mask: personMask,
+      t: (parameters[BodyWarpChain.chestKey] ?? 0).clamp(-1.0, 1.0),
+      band: BodyTorsoBand.chest,
+      runtime: _bodyChestWidthRuntime,
+    );
+    final chestWidthGeometry = _bodyChestWidthRuntime.geometry;
+    if (chestWidth != null && chestWidthGeometry != null) {
+      fields.add(chestWidth);
+      maxShift = math.max(
+        maxShift,
+        BodyWaistField.maxEdgeShift(chestWidthGeometry, BodyTorsoBand.chest),
+      );
     }
 
     final chest = BodyChestField.build(

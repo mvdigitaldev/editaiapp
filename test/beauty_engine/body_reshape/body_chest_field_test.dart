@@ -6,7 +6,9 @@ import 'package:editaiapp/features/editor/beauty_engine/filters/body/body_warp_c
 import 'package:editaiapp/features/editor/beauty_engine/models/pose_landmark.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/pose_result.dart';
 import 'package:editaiapp/features/editor/beauty_engine/warp/v2/backward_bilinear_warp.dart';
+import 'package:editaiapp/features/editor/beauty_engine/segment/person_mask.dart';
 import 'package:editaiapp/features/editor/beauty_engine/warp/v2/body_chest/body_chest_field.dart';
+import 'package:editaiapp/features/editor/beauty_engine/warp/v2/body_waist/body_waist_field.dart';
 import 'package:editaiapp/features/editor/beauty_engine/warp/v2/displacement_field.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -120,8 +122,8 @@ void main() {
             ),
           ).rgba,
         );
-    expect(after(1), greaterThan(before * 1.15));
-    expect(after(-1), lessThan(before * 0.88));
+    expect(after(1), greaterThan(before * 1.08));
+    expect(after(-1), lessThan(before * 0.93));
   });
 
   test('movimento natural: no máximo ≈ 0.29 · R · α', () {
@@ -132,7 +134,7 @@ void main() {
     }
     final g = BodyChestField.measure(pose: pose, imageSize: _size)!;
     expect(peak, lessThanOrEqualTo(BodyChestField.maxEdgeShift(g) * 1.05));
-    expect(peak, greaterThan(1.2));
+    expect(peak, greaterThan(0.6));
   });
 
   test('ombros, esterno acima, cintura e braços ficam parados', () {
@@ -172,6 +174,61 @@ void main() {
       BodyWarpChain.unavailableKeys(pose: null, imageSize: _size),
       contains(BodyWarpChain.chestKey),
     );
+  });
+
+  group('largura da silhueta (BodyTorsoBand.chest)', () {
+    final bytes = Uint8List(_w * _h);
+    for (var y = 90; y < 300; y++) {
+      for (var x = 95; x < 205; x++) {
+        bytes[y * _w + x] = 255;
+      }
+    }
+    final mask = PersonMask(bytes: bytes, width: _w, height: _h);
+    final source = Uint8List(_w * _h * 4);
+    for (var i = 0; i < _w * _h; i++) {
+      final v = bytes[i];
+      source[i * 4] = v;
+      source[i * 4 + 1] = v;
+      source[i * 4 + 2] = v;
+      source[i * 4 + 3] = 255;
+    }
+    double rowWidth(Uint8List rgba, int y) {
+      var sum = 0.0;
+      for (var x = 0; x < _w; x++) {
+        sum += rgba[(y * _w + x) * 4] / 255.0;
+      }
+      return sum;
+    }
+
+    Uint8List warp(double t) => BackwardBilinearWarp.apply(
+          WarpRequest(
+            sourceRgba: source,
+            width: _w,
+            height: _h,
+            field: BodyWaistField.build(
+              pose: pose,
+              imageSize: _size,
+              mask: mask,
+              t: t,
+              band: BodyTorsoBand.chest,
+            )!,
+          ),
+        ).rgba;
+
+    test('direita alarga, esquerda afina, na linha do busto', () {
+      // Linha do busto: t = 0.27 → y ≈ 148; borda a 55 px do eixo.
+      final before = rowWidth(source, 148);
+      expect(rowWidth(warp(1), 148), greaterThan(before + 6));
+      expect(rowWidth(warp(-1), 148), lessThan(before - 6));
+    });
+
+    test('cintura e ancas ficam', () {
+      // t ≥ 0.49 (y ≥ 189): fora da faixa.
+      final wide = warp(1);
+      for (final y in [195, 250, 290]) {
+        expect(rowWidth(wide, y), closeTo(rowWidth(source, y), 1e-6));
+      }
+    });
   });
 
   test('o slider só reescala o campo em cache', () {

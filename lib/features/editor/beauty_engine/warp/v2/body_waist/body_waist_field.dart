@@ -66,6 +66,12 @@ class BodyTorsoBand {
     gain: -0.14,
     skipCenterGap: true,
   );
+
+  /// Busto (Meitu Busto → Chest): largura da silhueta das axilas a baixo do
+  /// peito. Direita alarga, esquerda afina; o volume dos seios vem à parte
+  /// no `BodyChestField`.
+  static const chest =
+      BodyTorsoBand(centerT: 0.27, halfSpanT: 0.22, gain: -0.07);
 }
 
 /// Cache do campo unitário. O slider só entra em `α(t)`.

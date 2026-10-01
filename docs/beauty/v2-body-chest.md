@@ -8,28 +8,32 @@ Leonardo, 2026-10-01, com o Meitu Busto → Chest na `body-p04`: «vamos para o 
 
 ## Deformação
 
-`BodyChestField` (`warp/v2/body_chest/body_chest_field.dart`): Field V2 em CPU, escala radial em volta de cada seio.
+Dois Fields encadeados com o mesmo slider, cada um com o seu remap (nunca somados):
+
+1. **Largura da silhueta:** `BodyWaistField` com `BodyTorsoBand.chest` (`t` 0,05→0,49 no eixo ombros→anca, centro 0,27, `gain −0,07`). A borda vem da `PersonMask`, como na Cintura e nos Quadris; sem Field novo para a zona do tronco. Na `body-p04` cada lado anda cerca de 8 px no extremo, perto do Meitu (cerca de ±7 px por lado).
+2. **Volume:** `BodyChestField` (`warp/v2/body_chest/body_chest_field.dart`), escala radial em volta de cada seio. Dá o crescimento das taças, também na altura.
 
 - **Centros pela pose:** o MediaPipe não marca o peito. A linha dos centros fica abaixo da linha dos ombros a `0,27 ×` o tronco (ombros→anca), limitada a `0,35`–`0,55 ×` a largura dos ombros. Sem anca, o tronco estima-se em `1,6 ×` os ombros. Cada centro fica a `±0,27 ×` a largura dos ombros do eixo. Na `body-p04` os centros caem em (292, 497) e (407, 497), com raio de 64 px, que é o meio de cada taça do top.
 - **Campo:** `D = α · w(ρ) · (q − c)`, com `w = (1 − ρ²)²`, `ρ = |q − c| / R` e `R = 0,30 ×` a largura dos ombros. É liso e zero na borda do disco. A derivada radial fica em `[1 − α, 1 + 0,8 α]` e o mínimo de `det J` é `(1 − α)²`, no centro, logo nunca dobra. Os dois discos somam-se no esterno, onde quase não se tocam.
-- **Ganho `0,18`:** no centro a escala é `1/(1 − α)`, cerca de 1,22× no extremo. O maior deslocamento é `0,29 · R · α`, cerca de 3,3 px na `body-p04`.
+- **Ganho `0,10`** (era `0,18` quando o disco estava sozinho): no centro a escala é `1/(1 − α)`, cerca de 1,11× no extremo. O maior deslocamento é `0,29 · R · α`, cerca de 1,8 px na `body-p04`.
 - **Sentido:** direita aumenta, esquerda diminui.
 - **Disponibilidade:** ombros visíveis, de frente (ombros ≥ `0,35 ×` o tronco) e os dois centros dentro da foto. Senão o chip fica cinzento e o toque mostra «Falha ao reconhecer o busto, não foi possível ajustar.».
 - **Máscara:** o Field não usa a `PersonMask`. O fundo à volta do busto fica protegido pela trava de fundo, que cobre o Peito pelo `maxEdgeShift`.
 
 ## Cadeia
 
-`waist → hips → legs → thighs → calves → arms → chest`, cada um com o seu remap e medido na pose original. O slider só reescala o `BodyChestFieldRuntime`, cuja chave é `identical(pose) && size`.
+`waist → hips → legs → thighs → calves → arms → chest` (largura, depois volume), cada um com o seu remap e medido na pose original. O slider só reescala o `BodyChestFieldRuntime`, cuja chave é `identical(pose) && size`.
 
 ## Testes
 
 `test/beauty_engine/body_reshape/body_chest_field_test.dart`:
 
 - centros e raio onde a spec diz;
-- direita aumenta (área do busto > 1,15×) e esquerda diminui (< 0,88×);
+- direita aumenta (área do busto > 1,08×) e esquerda diminui (< 0,93×);
+- faixa de largura: na linha do busto a silhueta alarga e afina mais de 6 px, e a cintura e as ancas ficam exactamente iguais;
 - deslocamento máximo ≤ `maxEdgeShift`;
 - ombros, esterno acima, cintura e braços ficam parados;
-- `minDetJ > 0,6` nos dois extremos (o teórico é 0,67);
+- `minDetJ > 0,6` nos dois extremos (o teórico é 0,81);
 - sem ombros ou de perfil, indisponível;
 - o slider só reescala o cache.
 
@@ -37,3 +41,7 @@ Leonardo, 2026-10-01, com o Meitu Busto → Chest na `body-p04`: «vamos para o 
 
 - O centro vem da pose, não do corpo: num busto muito alto ou muito baixo face aos ombros, o disco fica um pouco ao lado.
 - Um braço cruzado à frente do peito, dentro do disco, escala com o busto.
+
+## Calibração 2026-10-01
+
+Leonardo: «parece muito leve o ajuste.. não parece só peito, parece a largura total da silhueta do busto». O disco sozinho (cerca de 3 px no centro dos seios) quase não chegava ao contorno. Juntou-se a faixa de largura `BodyTorsoBand.chest` e o disco desceu para `0,10`.
