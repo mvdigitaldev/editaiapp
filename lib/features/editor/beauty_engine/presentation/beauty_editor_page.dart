@@ -542,6 +542,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     final message = switch (key) {
       BodyWarpChain.armsKey => BodyReshapeLabels.armsNotRecognized,
       BodyWarpChain.chestKey => BodyReshapeLabels.chestNotRecognized,
+      BodyWarpChain.shouldersKey => BodyReshapeLabels.shouldersNotRecognized,
       _ when BodyWarpChain.isLegKey(key) => BodyReshapeLabels.legsNotRecognized,
       _ => null,
     };

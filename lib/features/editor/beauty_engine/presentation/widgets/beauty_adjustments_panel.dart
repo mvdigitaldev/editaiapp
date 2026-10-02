@@ -26,6 +26,7 @@ enum BeautyAdjustmentCategory {
   curvas,
   bracos,
   busto,
+  pescoco,
   pele,
   cor,
 }
@@ -37,6 +38,7 @@ const _bodyCategories = {
   BeautyAdjustmentCategory.curvas,
   BeautyAdjustmentCategory.bracos,
   BeautyAdjustmentCategory.busto,
+  BeautyAdjustmentCategory.pescoco,
 };
 
 /// Definição de uma categoria com ícone e parâmetros associados.
@@ -163,6 +165,12 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
       icon: Icons.checkroom_outlined,
       label: BeautyEngineLabels.sectionBodyChest,
       parameterKeys: BodyWarpChain.chestParameterKeys,
+    ),
+    BeautyAdjustmentCategoryDef(
+      category: BeautyAdjustmentCategory.pescoco,
+      icon: Icons.unfold_more_outlined,
+      label: BeautyEngineLabels.sectionBodyNeckline,
+      parameterKeys: BodyWarpChain.neckParameterKeys,
     ),
     BeautyAdjustmentCategoryDef(
       category: BeautyAdjustmentCategory.pele,
@@ -740,7 +748,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == BodyWarpChain.thighsKey ||
         key == BodyWarpChain.calvesKey ||
         key == BodyWarpChain.armsKey ||
-        key == BodyWarpChain.chestKey) {
+        key == BodyWarpChain.chestKey ||
+        key == BodyWarpChain.shouldersKey) {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

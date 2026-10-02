@@ -4,6 +4,7 @@ import '../../models/pose_result.dart';
 import '../../warp/v2/body_arms/body_arms_field.dart';
 import '../../warp/v2/body_chest/body_chest_field.dart';
 import '../../warp/v2/body_legs/body_legs_field.dart';
+import '../../warp/v2/body_shoulders/body_shoulders_field.dart';
 
 /// Keys do menu Corpo V2. Cada uma é um Field → DisplacementField →
 /// BackwardBilinearWarp, encadeado depois de `applyFaceWarpChain`.
@@ -17,6 +18,7 @@ abstract final class BodyWarpChain {
   static const calvesKey = 'calves';
   static const armsKey = 'arms';
   static const chestKey = 'chest';
+  static const shouldersKey = 'shoulders';
 
   /// Aba «Magro» (Meitu Magro).
   static const slimParameterKeys = <String>[waistKey];
@@ -30,11 +32,14 @@ abstract final class BodyWarpChain {
   /// Aba «Busto» (Meitu Busto).
   static const chestParameterKeys = <String>[chestKey];
 
+  /// Aba «Linhas do pescoço» (Meitu Linhas do pescoço).
+  static const neckParameterKeys = <String>[shouldersKey];
+
   /// Aba «Pernas» (Meitu Pernas).
   static const legParameterKeys = <String>[legsKey, thighsKey, calvesKey];
 
   /// Ordem da cadeia: cintura → quadris → pernas → coxas → canelas → braços
-  /// → busto.
+  /// → busto → ombros.
   static const parameterKeys = <String>[
     waistKey,
     hipsKey,
@@ -43,6 +48,7 @@ abstract final class BodyWarpChain {
     calvesKey,
     armsKey,
     chestKey,
+    shouldersKey,
   ];
 
   /// Ferramentas só do plano pago.
@@ -91,12 +97,21 @@ abstract final class BodyWarpChain {
     required Size imageSize,
   }) {
     if (pose == null) {
-      return {legsKey, thighsKey, calvesKey, armsKey, chestKey};
+      return {
+        legsKey,
+        thighsKey,
+        calvesKey,
+        armsKey,
+        chestKey,
+        shouldersKey,
+      };
     }
     return {
       if (!BodyArmsField.isAvailable(pose: pose, imageSize: imageSize)) armsKey,
       if (!BodyChestField.isAvailable(pose: pose, imageSize: imageSize))
         chestKey,
+      if (!BodyShouldersField.isAvailable(pose: pose, imageSize: imageSize))
+        shouldersKey,
       if (!BodyLegsField.isAvailable(pose: pose, imageSize: imageSize)) legsKey,
       if (!BodyLegsField.isAvailable(
         pose: pose,

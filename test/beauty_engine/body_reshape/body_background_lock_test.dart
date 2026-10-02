@@ -269,6 +269,52 @@ void main() {
     }
   });
 
+  test('o fundo revelado continua as riscas, não fica embaçado', () {
+    final f1 = waist(1);
+    final emptyMask = PersonMask(
+      bytes: Uint8List(_w * _h),
+      width: _w,
+      height: _h,
+    );
+    final out = _locked(source, mask, f1);
+    var revealed = 0;
+    var sharp = 0;
+    var inPhase = 0;
+    for (var y = 150; y < 210; y++) {
+      for (var x = 60; x < 140; x++) {
+        final i = y * _w + x;
+        // Só o fundo revelado de facto: a borda anti-aliasing da pessoa
+        // (um pixel) mistura-se com ela, como deve.
+        if (mask.bytes[i] <= 127 ||
+            f1.dx[i].abs() < 1 ||
+            _nearPerson(emptyMask, out, x, y, 1)) {
+          continue;
+        }
+        revealed++;
+        final r = out[i * 4];
+        final g = out[i * 4 + 1];
+        final b = out[i * 4 + 2];
+        int near(int cr, int cg, int cb) => [
+              (r - cr).abs(),
+              (g - cg).abs(),
+              (b - cb).abs(),
+            ].reduce((a, c) => a > c ? a : c);
+        final blue = near(20, 40, 230);
+        final yellow = near(240, 220, 40);
+        if (blue < 50 || yellow < 50) {
+          sharp++;
+        }
+        if ((x ~/ 3).isEven ? blue < 50 : yellow < 50) {
+          inPhase++;
+        }
+      }
+    }
+    expect(revealed, greaterThan(40));
+    // O pull-push sozinho dava a média azul/amarelo em quase todos.
+    expect(sharp, greaterThan(0.9 * revealed));
+    expect(inPhase, greaterThan(0.8 * revealed));
+  });
+
   test('o fundo limpo não se refaz quando o slider muda', () {
     final fieldRuntime = BodyWaistFieldRuntime();
     final lockRuntime = BodyBackgroundLockRuntime();

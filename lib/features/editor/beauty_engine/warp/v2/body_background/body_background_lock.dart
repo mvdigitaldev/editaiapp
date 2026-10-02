@@ -152,6 +152,7 @@ abstract final class BodyBackgroundLock {
       right: support.right,
       bottom: support.bottom,
       bandPx: bandPx,
+      fields: fields,
     );
     if (runtime != null) {
       runtime
@@ -282,6 +283,7 @@ abstract final class BodyBackgroundLock {
     required int right,
     required int bottom,
     required int bandPx,
+    required List<DisplacementField> fields,
   }) {
     final rw = right - left + 1;
     final rh = bottom - top + 1;
@@ -344,6 +346,30 @@ abstract final class BodyBackgroundLock {
       }
     }
     _pullPushFill(plate, background, target, rw, rh);
+
+    // O pull-push só dá a cor média: onde o corpo se mexe, a textura e as
+    // arestas do fundo (batente, cortina) vêm de pedaços do fundo real.
+    final refine = Uint8List(n);
+    var refineCount = 0;
+    for (var y = 0; y < rh; y++) {
+      final row = (y + top) * width + left;
+      for (var x = 0; x < rw; x++) {
+        final i = y * rw + x;
+        if (target[i] == 0) {
+          continue;
+        }
+        for (final f in fields) {
+          if (f.dx[row + x] != 0 || f.dy[row + x] != 0) {
+            refine[i] = 1;
+            refineCount++;
+            break;
+          }
+        }
+      }
+    }
+    if (refineCount > 0) {
+      _patchMatchFill(plate, background, target, refine, rw, rh);
+    }
 
     return BodyBackgroundLockPrepared(
       width: width,
@@ -422,6 +448,190 @@ abstract final class BodyBackgroundLock {
       }
     }
     return out;
+  }
+
+  /// Patch 7×7, comparado em 4×4 amostras.
+  static const patchRadius = 3;
+  static const _patchSteps = [-3, -1, 1, 3];
+
+  /// Janela da busca aleatória: o fundo que serve está perto da borda.
+  static const patchSearchRadius = 96;
+  static const patchIterations = 3;
+
+  /// Preferência por fontes perto (por px²): com o patch quase só de fundo
+  /// inventado, ganha o pedaço de fundo mais próximo.
+  static const patchSpatialCost = 0.05;
+
+  /// Inpainting por PatchMatch (Barnes et al.) nos pixels [refine], que já
+  /// trazem a cor do pull-push. Cada um copia o centro do patch de fundo
+  /// real ([known] no patch inteiro) mais parecido com a sua vizinhança: as
+  /// arestas e o grão continuam, em vez da média lisa. Na comparação o fundo
+  /// real pesa 1, o inventado 0.5 e o interior da pessoa 0.
+  static void _patchMatchFill(
+    Uint8List plate,
+    Uint8List known,
+    Uint8List target,
+    Uint8List refine,
+    int w,
+    int h,
+  ) {
+    const r = patchRadius;
+    if (w <= 2 * r || h <= 2 * r) {
+      return;
+    }
+    final n = w * h;
+    final knownF = Float32List(n);
+    for (var i = 0; i < n; i++) {
+      knownF[i] = known[i].toDouble();
+    }
+    final full = _boxMean(knownF, w, h, r);
+    final valid = Uint8List(n);
+    final sources = <int>[];
+    for (var y = r; y < h - r; y++) {
+      for (var x = r; x < w - r; x++) {
+        final i = y * w + x;
+        if (full[i] >= 1 - 1e-6) {
+          valid[i] = 1;
+          sources.add(i);
+        }
+      }
+    }
+    if (sources.isEmpty) {
+      return;
+    }
+    final weight = Float32List(n);
+    final img = Float32List(n * 3);
+    for (var i = 0; i < n; i++) {
+      weight[i] = known[i] == 1
+          ? 1
+          : target[i] == 1
+              ? 0.5
+              : 0;
+      img[i * 3] = plate[i * 4].toDouble();
+      img[i * 3 + 1] = plate[i * 4 + 1].toDouble();
+      img[i * 3 + 2] = plate[i * 4 + 2].toDouble();
+    }
+    final pixels = <int>[
+      for (var i = 0; i < n; i++)
+        if (refine[i] == 1) i,
+    ];
+    final nnf = Int32List(n)..fillRange(0, n, -1);
+    final cost = Float64List(n);
+    final random = math.Random(1);
+
+    double distance(int t, int s, double best) {
+      final tx = t % w;
+      final ty = t ~/ w;
+      final sx = s % w;
+      final sy = s ~/ w;
+      final ddx = (tx - sx).toDouble();
+      final ddy = (ty - sy).toDouble();
+      var d = patchSpatialCost * (ddx * ddx + ddy * ddy);
+      if (d >= best) {
+        return d;
+      }
+      for (final oy in _patchSteps) {
+        final ty1 = (ty + oy).clamp(0, h - 1);
+        final srow = (sy + oy) * w + sx;
+        for (final ox in _patchSteps) {
+          final j = ty1 * w + (tx + ox).clamp(0, w - 1);
+          final wt = weight[j];
+          if (wt == 0) {
+            continue;
+          }
+          final k = (srow + ox) * 3;
+          final j3 = j * 3;
+          final dr = img[j3] - img[k];
+          final dg = img[j3 + 1] - img[k + 1];
+          final db = img[j3 + 2] - img[k + 2];
+          d += wt * (dr * dr + dg * dg + db * db);
+          if (d >= best) {
+            return d;
+          }
+        }
+      }
+      return d;
+    }
+
+    void consider(int t, int s) {
+      if (s < 0 || s >= n || valid[s] == 0 || s == nnf[t]) {
+        return;
+      }
+      final d = distance(t, s, cost[t]);
+      if (d < cost[t]) {
+        cost[t] = d;
+        nnf[t] = s;
+      }
+    }
+
+    int randomAround(int s, int radius) {
+      final x =
+          (s % w + random.nextInt(2 * radius + 1) - radius).clamp(r, w - 1 - r);
+      final y = (s ~/ w + random.nextInt(2 * radius + 1) - radius)
+          .clamp(r, h - 1 - r);
+      return y * w + x;
+    }
+
+    for (final t in pixels) {
+      cost[t] = double.infinity;
+      for (var k = 0; k < 12; k++) {
+        consider(t, randomAround(t, patchSearchRadius));
+      }
+      if (nnf[t] < 0) {
+        final s = sources[random.nextInt(sources.length)];
+        nnf[t] = s;
+        cost[t] = distance(t, s, double.infinity);
+      }
+    }
+
+    for (var iteration = 0; iteration < patchIterations; iteration++) {
+      for (var pass = 0; pass < 2; pass++) {
+        final forward = pass.isEven;
+        final step = forward ? 1 : -1;
+        for (var p = 0; p < pixels.length; p++) {
+          final t = pixels[forward ? p : pixels.length - 1 - p];
+          final x = t % w;
+          final y = t ~/ w;
+          final nx = x - step;
+          if (nx >= 0 && nx < w) {
+            final s = nnf[t - step];
+            if (s >= 0 && refine[t - step] == 1) {
+              final sx = s % w + step;
+              if (sx >= 0 && sx < w) {
+                consider(t, s + step);
+              }
+            }
+          }
+          final ny = y - step;
+          if (ny >= 0 && ny < h) {
+            final s = nnf[t - step * w];
+            if (s >= 0 && refine[t - step * w] == 1) {
+              consider(t, s + step * w);
+            }
+          }
+          for (var radius = patchSearchRadius; radius >= 1; radius >>= 1) {
+            consider(t, randomAround(nnf[t], radius));
+          }
+        }
+      }
+      for (final t in pixels) {
+        final s = nnf[t] * 3;
+        img[t * 3] = img[s];
+        img[t * 3 + 1] = img[s + 1];
+        img[t * 3 + 2] = img[s + 2];
+      }
+      if (iteration < patchIterations - 1) {
+        for (final t in pixels) {
+          cost[t] = distance(t, nnf[t], double.infinity);
+        }
+      }
+    }
+
+    for (final t in pixels) {
+      for (var c = 0; c < 3; c++) {
+        plate[t * 4 + c] = img[t * 3 + c].round().clamp(0, 255);
+      }
+    }
   }
 
   /// Preenche [target] a partir de [known] por pull-push: pirâmide de médias

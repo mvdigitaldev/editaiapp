@@ -74,6 +74,7 @@ void main() {
         BeautyAdjustmentCategory.curvas,
         BeautyAdjustmentCategory.bracos,
         BeautyAdjustmentCategory.busto,
+        BeautyAdjustmentCategory.pescoco,
         BeautyAdjustmentCategory.pele,
         BeautyAdjustmentCategory.cor,
       ],

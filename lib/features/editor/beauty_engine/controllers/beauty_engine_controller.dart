@@ -74,6 +74,7 @@ import '../warp/v2/lip_smile/lip_smile_field.dart';
 import '../warp/v2/body_background/body_background_lock.dart';
 import '../warp/v2/body_arms/body_arms_field.dart';
 import '../warp/v2/body_chest/body_chest_field.dart';
+import '../warp/v2/body_shoulders/body_shoulders_field.dart';
 import '../warp/v2/body_legs/body_legs_field.dart';
 import '../warp/v2/body_waist/body_waist_field.dart';
 import '../warp/v2/eye_size/eye_size_field.dart';
@@ -160,6 +161,8 @@ class BeautyEngineController {
   final BodyArmsFieldRuntime _bodyArmsRuntime = BodyArmsFieldRuntime();
   final BodyWaistFieldRuntime _bodyChestWidthRuntime = BodyWaistFieldRuntime();
   final BodyChestFieldRuntime _bodyChestRuntime = BodyChestFieldRuntime();
+  final BodyShouldersFieldRuntime _bodyShouldersRuntime =
+      BodyShouldersFieldRuntime();
   final BodyBackgroundLockRuntime _bodyBackgroundLockRuntime =
       BodyBackgroundLockRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
@@ -597,6 +600,22 @@ class BeautyEngineController {
     if (chest != null && chestGeometry != null) {
       fields.add(chest);
       maxShift = math.max(maxShift, BodyChestField.maxEdgeShift(chestGeometry));
+    }
+
+    final shoulders = BodyShouldersField.build(
+      pose: pose,
+      imageSize: imageSize,
+      mask: personMask,
+      t: (parameters[BodyWarpChain.shouldersKey] ?? 0).clamp(-1.0, 1.0),
+      runtime: _bodyShouldersRuntime,
+    );
+    final shouldersGeometry = _bodyShouldersRuntime.geometry;
+    if (shoulders != null && shouldersGeometry != null) {
+      fields.add(shoulders);
+      maxShift = math.max(
+        maxShift,
+        BodyShouldersField.maxEdgeShift(shouldersGeometry),
+      );
     }
 
     if (fields.isEmpty) {

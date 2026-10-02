@@ -374,7 +374,7 @@ void main() {
       );
       expect(
         BodyWarpChain.unavailableKeys(pose: null, imageSize: cropped),
-        {'legs', 'thighs', 'calves', 'arms', 'chest'},
+        {'legs', 'thighs', 'calves', 'arms', 'chest', 'shoulders'},
       );
     });
 
