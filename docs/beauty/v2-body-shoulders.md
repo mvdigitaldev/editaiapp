@@ -1,6 +1,6 @@
 # Ombros (Linhas do pescoço → Width) — corpo V2
 
-Key `shoulders`, ferramenta «Ombros». Aba **Linhas do pescoço**, depois do Busto (`corpo, pernas, curvas, bracos, busto, pescoco`). Livre, sem cadeado, como o Width do Meitu.
+Key `shoulders`, ferramenta «Ombros». Aba **Pescoço** (Meitu «Linhas do pescoço»; o nome longo cortava na barra), depois do Busto (`corpo, pernas, curvas, bracos, busto, pescoco`). Livre, sem cadeado, como o Width do Meitu.
 
 ## Pedido
 

@@ -115,7 +115,7 @@ abstract final class BeautyEngineLabels {
   static const sectionBodyLegs = 'Pernas';
   static const sectionBodyArms = 'Braços';
   static const sectionBodyChest = 'Busto';
-  static const sectionBodyNeckline = 'Linhas do pescoço';
+  static const sectionBodyNeckline = 'Pescoço';
 
   static const beautyEditorTitle = 'Retoque beauty';
   static const beautyEditorEmptyHint =

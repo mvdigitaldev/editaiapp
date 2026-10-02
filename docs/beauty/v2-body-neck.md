@@ -1,6 +1,6 @@
 # Pescoço (Linhas do pescoço → Width) — corpo V2
 
-Key `neck`, ferramenta «Pescoço». Aba **Linhas do pescoço**, depois dos Ombros. Livre, sem cadeado, como o segundo Width do Meitu.
+Key `neck`, ferramenta «Pescoço». Aba **Pescoço** (Meitu «Linhas do pescoço»), depois dos Ombros. Livre, sem cadeado, como o segundo Width do Meitu.
 
 ## Pedido
 
