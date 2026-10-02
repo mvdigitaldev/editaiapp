@@ -749,7 +749,8 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
         key == BodyWarpChain.calvesKey ||
         key == BodyWarpChain.armsKey ||
         key == BodyWarpChain.chestKey ||
-        key == BodyWarpChain.shouldersKey) {
+        key == BodyWarpChain.shouldersKey ||
+        key == BodyWarpChain.neckKey) {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {

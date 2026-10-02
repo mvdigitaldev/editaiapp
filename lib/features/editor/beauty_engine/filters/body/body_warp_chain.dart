@@ -4,6 +4,7 @@ import '../../models/pose_result.dart';
 import '../../warp/v2/body_arms/body_arms_field.dart';
 import '../../warp/v2/body_chest/body_chest_field.dart';
 import '../../warp/v2/body_legs/body_legs_field.dart';
+import '../../warp/v2/body_neck/body_neck_field.dart';
 import '../../warp/v2/body_shoulders/body_shoulders_field.dart';
 
 /// Keys do menu Corpo V2. Cada uma é um Field → DisplacementField →
@@ -19,6 +20,7 @@ abstract final class BodyWarpChain {
   static const armsKey = 'arms';
   static const chestKey = 'chest';
   static const shouldersKey = 'shoulders';
+  static const neckKey = 'neck';
 
   /// Aba «Magro» (Meitu Magro).
   static const slimParameterKeys = <String>[waistKey];
@@ -33,13 +35,13 @@ abstract final class BodyWarpChain {
   static const chestParameterKeys = <String>[chestKey];
 
   /// Aba «Linhas do pescoço» (Meitu Linhas do pescoço).
-  static const neckParameterKeys = <String>[shouldersKey];
+  static const neckParameterKeys = <String>[shouldersKey, neckKey];
 
   /// Aba «Pernas» (Meitu Pernas).
   static const legParameterKeys = <String>[legsKey, thighsKey, calvesKey];
 
   /// Ordem da cadeia: cintura → quadris → pernas → coxas → canelas → braços
-  /// → busto → ombros.
+  /// → busto → ombros → pescoço.
   static const parameterKeys = <String>[
     waistKey,
     hipsKey,
@@ -49,6 +51,7 @@ abstract final class BodyWarpChain {
     armsKey,
     chestKey,
     shouldersKey,
+    neckKey,
   ];
 
   /// Ferramentas só do plano pago.
@@ -104,6 +107,7 @@ abstract final class BodyWarpChain {
         armsKey,
         chestKey,
         shouldersKey,
+        neckKey,
       };
     }
     return {
@@ -112,6 +116,7 @@ abstract final class BodyWarpChain {
         chestKey,
       if (!BodyShouldersField.isAvailable(pose: pose, imageSize: imageSize))
         shouldersKey,
+      if (!BodyNeckField.isAvailable(pose: pose, imageSize: imageSize)) neckKey,
       if (!BodyLegsField.isAvailable(pose: pose, imageSize: imageSize)) legsKey,
       if (!BodyLegsField.isAvailable(
         pose: pose,

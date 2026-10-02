@@ -74,6 +74,7 @@ import '../warp/v2/lip_smile/lip_smile_field.dart';
 import '../warp/v2/body_background/body_background_lock.dart';
 import '../warp/v2/body_arms/body_arms_field.dart';
 import '../warp/v2/body_chest/body_chest_field.dart';
+import '../warp/v2/body_neck/body_neck_field.dart';
 import '../warp/v2/body_shoulders/body_shoulders_field.dart';
 import '../warp/v2/body_legs/body_legs_field.dart';
 import '../warp/v2/body_waist/body_waist_field.dart';
@@ -163,6 +164,7 @@ class BeautyEngineController {
   final BodyChestFieldRuntime _bodyChestRuntime = BodyChestFieldRuntime();
   final BodyShouldersFieldRuntime _bodyShouldersRuntime =
       BodyShouldersFieldRuntime();
+  final BodyNeckFieldRuntime _bodyNeckRuntime = BodyNeckFieldRuntime();
   final BodyBackgroundLockRuntime _bodyBackgroundLockRuntime =
       BodyBackgroundLockRuntime();
   final ChinFieldRuntime _chinRuntime = ChinFieldRuntime();
@@ -616,6 +618,18 @@ class BeautyEngineController {
         maxShift,
         BodyShouldersField.maxEdgeShift(shouldersGeometry),
       );
+    }
+
+    final neck = BodyNeckField.build(
+      pose: pose,
+      imageSize: imageSize,
+      t: (parameters[BodyWarpChain.neckKey] ?? 0).clamp(-1.0, 1.0),
+      runtime: _bodyNeckRuntime,
+    );
+    final neckGeometry = _bodyNeckRuntime.geometry;
+    if (neck != null && neckGeometry != null) {
+      fields.add(neck);
+      maxShift = math.max(maxShift, BodyNeckField.maxEdgeShift(neckGeometry));
     }
 
     if (fields.isEmpty) {

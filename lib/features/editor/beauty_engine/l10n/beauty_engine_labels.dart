@@ -42,6 +42,7 @@ abstract final class BeautyEngineLabels {
     'arms': 'Braços',
     'chest': 'Peito',
     'shoulders': 'Ombros',
+    'neck': 'Pescoço',
     'hairline': 'Linha do cabelo',
     'jaw': 'Mandíbula',
     'jaw_angle': 'Ângulo da mandíbula',

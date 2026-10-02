@@ -543,6 +543,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       BodyWarpChain.armsKey => BodyReshapeLabels.armsNotRecognized,
       BodyWarpChain.chestKey => BodyReshapeLabels.chestNotRecognized,
       BodyWarpChain.shouldersKey => BodyReshapeLabels.shouldersNotRecognized,
+      BodyWarpChain.neckKey => BodyReshapeLabels.neckNotRecognized,
       _ when BodyWarpChain.isLegKey(key) => BodyReshapeLabels.legsNotRecognized,
       _ => null,
     };

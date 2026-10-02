@@ -27,6 +27,8 @@ abstract final class BodyReshapeLabels {
       'Falha ao reconhecer o busto, não foi possível ajustar.';
   static const shouldersNotRecognized =
       'Falha ao reconhecer os ombros, não foi possível ajustar.';
+  static const neckNotRecognized =
+      'Falha ao reconhecer o pescoço, não foi possível ajustar.';
   static const limitedByOcclusion = 'Ajuste limitado por oclusão';
   static const limitedByConfidence = 'Ajuste limitado por confiança baixa';
   static const limitedByCapability = 'Ajuste limitado — evidência insuficiente';
