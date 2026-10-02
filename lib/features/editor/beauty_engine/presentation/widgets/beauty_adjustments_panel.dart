@@ -64,6 +64,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
     required this.enabled,
     required this.linkEyes,
     required this.onParamChanged,
+    this.onParamChangeEnd,
     required this.onLinkEyesChanged,
     this.bodyWarpPlan,
     this.bodyOnly = false,
@@ -91,6 +92,9 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
   final bool enabled;
   final bool linkEyes;
   final void Function(String key, double value) onParamChanged;
+
+  /// Dedo levantado do slider de [key].
+  final void Function(String key, double value)? onParamChangeEnd;
   final ValueChanged<bool> onLinkEyesChanged;
   final bool bodyOnly;
   final bool labMode;
@@ -413,7 +417,6 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                   value: activeValue,
                   min: sliderRange.min,
                   max: sliderRange.max,
-                  divisions: sliderRange.divisions,
                   bipolar: sliderRange.bipolar,
                   enabled: paramEnabled,
                   trailing: isSideWarp
@@ -427,6 +430,9 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                           : isLipBand
                               ? _onLipBandSliderChanged(activeKey, value)
                               : widget.onParamChanged(activeKey, value)
+                      : null,
+                  onChangeEnd: paramEnabled && widget.onParamChangeEnd != null
+                      ? (value) => widget.onParamChangeEnd!(activeKey, value)
                       : null,
                 ),
               ),
@@ -754,10 +760,10 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
       return const _SliderRange(min: -1, max: 1, bipolar: true);
     }
     if (key == 'temperature') {
-      return const _SliderRange(min: -0.5, max: 0.5, divisions: 200);
+      return const _SliderRange(min: -0.5, max: 0.5);
     }
     if (ColorFilterPipeline.isColorKey(key)) {
-      return const _SliderRange(min: -1, max: 1, divisions: 200);
+      return const _SliderRange(min: -1, max: 1);
     }
     return const _SliderRange();
   }
@@ -767,13 +773,11 @@ class _SliderRange {
   const _SliderRange({
     this.min = 0,
     this.max = 1,
-    this.divisions,
     this.bipolar = false,
   });
 
   final double min;
   final double max;
-  final int? divisions;
   final bool bipolar;
 }
 

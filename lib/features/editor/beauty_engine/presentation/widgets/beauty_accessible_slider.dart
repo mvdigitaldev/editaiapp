@@ -11,6 +11,7 @@ class BeautyAccessibleSlider extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChanged,
+    this.onChangeEnd,
     this.min = 0,
     this.max = 1,
     this.divisions,
@@ -27,6 +28,9 @@ class BeautyAccessibleSlider extends StatelessWidget {
   final int? divisions;
   final bool enabled;
   final ValueChanged<double>? onChanged;
+
+  /// Dedo levantado: o arrasto acabou.
+  final ValueChanged<double>? onChangeEnd;
   final String Function(double value)? valueFormatter;
 
   /// Centro = neutro. O preenchimento sai do meio (padrão Meitu).
@@ -149,6 +153,7 @@ class BeautyAccessibleSlider extends StatelessWidget {
                         max: max,
                         divisions: divisions,
                         onChanged: enabled ? onChanged : null,
+                        onChangeEnd: enabled ? onChangeEnd : null,
                         semanticFormatterCallback: (raw) =>
                             '$label, ${_formatValue(raw)}',
                       ),
@@ -164,7 +169,8 @@ class BeautyAccessibleSlider extends StatelessWidget {
   }
 }
 
-/// Faixa sempre visível, com marcas de escala. Bipolar preenche a partir do centro.
+/// Barra inteira, sem marcas (como no Meitu). Bipolar preenche a partir do
+/// centro, marcado por um ponto.
 class _BeautySliderTrackShape extends RoundedRectSliderTrackShape {
   const _BeautySliderTrackShape({this.bipolar = false});
 
@@ -228,16 +234,10 @@ class _BeautySliderTrackShape extends RoundedRectSliderTrackShape {
           Paint()..color = active,
         );
       }
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: Offset(centerX, trackRect.center.dy),
-            width: 2,
-            height: trackRect.height + 6,
-          ),
-          const Radius.circular(1),
-        ),
-        Paint()..color = active.withValues(alpha: 0.9),
+      canvas.drawCircle(
+        Offset(centerX, trackRect.center.dy),
+        trackRect.height * 0.75,
+        Paint()..color = active,
       );
     } else if (thumbCenter.dx - trackRect.left > 0.5) {
       canvas.drawRRect(
@@ -251,28 +251,6 @@ class _BeautySliderTrackShape extends RoundedRectSliderTrackShape {
           radius,
         ),
         Paint()..color = active,
-      );
-    }
-
-    const count = 5;
-    final tickColor = inactive.withValues(alpha: 0.85);
-    final minor = Paint()
-      ..color = tickColor
-      ..strokeWidth = 1
-      ..strokeCap = StrokeCap.round;
-    final major = Paint()
-      ..color = tickColor
-      ..strokeWidth = 1.15
-      ..strokeCap = StrokeCap.round;
-    for (var i = 0; i < count; i++) {
-      final t = i / (count - 1);
-      final x = trackRect.left + trackRect.width * t;
-      final isMajor = i == 0 || i == count - 1 || (bipolar && i == 2);
-      final h = isMajor ? 7.0 : 4.5;
-      canvas.drawLine(
-        Offset(x, trackRect.bottom + 3),
-        Offset(x, trackRect.bottom + 3 + h),
-        isMajor ? major : minor,
       );
     }
   }

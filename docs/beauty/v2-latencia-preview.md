@@ -267,3 +267,36 @@ desligar o modo. Descartada por agora.
 - O slider facial não tem debounce: dispara logo e coalesce um frame. Com
   frames de 250 ms isso põe a imagem dois frames atrás do dedo, que é o atraso
   sentido.
+
+---
+
+# Terceira ronda — fluidez do slider (2026-10-01, rosto e corpo)
+
+Leonardo: «sinto que fica meio travado ao chegar em cada ponto, não deveria ter
+pontos, deveria ter uma barra inteira igual no Meitu». Nenhum Field, ganho,
+cadeia, cache nem resolução de preview mudou; só o caminho entre o dedo e o
+frame.
+
+- **Sem marcas.** O `_BeautySliderTrackShape` desenhava 5 marcas e uma barra
+  vertical no centro do bipolar; Temperatura e Cor tinham `divisions: 200`,
+  que encaixa o polegar em degraus. Agora a barra é inteira, o centro do
+  bipolar é um ponto e nenhum slider tem `divisions`. Teste: o `Slider` do
+  painel tem `divisions == null`.
+- **Corpo sem debounce.** O corpo esperava 80/100/120 ms (tier) de dedo parado
+  antes de pedir um frame: durante o arrasto a imagem não mexia e depois
+  saltava. Passa a disparar logo e a coalescer um frame, como o rosto. Os
+  `*FieldRuntime` de corpo (chave `identical(pose)` + máscara + tamanho) e a
+  trava em cache fazem do arrasto um reescalar.
+- **Telemetria ao soltar.** Cada frame fazia `logEvent('preview_apply')`: um
+  `debugPrint` e um insert no Supabase a competir com o arrasto no isolate da
+  UI. O `BeautyAccessibleSlider` ganhou `onChangeEnd`, propagado pelo painel
+  como `onParamChangeEnd`; o evento sai uma vez por gesto, com `tool_key`,
+  `value` e o último `apply_ms`. O `debugPrint` do reporter só corre em debug.
+- **Sem selo de ms.** O `_ApplyTimeBadge` sobre a foto (rosto e corpo) saiu; o
+  benchmark (`beautyBenchmarkProvider`, resumo a cada 20 frames) fica.
+- **`RepaintBoundary` no preview.** O número sobre o polegar repinta a cada
+  movimento; a foto fica numa camada própria e só repinta quando chega frame
+  novo.
+
+Medir em `flutter run --profile` num telemóvel: o JIT do `flutter test` não
+mostra o custo do insert nem do repaint.

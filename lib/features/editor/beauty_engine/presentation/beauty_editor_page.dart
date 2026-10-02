@@ -23,7 +23,6 @@ import '../diagnostics/beauty_editor_session_reporter.dart';
 import '../diagnostics/beauty_engine_error_reporter.dart';
 import '../config/face_warp_v3_rollout.dart';
 import '../filters/face/face_filter_pipeline.dart';
-import '../filters/body/body_filter_pipeline.dart';
 import '../filters/body/body_warp_chain.dart';
 import '../l10n/beauty_engine_labels.dart';
 import '../l10n/body_reshape_labels.dart';
@@ -44,7 +43,6 @@ import 'widgets/beauty_rgba_preview.dart';
 import 'widgets/face_selection_overlay.dart';
 import 'widgets/preview_coordinate_mapper.dart';
 import 'widgets/parity_checklist_panel.dart';
-import 'widgets/warp_debug_overlay.dart';
 
 /// Editor de retoque beauty — ajustes manuais rosto/nariz/corpo/pele.
 class BeautyEditorPage extends ConsumerStatefulWidget {
@@ -89,12 +87,10 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   bool _showOriginal = false;
   bool _linkEyes = true;
   int? _lastApplyMs;
-  bool _showWarpDebug = false;
   String? _debugActiveToolKey;
   DeviceCapabilityProfile? _deviceProfile;
   WarpPlan? _lastBodyWarpPlan;
   bool _prewarmed = false;
-  Timer? _debounceTimer;
   bool _previewQueued = false;
 
   // Pincel manual (Facetune-style).
@@ -146,7 +142,6 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
     _bodyNoticeTimer?.cancel();
     _previewImage?.dispose();
     _viewerTransform.dispose();
@@ -381,6 +376,23 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     _schedulePreview();
   }
 
+  /// Telemetria uma vez por gesto: um insert por frame disputava o isolate
+  /// com o próprio arrasto.
+  void _onParamChangeEnd(String key, double value) {
+    unawaited(
+      _sessionReporter.logEvent(
+        'preview_apply',
+        metadata: {
+          'face_count': _detectedFaces.length,
+          'selected_face_index': _selectedFaceIndex,
+          'tool_key': key,
+          'value': value,
+          if (_lastApplyMs != null) 'apply_ms': _lastApplyMs,
+        },
+      ),
+    );
+  }
+
   void _onLinkEyesChanged(bool value) {
     setState(() {
       _linkEyes = value;
@@ -390,32 +402,18 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   }
 
   void _schedulePreview() {
-    _debounceTimer?.cancel();
     if (_source == null) {
       return;
     }
 
-    // Rosto: dispara já e coalesca se ainda estiver a processar (sensação Meitu).
-    // Corpo: mantém o debounce do perfil — o warp de corpo é mais pesado.
-    if (!_hasActiveBodyWarp(_params)) {
-      if (_processing) {
-        _previewQueued = true;
-        return;
-      }
-      unawaited(_processPreview());
+    // Rosto e corpo: dispara já e coalesca se ainda estiver a processar
+    // (sensação Meitu). Um debounce só actualizava quando o dedo parava; os
+    // caches dos Fields e da trava fazem o arrasto só reescalar.
+    if (_processing) {
+      _previewQueued = true;
       return;
     }
-
-    final profile = _deviceProfile;
-    final debounceMs = profile?.sliderDebounceMs ?? 120;
-
-    _debounceTimer = Timer(Duration(milliseconds: debounceMs), () {
-      if (_processing) {
-        _previewQueued = true;
-        return;
-      }
-      unawaited(_processPreview());
-    });
+    unawaited(_processPreview());
   }
 
   Future<void> _ensureLandmarks() async {
@@ -507,8 +505,6 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     }
     return controller.applyToolGating(params);
   }
-
-  bool get _warpDebugAvailable => widget.labMode || kDebugMode;
 
   void _showBackgroundLockPaywall() => _showPaidFeaturePaywall(
         title: BodyReshapeLabels.backgroundLockPaywallTitle,
@@ -660,19 +656,6 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         benchmark.logSummary();
       }
 
-      unawaited(
-        _sessionReporter.logEvent(
-          'preview_apply',
-          metadata: {
-            'face_count': _detectedFaces.length,
-            'selected_face_index': _selectedFaceIndex,
-            'apply_ms': profile.totalMs > 0
-                ? profile.totalMs
-                : stopwatch.elapsedMilliseconds,
-          },
-        ),
-      );
-
       if (!mounted) {
         return;
       }
@@ -719,18 +702,6 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         _previewQueued = false;
       }
     }
-  }
-
-  bool _hasActiveBodyWarp(Map<String, double> params) {
-    if (_brushHistory.strokes.isNotEmpty || BodyWarpChain.hasActive(params)) {
-      return true;
-    }
-    for (final key in BodyFilterPipeline.bodyWarpParameterKeys) {
-      if ((params[key] ?? 0) > 0.001) {
-        return true;
-      }
-    }
-    return false;
   }
 
   String? _firstActiveFaceWarpKey() {
@@ -1025,7 +996,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     return 'Erro ao aplicar ajuste: $error';
   }
 
-  Future<void> _saveBodyEdit() async {
+  Future<void> _saveEdit() async {
     final source = _source;
     final originalBytes = _imageBytes;
     final imagePath = _imagePath;
@@ -1129,30 +1100,15 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
               : BeautyEngineLabels.beautyEditorTitle,
         ),
         actions: [
-          if (_imageBytes != null && !widget.bodyOnly)
-            IconButton(
-              tooltip: _showOriginal ? 'Ver editada' : 'Ver original',
-              onPressed: () => setState(() => _showOriginal = !_showOriginal),
-              icon: Icon(_showOriginal ? Icons.auto_fix_high : Icons.compare),
-            ),
-          if (_warpDebugAvailable && !widget.bodyOnly && _imageBytes != null)
-            IconButton(
-              tooltip: _showWarpDebug ? 'Ocultar máscara warp' : 'Máscara warp',
-              onPressed: () => setState(() => _showWarpDebug = !_showWarpDebug),
-              icon: Icon(
-                _showWarpDebug ? Icons.grid_off : Icons.grid_on_outlined,
-                color: _showWarpDebug ? AppColors.primary : null,
-              ),
-            ),
           IconButton(
             tooltip: 'Selecionar foto',
             onPressed: _pickImage,
             icon: const Icon(Icons.photo_library_outlined),
           ),
-          if (widget.bodyOnly && _imageBytes != null)
+          if (_imageBytes != null)
             IconButton(
               tooltip: 'Salvar edição',
-              onPressed: _processing ? null : _saveBodyEdit,
+              onPressed: _processing ? null : _saveEdit,
               icon: const Icon(Icons.check_rounded),
             ),
         ],
@@ -1223,25 +1179,27 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                           key: _previewImageKey,
                           width: fitted.width,
                           height: fitted.height,
-                          child: _showOriginal
-                              ? Image.memory(
-                                  _imageBytes!,
-                                  fit: BoxFit.fill,
-                                  gaplessPlayback: true,
-                                  key: const ValueKey('original'),
-                                )
-                              : _previewImage == null
-                                  ? const Center(
-                                      child: CircularProgressIndicator(),
-                                    )
-                                  : BeautyRgbaPreview(
-                                      key: ValueKey(
-                                        'preview_${_params.hashCode}_'
-                                        '${_brushHistory.strokes.length}',
+                          child: RepaintBoundary(
+                            child: _showOriginal
+                                ? Image.memory(
+                                    _imageBytes!,
+                                    fit: BoxFit.fill,
+                                    gaplessPlayback: true,
+                                    key: const ValueKey('original'),
+                                  )
+                                : _previewImage == null
+                                    ? const Center(
+                                        child: CircularProgressIndicator(),
+                                      )
+                                    : BeautyRgbaPreview(
+                                        key: ValueKey(
+                                          'preview_${_params.hashCode}_'
+                                          '${_brushHistory.strokes.length}',
+                                        ),
+                                        image: _previewImage!,
+                                        fit: BoxFit.fill,
                                       ),
-                                      image: _previewImage!,
-                                      fit: BoxFit.fill,
-                                    ),
+                          ),
                         );
                         return InteractiveViewer(
                           transformationController: _viewerTransform,
@@ -1277,21 +1235,6 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                                           ),
                                           boxSize: fitted,
                                           onSelected: _selectFace,
-                                        ),
-                                      if (_warpDebugAvailable &&
-                                          _showWarpDebug &&
-                                          !_showOriginal &&
-                                          preview != null)
-                                        WarpDebugOverlay(
-                                          field: ref
-                                              .watch(
-                                                  beautyEngineControllerProvider)
-                                              .lastFaceWarpField,
-                                          vertexStats: ref
-                                              .watch(
-                                                  beautyEngineControllerProvider)
-                                              .lastFaceWarpDebugStats,
-                                          boxSize: fitted,
                                         ),
                                       // Overlay debug desligado (diagnóstico).
                                       // if (kDebugMode &&
@@ -1356,12 +1299,12 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                       ),
                     ),
                   ),
-                if (widget.bodyOnly && _imageBytes != null && !_brushMode)
+                if (_imageBytes != null && !_brushMode)
                   Positioned(
                     right: 12,
                     bottom: 10,
                     child: _CompareHoldButton(
-                      key: const ValueKey('body_compare'),
+                      key: const ValueKey('compare_hold'),
                       onHold: (holding) {
                         if (_showOriginal != holding) {
                           setState(() => _showOriginal = holding);
@@ -1404,25 +1347,6 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                     left: 12,
                     child: _labPhotoPanel(),
                   ),
-                if (_lastApplyMs != null && !_processing)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: _ApplyTimeBadge(
-                      milliseconds: _lastApplyMs!,
-                      budgetMs: _deviceProfile?.sliderToFrameBudgetMs ?? 250,
-                      tier: _deviceProfile?.tier,
-                      p50Ms: ref
-                          .read(beautyBenchmarkProvider)
-                          .percentile('total', 50),
-                      showBaseline: _warpDebugAvailable,
-                      warpBackend: _warpDebugAvailable
-                          ? ref
-                              .watch(beautyEngineControllerProvider)
-                              .lastFaceWarpBackend
-                          : null,
-                    ),
-                  ),
               ],
             ),
           ),
@@ -1448,6 +1372,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                   ? null
                   : ref.watch(beautyEngineControllerProvider).lastToolGatePlan,
               onParamChanged: _onParamChanged,
+              onParamChangeEnd: _onParamChangeEnd,
               onLinkEyesChanged: _onLinkEyesChanged,
               proToolsAllowed: widget.bodyOnly &&
                   ref.watch(bodyBackgroundLockAllowedProvider),
@@ -1601,63 +1526,6 @@ class _BrushToolbar extends StatelessWidget {
                 ],
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ApplyTimeBadge extends StatelessWidget {
-  const _ApplyTimeBadge({
-    required this.milliseconds,
-    required this.budgetMs,
-    this.tier,
-    this.p50Ms = 0,
-    this.showBaseline = false,
-    this.warpBackend,
-  });
-
-  final int milliseconds;
-  final int budgetMs;
-  final DeviceTier? tier;
-  final int p50Ms;
-  final bool showBaseline;
-  final String? warpBackend;
-
-  String _tierLabel(DeviceTier tier) {
-    return switch (tier) {
-      DeviceTier.a => 'A',
-      DeviceTier.b => 'B',
-      DeviceTier.c => 'C',
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final fast = milliseconds <= budgetMs;
-    var label = '${milliseconds}ms';
-    if (showBaseline && tier != null && p50Ms > 0) {
-      label = '$label · p50 ${p50Ms}ms · tier ${_tierLabel(tier!)}';
-    }
-    if (warpBackend != null) {
-      label = '$label · ${warpBackend!.toUpperCase()}';
-    }
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: fast
-            ? AppColors.success.withValues(alpha: 0.9)
-            : AppColors.warning.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
           ),
         ),
       ),

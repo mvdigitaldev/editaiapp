@@ -12,7 +12,11 @@ class BeautyEditorSessionReporter {
     String editor = 'native',
     Map<String, dynamic>? metadata,
   }) async {
-    debugPrint('[BeautyEditorSession] $event editor=$editor metadata=$metadata');
+    if (kDebugMode) {
+      debugPrint(
+        '[BeautyEditorSession] $event editor=$editor metadata=$metadata',
+      );
+    }
 
     final client = _client ?? _tryClient();
     if (client == null) {

@@ -11,6 +11,7 @@ void main() {
     WidgetTester tester, {
     Map<String, double>? params,
     void Function(String key, double value)? onParamChanged,
+    void Function(String key, double value)? onParamChangeEnd,
   }) async {
     tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1;
@@ -25,6 +26,7 @@ void main() {
             enabled: true,
             linkEyes: true,
             onParamChanged: onParamChanged ?? (_, __) {},
+            onParamChangeEnd: onParamChangeEnd,
             onLinkEyesChanged: (_) {},
           ),
         ),
@@ -85,6 +87,26 @@ void main() {
 
     expect(lastKey, 'jaw');
     expect(lastValue, greaterThan(0));
+  });
+
+  testWidgets('slider contínuo, sem marcas, e avisa só ao soltar',
+      (tester) async {
+    var changes = 0;
+    final ends = <String>[];
+    await pumpPanel(
+      tester,
+      onParamChanged: (_, __) => changes++,
+      onParamChangeEnd: (key, _) => ends.add(key),
+    );
+
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    expect(slider.divisions, isNull);
+
+    await tester.drag(find.byType(Slider), const Offset(80, 0));
+    await tester.pumpAndSettle();
+
+    expect(changes, greaterThan(1));
+    expect(ends, ['jaw']);
   });
 
   testWidgets('Rosto e Pele rendem BeautyToolIcon; Cor mantém ChoiceChip',
