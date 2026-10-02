@@ -373,16 +373,6 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     _schedulePreview();
   }
 
-  void _undoBrush() {
-    if (!_brushHistory.canUndo) {
-      return;
-    }
-    _brushHistory.undo();
-    _syncBrushFieldToController();
-    _schedulePreview();
-    setState(() {});
-  }
-
   void _onParamChanged(String key, double value) {
     setState(() {
       _params[key] = value;
@@ -1139,33 +1129,13 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
               : BeautyEngineLabels.beautyEditorTitle,
         ),
         actions: [
-          if (widget.bodyOnly && _imageBytes != null) ...[
-            IconButton(
-              tooltip: _brushMode ? 'Sliders' : 'Pincel',
-              onPressed: () => setState(() {
-                _brushMode = !_brushMode;
-                if (!_brushMode) {
-                  _activeStrokePoints.clear();
-                }
-              }),
-              icon: Icon(
-                _brushMode ? Icons.tune_rounded : Icons.brush_rounded,
-              ),
-            ),
-            if (_brushHistory.canUndo)
-              IconButton(
-                tooltip: 'Desfazer pincel',
-                onPressed: _processing ? null : _undoBrush,
-                icon: const Icon(Icons.undo_rounded),
-              ),
-          ],
-          if (_imageBytes != null)
+          if (_imageBytes != null && !widget.bodyOnly)
             IconButton(
               tooltip: _showOriginal ? 'Ver editada' : 'Ver original',
               onPressed: () => setState(() => _showOriginal = !_showOriginal),
               icon: Icon(_showOriginal ? Icons.auto_fix_high : Icons.compare),
             ),
-          if (_warpDebugAvailable && _imageBytes != null)
+          if (_warpDebugAvailable && !widget.bodyOnly && _imageBytes != null)
             IconButton(
               tooltip: _showWarpDebug ? 'Ocultar máscara warp' : 'Máscara warp',
               onPressed: () => setState(() => _showWarpDebug = !_showWarpDebug),
@@ -1386,6 +1356,19 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                       ),
                     ),
                   ),
+                if (widget.bodyOnly && _imageBytes != null && !_brushMode)
+                  Positioned(
+                    right: 12,
+                    bottom: 10,
+                    child: _CompareHoldButton(
+                      key: const ValueKey('body_compare'),
+                      onHold: (holding) {
+                        if (_showOriginal != holding) {
+                          setState(() => _showOriginal = holding);
+                        }
+                      },
+                    ),
+                  ),
                 if (_bodyNotice != null)
                   Positioned.fill(
                     child: IgnorePointer(
@@ -1499,6 +1482,37 @@ class _BodyNotice extends StatelessWidget {
         message,
         textAlign: TextAlign.center,
         style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.3),
+      ),
+    );
+  }
+}
+
+/// Comparar sobre a foto, como no Meitu: segurar mostra a original.
+class _CompareHoldButton extends StatelessWidget {
+  const _CompareHoldButton({super.key, required this.onHold});
+
+  final ValueChanged<bool> onHold;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Segure para ver a original',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => onHold(true),
+        onTapUp: (_) => onHold(false),
+        onTapCancel: () => onHold(false),
+        onLongPressEnd: (_) => onHold(false),
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.compare, color: Colors.white, size: 20),
+        ),
       ),
     );
   }
