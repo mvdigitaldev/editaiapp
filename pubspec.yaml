@@ -59,6 +59,7 @@ dependencies:
   file_picker: ^8.0.0
   path_provider: ^2.1.1
   url_launcher: ^6.2.5
+  upgrader: ^13.7.0
   equatable: any
   webview_flutter: any
   saver_gallery: ^4.1.0
@@ -77,6 +78,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
+  package_info_plus: ^9.0.1
+  version: ^3.0.2
   
   # Code Generation
   build_runner: ^2.4.7

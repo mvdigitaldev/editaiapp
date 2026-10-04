@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
+import '../../../../core/widgets/app_update_gate.dart';
 import '../../../../core/widgets/ad_banner_widget.dart';
 import 'home_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -54,21 +55,22 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
       },
     );
 
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: pages,
+    return AppUpdateGate(
+      child: Scaffold(
+        body: IndexedStack(
+          index: _currentIndex,
+          children: pages,
+        ),
+        bottomNavigationBar: showBanner
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const AdBannerWidget(),
+                  navBar,
+                ],
+              )
+            : navBar,
       ),
-      bottomNavigationBar: showBanner
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const AdBannerWidget(),
-                navBar,
-              ],
-            )
-          : navBar,
     );
   }
 }
-
