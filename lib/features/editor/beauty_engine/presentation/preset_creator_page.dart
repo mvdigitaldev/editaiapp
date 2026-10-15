@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart' as image_picker;
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/photo_pick_card.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../filter_presets/filter_grade_engine.dart';
 import '../../filter_presets/filter_preset_mapper.dart';
@@ -765,6 +766,10 @@ class _PreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (previewBytes == null && !processing) {
+      return PhotoPickCard(onTap: onPickImage);
+    }
+
     final preview = AspectRatio(
       aspectRatio: compact ? 16 / 9 : 4 / 5,
       child: Stack(

@@ -1,85 +1,124 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/widgets/app_button.dart';
-import '../../../../core/widgets/app_text_field.dart';
-import '../providers/auth_provider.dart';
+
+import '../../../../core/theme/brand_visual.dart';
 import '../widgets/login_form.dart';
 
-class LoginPage extends ConsumerWidget {
+class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  ConsumerState<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends ConsumerState<LoginPage> {
+  /// Mantém o que foi digitado quando o teclado troca a coluna por rolagem.
+  final _formKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final column = Column(
+      mainAxisSize: keyboardOpen ? MainAxisSize.min : MainAxisSize.max,
+      children: [
+        const _LoginHeader(),
+        if (keyboardOpen)
+          const SizedBox(height: 16)
+        else
+          const Expanded(child: _BeforeAfterStrip()),
+        LoginForm(key: _formKey),
+      ],
+    );
 
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              children: [
-                const SizedBox(height: 64),
-                // Logo
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.asset(
-                    'assets/logo.png',
-                    height: 80,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-                const SizedBox(height: 48),
-                // Title
-                Text(
-                  'Bem-vindo de volta!',
-                  style: AppTextStyles.displaySmall.copyWith(
-                    color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Sentimos sua falta. Entre para continuar editando.',
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 40),
-                // Form
-                const LoginForm(),
-                const SizedBox(height: 32),
-                // Sign up link
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Não tem uma conta? ',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+          child: keyboardOpen
+              ? LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints:
+                            BoxConstraints(minHeight: constraints.maxHeight),
+                        child: column,
                       ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pushNamed('/register');
-                      },
-                      child: Text(
-                        'Criar uma conta',
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 40),
-              ],
-            ),
+                    );
+                  },
+                )
+              : column,
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginHeader extends StatelessWidget {
+  const _LoginHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = BrandVisual.navy.withValues(alpha: 0.62);
+    final logoHeight = MediaQuery.sizeOf(context).height < 700 ? 92.0 : 140.0;
+
+    return Column(
+      children: [
+        const SizedBox(height: 4),
+        Semantics(
+          label: 'Editaí',
+          child: Image.asset(
+            'assets/branding/logo_lockup.png',
+            height: logoHeight,
+            fit: BoxFit.contain,
+            excludeFromSemantics: true,
           ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Um novo olhar para suas fotos.',
+          textAlign: TextAlign.center,
+          style: BrandVisual.text(size: 15, color: muted),
+        ),
+        const SizedBox(height: 14),
+        Text.rich(
+          TextSpan(
+            style: BrandVisual.title(size: 26),
+            children: [
+              const TextSpan(text: 'Bem-vindo '),
+              TextSpan(
+                text: 'de volta!',
+                style: BrandVisual.title(size: 26, color: BrandVisual.blue),
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Entre na sua conta e continue\neditando suas fotos.',
+          textAlign: TextAlign.center,
+          style: BrandVisual.text(size: 15, color: muted),
+        ),
+      ],
+    );
+  }
+}
+
+class _BeforeAfterStrip extends StatelessWidget {
+  const _BeforeAfterStrip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Semantics(
+        label: 'Antes e depois',
+        child: Image.asset(
+          'assets/login/antes_depois.png',
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+          excludeFromSemantics: true,
         ),
       ),
     );

@@ -5,6 +5,8 @@ import '../../../../core/providers/app_remote_config_provider.dart';
 import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/brand_visual.dart';
+import '../../../../core/widgets/brand_blue_wash.dart';
 import '../../../../core/widgets/credit_indicator.dart';
 import '../../../../core/widgets/hero_action_card.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -32,237 +34,266 @@ class _HomePageState extends ConsumerState<HomePage> {
     ref.watch(enablePlansProvider);
 
     return Scaffold(
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(recentEditsProvider);
-            ref.invalidate(homeModuleConfigProvider);
-            await Future.wait([
-              ref.read(recentEditsProvider.future),
-              ref.read(homeModuleConfigProvider.future),
-            ]);
-          },
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Row(
-                      children: [
-                        // Avatar
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppColors.primary.withOpacity(0.2),
-                              width: 2,
-                            ),
-                          ),
-                          child: ClipOval(
-                            child: user?.avatarUrl != null
-                                ? Image.network(
-                                    user!.avatarUrl!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const Icon(Icons.person),
-                                  )
-                                : const Icon(Icons.person),
-                          ),
-                        ),
-                        const Spacer(),
-                        // Credits
-                        GestureDetector(
-                          onTap: () {
-                            final enabled =
-                                ref.read(enablePlansProvider).valueOrNull ==
-                                    true;
-                            if (!enabled) return;
-                            Navigator.of(context).pushNamed('/credits-shop');
-                          },
-                          child: creditsUsageAsync.when(
-                            loading: () => const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  AppColors.primary,
-                                ),
+      backgroundColor: isDark ? BrandVisual.navy : Colors.white,
+      body: Stack(
+        children: [
+          BrandBlueWash(isDark: isDark),
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(recentEditsProvider);
+                ref.invalidate(homeModuleConfigProvider);
+                await Future.wait([
+                  ref.read(recentEditsProvider.future),
+                  ref.read(homeModuleConfigProvider.future),
+                ]);
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Row(
+                        children: [
+                          // Avatar
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: BrandVisual.blue.withValues(alpha: 0.2),
+                                width: 2,
                               ),
                             ),
-                            error: (_, __) => CreditIndicator(
-                              credits: user?.creditsBalance ?? 0,
-                            ),
-                            data: (usage) => CreditIndicator(
-                              credits: usage.balance,
+                            child: ClipOval(
+                              child: user?.avatarUrl != null
+                                  ? Image.network(
+                                      user!.avatarUrl!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) =>
+                                          const Icon(Icons.person),
+                                    )
+                                  : const Icon(Icons.person),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Logo
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Image.asset(
-                            'assets/branding/logo_mark.png',
-                            height: 40,
-                            fit: BoxFit.contain,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'editaí',
-                            style: AppTextStyles.headingMedium.copyWith(
-                              color: isDark
-                                  ? AppColors.textLight
-                                  : AppColors.textPrimary,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.5,
-                              height: 1,
+                          const Spacer(),
+                          // Credits
+                          GestureDetector(
+                            onTap: () {
+                              final enabled =
+                                  ref.read(enablePlansProvider).valueOrNull ==
+                                      true;
+                              if (!enabled) return;
+                              Navigator.of(context).pushNamed('/credits-shop');
+                            },
+                            child: creditsUsageAsync.when(
+                              loading: () => const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    BrandVisual.blue,
+                                  ),
+                                ),
+                              ),
+                              error: (_, __) => CreditIndicator(
+                                credits: user?.creditsBalance ?? 0,
+                              ),
+                              data: (usage) => CreditIndicator(
+                                credits: usage.balance,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  // Opções principais
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Builder(
-                      builder: (context) {
-                        final cards = <Widget>[
-                          if (moduleConfig.manualEdit)
-                            HeroActionCard(
-                              index: 0,
-                              icon: Icons.brush_outlined,
-                              accentColor: const Color(0xFF3B82F6),
-                              backgroundColor: const Color(0xFFEFF6FF),
-                              backgroundColorDark: const Color(0xFF1E3A8A),
-                              previewAsset: 'assets/home/home_preview_edit.png',
-                              title: 'Editar manualmente',
-                              description:
-                                  'Filtros, retoque beauty, presets e recorte — sem IA.',
-                              onTap: () => Navigator.of(context)
-                                  .pushNamed('/manual-editing-hub'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Text.rich(
+                            TextSpan(
+                              style: BrandVisual.title(
+                                size: 28,
+                                height: 1.2,
+                                color: isDark ? Colors.white : null,
+                              ),
+                              children: [
+                                const TextSpan(text: 'O que você quer fazer\n'),
+                                TextSpan(
+                                  text: 'com suas fotos?',
+                                  style: BrandVisual.title(
+                                    size: 28,
+                                    height: 1.2,
+                                    color: BrandVisual.blue,
+                                  ),
+                                ),
+                              ],
                             ),
-                          if (moduleConfig.aiEdit)
-                            HeroActionCard(
-                              index: 1,
-                              icon: Icons.landscape_rounded,
-                              accentColor: const Color(0xFF22C55E),
-                              backgroundColor: const Color(0xFFECFDF5),
-                              backgroundColorDark: const Color(0xFF14532D),
-                              previewAsset: 'assets/home/home_preview_edit.png',
-                              title: 'Editar com Inteligência Artificial',
-                              description:
-                                  'Faça montagens, troque o fundo, peça o que quiser…',
-                              onTap: () => Navigator.of(context)
-                                  .pushNamed('/edit-image'),
+                          ),
+                          Positioned(
+                            top: -4,
+                            right: 28,
+                            child: _Sparkle(
+                              size: 12,
+                              color: isDark ? Colors.white : BrandVisual.blue,
                             ),
-                          if (moduleConfig.textToImage)
-                            HeroActionCard(
-                              index: 2,
-                              icon: Icons.text_fields_rounded,
-                              accentColor: const Color(0xFF8B5CF6),
-                              backgroundColor: const Color(0xFFF5F3FF),
-                              backgroundColorDark: const Color(0xFF2E1065),
-                              previewAsset:
-                                  'assets/home/home_preview_text.png',
-                              title: 'Imagem à partir de Texto',
-                              description: 'Peça o que quer criar do zero.',
-                              onTap: () => Navigator.of(context)
-                                  .pushNamed('/text-to-image'),
+                          ),
+                          Positioned(
+                            top: 18,
+                            right: 4,
+                            child: _Sparkle(
+                              size: 8,
+                              color: isDark
+                                  ? BrandVisual.blue
+                                  : BrandVisual.blue.withValues(alpha: 0.7),
                             ),
-                          if (moduleConfig.multiImage)
-                            HeroActionCard(
-                              index: 3,
-                              icon: Icons.layers_rounded,
-                              accentColor: const Color(0xFFF59E0B),
-                              backgroundColor: const Color(0xFFFFFBEB),
-                              backgroundColorDark: const Color(0xFF78350F),
-                              previewAsset:
-                                  'assets/home/home_preview_compose.png',
-                              title: 'Unir várias Fotos',
-                              description:
-                                  'Combine vários elementos em uma única foto.',
-                              onTap: () => Navigator.of(context)
-                                  .pushNamed('/create-composition'),
-                            ),
-                          if (moduleConfig.removeBackground)
-                            HeroActionCard(
-                              index: 4,
-                              icon: Icons.grid_on_rounded,
-                              accentColor: const Color(0xFFEC4899),
-                              backgroundColor: const Color(0xFFFDF2F8),
-                              backgroundColorDark: const Color(0xFF831843),
-                              previewAsset: 'assets/home/home_preview_bg.png',
-                              title: 'Remover Fundo',
-                              description: 'Remova com precisão.',
-                              onTap: () => Navigator.of(context)
-                                  .pushNamed('/remove-background'),
-                            ),
-                        ];
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Opções principais
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Builder(
+                        builder: (context) {
+                          final cards = <Widget>[
+                            if (moduleConfig.manualEdit)
+                              HeroActionCard(
+                                index: 0,
+                                icon: Icons.back_hand_outlined,
+                                accentColor: BrandVisual.blue,
+                                backgroundColor: const Color(0xFFE7F3FF),
+                                backgroundColorDark: const Color(0xFF1E3A8A),
+                                previewAsset:
+                                    'assets/home/home_preview_edit.png',
+                                title: 'Editar sua foto manualmente',
+                                description:
+                                    'Melhore a aparência, ajuste cores, corte e muito mais.',
+                                onTap: () => Navigator.of(context)
+                                    .pushNamed('/manual-editing-hub'),
+                              ),
+                            if (moduleConfig.aiEdit)
+                              HeroActionCard(
+                                index: 1,
+                                icon: Icons.auto_awesome,
+                                accentColor: const Color(0xFF22C55E),
+                                backgroundColor: const Color(0xFFECFDF5),
+                                backgroundColorDark: const Color(0xFF14532D),
+                                previewAsset: 'assets/home/home_preview_ai.png',
+                                title: 'Editar com Inteligência Artificial',
+                                description:
+                                    'Faça montagens, troque o fundo, peça o que quiser.',
+                                onTap: () => Navigator.of(context)
+                                    .pushNamed('/edit-image'),
+                              ),
+                            if (moduleConfig.textToImage)
+                              HeroActionCard(
+                                index: 2,
+                                icon: Icons.text_fields_rounded,
+                                accentColor: const Color(0xFF8B5CF6),
+                                backgroundColor: const Color(0xFFF5F3FF),
+                                backgroundColorDark: const Color(0xFF2E1065),
+                                previewAsset:
+                                    'assets/home/home_preview_text.png',
+                                title: 'Criar imagem com texto',
+                                description:
+                                    'Escreva o que você imagina e o Editaí cria para você.',
+                                onTap: () => Navigator.of(context)
+                                    .pushNamed('/text-to-image'),
+                              ),
+                            if (moduleConfig.multiImage)
+                              HeroActionCard(
+                                index: 3,
+                                icon: Icons.layers_rounded,
+                                accentColor: const Color(0xFFF59E0B),
+                                backgroundColor: const Color(0xFFFFFBEB),
+                                backgroundColorDark: const Color(0xFF78350F),
+                                previewAsset:
+                                    'assets/home/home_preview_compose.png',
+                                title: 'Unir várias fotos',
+                                description:
+                                    'Combine vários elementos em uma única foto.',
+                                onTap: () => Navigator.of(context)
+                                    .pushNamed('/create-composition'),
+                              ),
+                            if (moduleConfig.removeBackground)
+                              HeroActionCard(
+                                index: 4,
+                                icon: Icons.grid_on_rounded,
+                                accentColor: const Color(0xFFEC4899),
+                                backgroundColor: const Color(0xFFFDF2F8),
+                                backgroundColorDark: const Color(0xFF831843),
+                                previewAsset: 'assets/home/home_preview_bg.png',
+                                title: 'Remover Fundo',
+                                description: 'Remova com precisão.',
+                                onTap: () => Navigator.of(context)
+                                    .pushNamed('/remove-background'),
+                              ),
+                          ];
 
-                        return Column(
-                          children: [
-                            for (var i = 0; i < cards.length; i++) ...[
-                              if (i > 0) const SizedBox(height: 12),
-                              cards[i],
+                          return Column(
+                            children: [
+                              for (var i = 0; i < cards.length; i++) ...[
+                                if (i > 0) const SizedBox(height: 12),
+                                cards[i],
+                              ],
                             ],
-                          ],
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                  // Recent Edits
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Edições Recentes',
-                          style: AppTextStyles.headingSmall.copyWith(
-                            color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pushNamed('/gallery');
-                          },
-                          child: Text(
-                            'Ver tudo',
-                            style: AppTextStyles.labelMedium.copyWith(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
+                    const SizedBox(height: 32),
+                    // Recent Edits
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Edições Recentes',
+                            style: BrandVisual.title(
+                              size: 20,
+                              color: isDark ? Colors.white : null,
                             ),
                           ),
-                        ),
-                      ],
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pushNamed('/gallery');
+                            },
+                            child: Text(
+                              'Ver tudo',
+                              style: BrandVisual.text(
+                                size: 14,
+                                weight: FontWeight.w600,
+                                color: BrandVisual.blue,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Recent Edits Grid
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: _buildRecentEditsGrid(context, isDark, recentEditsAsync),
-                  ),
-              const SizedBox(height: 32),
-            ],
+                    const SizedBox(height: 16),
+                    // Recent Edits Grid
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: _buildRecentEditsGrid(
+                          context, isDark, recentEditsAsync),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-        ),
+        ],
       ),
     );
   }
@@ -305,49 +336,89 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
       data: (recentEdits) {
         if (recentEdits.isEmpty) {
-      return Container(
-        height: 180,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isDark ? AppColors.borderDark : AppColors.border,
+          return Container(
+            height: 180,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isDark ? AppColors.borderDark : AppColors.border,
+              ),
+            ),
+            child: Text(
+              'Nenhuma edição recente',
+              style: AppTextStyles.bodySmall.copyWith(
+                color:
+                    isDark ? AppColors.textTertiary : AppColors.textSecondary,
+              ),
+            ),
+          );
+        }
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 1,
           ),
-        ),
-        child: Text(
-          'Nenhuma edição recente',
-          style: AppTextStyles.bodySmall.copyWith(
-            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-          ),
-        ),
-      );
-    }
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 1,
-      ),
-      itemCount: recentEdits.length,
-      itemBuilder: (context, index) {
-        final edit = recentEdits[index];
-        return _RecentEditCard(
-          edit: edit,
-          onTap: () {
-            Navigator.of(context).pushNamed(
-              '/edit-detail',
-              arguments: edit.id,
+          itemCount: recentEdits.length,
+          itemBuilder: (context, index) {
+            final edit = recentEdits[index];
+            return _RecentEditCard(
+              edit: edit,
+              onTap: () {
+                Navigator.of(context).pushNamed(
+                  '/edit-detail',
+                  arguments: edit.id,
+                );
+              },
             );
           },
         );
       },
     );
-      },
+  }
+}
+
+class _Sparkle extends StatelessWidget {
+  const _Sparkle({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _SparklePainter(color),
     );
+  }
+}
+
+class _SparklePainter extends CustomPainter {
+  const _SparklePainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    final center = Offset(size.width / 2, size.height / 2);
+    final path = Path()
+      ..moveTo(center.dx, 0)
+      ..quadraticBezierTo(center.dx, center.dy, size.width, center.dy)
+      ..quadraticBezierTo(center.dx, center.dy, center.dx, size.height)
+      ..quadraticBezierTo(center.dx, center.dy, 0, center.dy)
+      ..quadraticBezierTo(center.dx, center.dy, center.dx, 0);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SparklePainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }
 
@@ -411,8 +482,9 @@ class _OptionCard extends StatelessWidget {
                     Text(
                       label,
                       style: AppTextStyles.bodyLarge.copyWith(
-                        color:
-                            isDark ? AppColors.textLight : AppColors.textPrimary,
+                        color: isDark
+                            ? AppColors.textLight
+                            : AppColors.textPrimary,
                         fontWeight: FontWeight.bold,
                       ),
                       maxLines: 1,
@@ -458,7 +530,6 @@ class _RecentEditCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final url = edit.imageUrl;
 
     return GestureDetector(
@@ -467,7 +538,7 @@ class _RecentEditCard extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isDark ? AppColors.borderDark : AppColors.border,
+            color: AppColors.border,
             width: 1,
           ),
         ),
@@ -482,7 +553,7 @@ class _RecentEditCard extends StatelessWidget {
                       height: double.infinity,
                       fit: BoxFit.cover,
                       placeholder: (_, __) => Container(
-                        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                        color: AppColors.surfaceLight,
                         child: const Center(
                           child: SizedBox(
                             width: 24,
@@ -497,7 +568,7 @@ class _RecentEditCard extends StatelessWidget {
                       ),
                     )
                   : Container(
-                      color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                      color: AppColors.surfaceLight,
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -520,9 +591,7 @@ class _RecentEditCard extends StatelessWidget {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: AppTextStyles.bodySmall.copyWith(
-                                color: isDark
-                                    ? AppColors.textLight
-                                    : AppColors.textPrimary,
+                                color: AppColors.textPrimary,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),

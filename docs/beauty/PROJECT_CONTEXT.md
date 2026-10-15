@@ -1,7 +1,9 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-10-01 (corpo: Coxas no editor, plano pago)
+Última actualização: 2026-10-08 (o arrasto do slider usa a mesma cadeia que o frame assente)
+
+O slider de warp, no arrasto e ao soltar, pede a cadeia CPU (`applyFaceWarpChain`, depois `applyBodyWarpChain`). Não há um preview GPU enquanto o dedo está pousado: esse atalho mostrava outra foto e o efeito só aparecia ao soltar. `renderDragPreview` fica no controlador, fora do editor. O export usa a mesma cadeia. `ensureRgba` converte Display P3 para sRGB uma vez por foto. Resolução e Fields não mudam.
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.

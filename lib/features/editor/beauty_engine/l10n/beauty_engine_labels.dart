@@ -117,7 +117,7 @@ abstract final class BeautyEngineLabels {
   static const sectionBodyChest = 'Busto';
   static const sectionBodyNeckline = 'Pescoço';
 
-  static const beautyEditorTitle = 'Retoque beauty';
+  static const beautyEditorTitle = 'Retoques';
   static const beautyEditorEmptyHint =
       'Selecione uma foto e use os ajustes abaixo para afinar rosto, nariz, corpo e pele.';
   static const beautyEditorBodyEmptyHint =

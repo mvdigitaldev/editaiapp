@@ -300,3 +300,25 @@ frame.
 
 Medir em `flutter run --profile` num telemóvel: o JIT do `flutter test` não
 mostra o custo do insert nem do repaint.
+
+---
+
+# Quarta ronda — preview do arrasto na GPU (2026-10-07)
+
+Leonardo: num telemóvel com a memória cheia o dedo anda e a foto não. Baixar a
+resolução ficou de fora. O que prendia o gesto era percorrer os pixels em Dart
+e copiar a imagem de volta (`toByteData` / `readPixels`) em cada movimento.
+
+O atalho `renderDragPreview` (foto na GPU, uniform de amplitude) foi ligado
+ao editor e retirado em 2026-10-08. Enquanto o dedo estava no slider a foto
+era esse remap; ao soltar, `onChangeEnd` pedia a cadeia CPU. Eram duas
+imagens: o gesto «abria o preview» e o efeito só entrava ao levantar o dedo.
+O editor volta a pedir a cadeia em cada frame do slider. Soltar não pede
+outro frame. `renderDragPreview` permanece no controlador e nos testes; o
+export não o chama.
+
+A cor lavada vinha da descodificação: o JPEG de iPhone traz Display P3, o
+pacote `image` deitava o perfil fora e o preview mostrava os números como
+sRGB. `ensureRgba` converte para sRGB uma vez por foto, quando o perfil é
+Display P3. Sem perfil, ou já em sRGB, os pixels ficam como estavam. O tecto
+do preview (1080 / 720) não sobe.

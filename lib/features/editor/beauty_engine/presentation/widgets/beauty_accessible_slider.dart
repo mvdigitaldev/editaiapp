@@ -11,6 +11,7 @@ class BeautyAccessibleSlider extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChanged,
+    this.onChangeStart,
     this.onChangeEnd,
     this.min = 0,
     this.max = 1,
@@ -28,6 +29,9 @@ class BeautyAccessibleSlider extends StatelessWidget {
   final int? divisions;
   final bool enabled;
   final ValueChanged<double>? onChanged;
+
+  /// Dedo pousou: o arrasto começou.
+  final ValueChanged<double>? onChangeStart;
 
   /// Dedo levantado: o arrasto acabou.
   final ValueChanged<double>? onChangeEnd;
@@ -153,6 +157,7 @@ class BeautyAccessibleSlider extends StatelessWidget {
                         max: max,
                         divisions: divisions,
                         onChanged: enabled ? onChanged : null,
+                        onChangeStart: enabled ? onChangeStart : null,
                         onChangeEnd: enabled ? onChangeEnd : null,
                         semanticFormatterCallback: (raw) =>
                             '$label, ${_formatValue(raw)}',

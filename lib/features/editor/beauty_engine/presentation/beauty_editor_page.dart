@@ -11,6 +11,9 @@ import 'package:image_picker/image_picker.dart' as image_picker;
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/brand_visual.dart';
+import '../../../../core/widgets/brand_blue_wash.dart';
+import '../../../../core/widgets/photo_pick_card.dart';
 import '../../manual_editor/di/manual_editor_providers.dart';
 import '../../presentation/utils/edit_submission_helpers.dart';
 import '../body_reshape/brush/brush_warp_field_builder.dart';
@@ -85,6 +88,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   bool _processing = false;
   bool _saving = false;
   bool _showOriginal = false;
+  bool _compareHeld = false;
   bool _linkEyes = true;
   int? _lastApplyMs;
   String? _debugActiveToolKey;
@@ -143,6 +147,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   @override
   void dispose() {
     _bodyNoticeTimer?.cancel();
+    ref.read(beautyEngineControllerProvider).clearDragGpuPreview();
     _previewImage?.dispose();
     _viewerTransform.dispose();
     super.dispose();
@@ -151,6 +156,23 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   void _disposePreviewImage() {
     _previewImage?.dispose();
     _previewImage = null;
+  }
+
+  /// Troca a foto do ecrã e só liberta a anterior no frame seguinte.
+  /// Dispô-la dentro do setState rebenta o unmount no iOS e desloca a vista.
+  void _adoptPreviewImage(ui.Image image) {
+    final previous = _previewImage;
+    setState(() {
+      _previewImage = image;
+      if (!_compareHeld) {
+        _showOriginal = false;
+      }
+    });
+    if (previous != null && !identical(previous, image)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        previous.dispose();
+      });
+    }
   }
 
   Future<void> _loadInitialPreviewImage(ImageSource previewSource) async {
@@ -231,7 +253,9 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     final profile = _deviceProfile ??
         await ref.read(deviceCapabilityManagerProvider).resolve();
     _deviceProfile ??= profile;
-    ref.read(beautyEngineControllerProvider).deviceProfile = profile;
+    ref.read(beautyEngineControllerProvider)
+      ..deviceProfile = profile
+      ..clearDragGpuPreview();
 
     final previewMaxEdge = widget.bodyOnly
         ? AdaptivePreviewPolicy.maxEdgeForBodyWarpPreviewWithProfile(
@@ -261,6 +285,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       _cachedPersonMask = null;
       _landmarksReady = false;
       _lastApplyMs = null;
+      _compareHeld = false;
       _showOriginal = false;
       _params = BeautyAdjustmentsPanel.initialParams(linkEyes: _linkEyes);
       _brushHistory.clear();
@@ -368,6 +393,10 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     _schedulePreview();
   }
 
+  void _onParamChangeStart(String key, double value) {
+    ref.read(beautyEngineControllerProvider).clearDragGpuPreview();
+  }
+
   void _onParamChanged(String key, double value) {
     setState(() {
       _params[key] = value;
@@ -376,8 +405,8 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     _schedulePreview();
   }
 
-  /// Telemetria uma vez por gesto: um insert por frame disputava o isolate
-  /// com o próprio arrasto.
+  /// Telemetria uma vez por gesto. O frame do arrasto já é a cadeia; soltar
+  /// não pede outro, senão o efeito parecia só «aplicar» ao levantar o dedo.
   void _onParamChangeEnd(String key, double value) {
     unawaited(
       _sessionReporter.logEvent(
@@ -467,11 +496,13 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         index == _selectedFaceIndex) {
       return;
     }
+    final controller = ref.read(beautyEngineControllerProvider);
+    controller.clearDragGpuPreview();
     setState(() {
       _selectedFaceIndex = index;
       _cachedFace = _detectedFaces[index];
     });
-    ref.read(beautyEngineControllerProvider).invalidateRenderStageCache();
+    controller.invalidateRenderStageCache();
     unawaited(_reassessQualityForSelectedFace());
     _schedulePreview();
   }
@@ -492,6 +523,32 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  bool _warpSlidersActive(Map<String, double> params) {
+    for (final stage in BeautyEngineController.faceWarpChainStages) {
+      for (final key in stage.parameters) {
+        if ((params[key] ?? 0).abs() > 1e-6) {
+          return true;
+        }
+      }
+    }
+    return BodyWarpChain.hasActive(params);
+  }
+
+  bool _sameRgba(Uint8List a, Uint8List b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Map<String, double> _gatedParams(BeautyEngineController controller) {
@@ -626,14 +683,28 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       final controller = ref.read(beautyEngineControllerProvider);
       await _ensureLandmarks();
 
-      final gated = _gatedParams(controller);
+      final settled = _gatedParams(controller);
       final frame = await controller.renderPreview(
         source: _previewSource!,
-        pipeline: ProcessingPipeline(overrides: Map<String, double>.of(gated)),
+        pipeline:
+            ProcessingPipeline(overrides: Map<String, double>.of(settled)),
         face: _cachedFace,
         pose: _cachedPose,
         personMask: _cachedPersonMask,
       );
+
+      final preview = _previewSource!;
+      final expectedBytes = preview.width * preview.height * 4;
+      if (frame.bytes.length != expectedBytes ||
+          frame.width != preview.width ||
+          frame.height != preview.height) {
+        return;
+      }
+      if (_previewImage != null &&
+          _warpSlidersActive(settled) &&
+          _sameRgba(frame.bytes, preview.bytes)) {
+        return;
+      }
 
       final generation = ++_previewImageGeneration;
       final image = await PreviewImageDecoder.fromRgba(
@@ -670,14 +741,21 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         );
       }
 
+      _adoptPreviewImage(image);
       setState(() {
-        _previewImage?.dispose();
-        _previewImage = image;
         _lastApplyMs = profile.totalMs > 0
             ? profile.totalMs
             : stopwatch.elapsedMilliseconds;
         _lastBodyWarpPlan = controller.lastBodyWarpPlan;
-        _showOriginal = false;
+      });
+      // A sessão GPU só cai no frame seguinte. Dispô-la no mesmo frame em
+      // que a foto nova entra deixava a vista do iOS deslocada, com uma
+      // faixa preta na esquerda.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        ref.read(beautyEngineControllerProvider).clearDragGpuPreview();
       });
     } catch (error, stackTrace) {
       unawaited(_errorReporter.report(
@@ -1092,25 +1170,42 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       );
     }
 
+    final noImage = _previewImage == null && _imageBytes == null;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurface = isDark ? Colors.white : BrandVisual.navy;
+
     return Scaffold(
+      backgroundColor:
+          noImage ? (isDark ? BrandVisual.navy : Colors.white) : null,
+      extendBodyBehindAppBar: noImage,
       appBar: AppBar(
-        title: Text(
-          widget.bodyOnly
-              ? 'Ajustar corpo'
-              : BeautyEngineLabels.beautyEditorTitle,
-        ),
+        backgroundColor: noImage ? Colors.transparent : null,
+        surfaceTintColor: noImage ? Colors.transparent : null,
+        shadowColor: noImage ? Colors.transparent : null,
+        elevation: noImage ? 0 : null,
+        scrolledUnderElevation: noImage ? 0 : null,
+        forceMaterialTransparency: noImage,
+        foregroundColor: noImage ? onSurface : null,
+        title: noImage
+            ? null
+            : Text(
+                widget.bodyOnly
+                    ? 'Ajustar corpo'
+                    : BeautyEngineLabels.beautyEditorTitle,
+              ),
         actions: [
-          IconButton(
-            tooltip: 'Selecionar foto',
-            onPressed: _pickImage,
-            icon: const Icon(Icons.photo_library_outlined),
-          ),
-          if (_imageBytes != null)
+          if (_imageBytes != null) ...[
+            IconButton(
+              tooltip: 'Selecionar foto',
+              onPressed: _pickImage,
+              icon: const Icon(Icons.photo_library_outlined),
+            ),
             IconButton(
               tooltip: 'Salvar edição',
               onPressed: _processing ? null : _saveEdit,
               icon: const Icon(Icons.check_rounded),
             ),
+          ],
         ],
       ),
       body: Column(
@@ -1119,47 +1214,98 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (_previewImage == null && _imageBytes == null)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            widget.bodyOnly
-                                ? BeautyEngineLabels.beautyEditorBodyEmptyHint
-                                : BeautyEngineLabels.beautyEditorEmptyHint,
-                            textAlign: TextAlign.center,
-                          ),
-                          if (kDebugMode) ...[
-                            const SizedBox(height: 20),
-                            Text(
-                              widget.bodyOnly
-                                  ? 'Lab de corpo — fotos de teste'
-                                  : 'Device Lab V2 — fotos de teste',
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              alignment: WrapAlignment.center,
+                if (noImage) ...[
+                  Positioned.fill(child: BrandBlueWash(isDark: isDark)),
+                  Positioned.fill(
+                    child: SafeArea(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(
+                          24,
+                          kToolbarHeight,
+                          24,
+                          16,
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                for (final id in _labAssets.keys)
-                                  FilledButton(
-                                    onPressed: () =>
-                                        unawaited(_loadV2LabPhoto(id)),
-                                    child: Text('Lab $id'),
+                                Flexible(
+                                  child: Text(
+                                    widget.bodyOnly
+                                        ? 'Ajustar corpo'
+                                        : BeautyEngineLabels.beautyEditorTitle,
+                                    textAlign: TextAlign.center,
+                                    style: BrandVisual.title(
+                                      size: 30,
+                                      color: onSurface,
+                                    ),
                                   ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 6),
+                                  child: BrandSparkle(
+                                    size: 16,
+                                    color: BrandVisual.blue,
+                                  ),
+                                ),
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 16, left: 4),
+                                  child: BrandSparkle(
+                                    size: 11,
+                                    color: BrandVisual.blue,
+                                  ),
+                                ),
                               ],
                             ),
+                            const SizedBox(height: 12),
+                            Text(
+                              widget.bodyOnly
+                                  ? BeautyEngineLabels.beautyEditorBodyEmptyHint
+                                  : BeautyEngineLabels.beautyEditorEmptyHint,
+                              textAlign: TextAlign.center,
+                              style: BrandVisual.text(
+                                size: 15,
+                                color: onSurface.withValues(alpha: 0.62),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            PhotoPickCard(onTap: _pickImage),
+                            if (kDebugMode) ...[
+                              const SizedBox(height: 20),
+                              Text(
+                                widget.bodyOnly
+                                    ? 'Lab de corpo — fotos de teste'
+                                    : 'Device Lab V2 — fotos de teste',
+                                textAlign: TextAlign.center,
+                                style: BrandVisual.text(
+                                  size: 13,
+                                  color: onSurface.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                alignment: WrapAlignment.center,
+                                children: [
+                                  for (final id in _labAssets.keys)
+                                    FilledButton(
+                                      onPressed: () =>
+                                          unawaited(_loadV2LabPhoto(id)),
+                                      child: Text('Lab $id'),
+                                    ),
+                                ],
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
-                  )
-                else
+                  ),
+                ] else
                   Positioned.fill(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
@@ -1192,10 +1338,6 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                                         child: CircularProgressIndicator(),
                                       )
                                     : BeautyRgbaPreview(
-                                        key: ValueKey(
-                                          'preview_${_params.hashCode}_'
-                                          '${_brushHistory.strokes.length}',
-                                        ),
                                         image: _previewImage!,
                                         fit: BoxFit.fill,
                                       ),
@@ -1306,6 +1448,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                     child: _CompareHoldButton(
                       key: const ValueKey('compare_hold'),
                       onHold: (holding) {
+                        _compareHeld = holding;
                         if (_showOriginal != holding) {
                           setState(() => _showOriginal = holding);
                         }
@@ -1372,6 +1515,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                   ? null
                   : ref.watch(beautyEngineControllerProvider).lastToolGatePlan,
               onParamChanged: _onParamChanged,
+              onParamChangeStart: _onParamChangeStart,
               onParamChangeEnd: _onParamChangeEnd,
               onLinkEyesChanged: _onLinkEyesChanged,
               proToolsAllowed: widget.bodyOnly &&
@@ -1412,7 +1556,9 @@ class _BodyNotice extends StatelessWidget {
   }
 }
 
-/// Comparar sobre a foto, como no Meitu: segurar mostra a original.
+/// Comparar sobre a foto: o dedo em baixo mostra a original, soltar volta
+/// à editada. [Listener] não entra na arena de gestos, senão um movimento
+/// mínimo cancela o toque e a original some.
 class _CompareHoldButton extends StatelessWidget {
   const _CompareHoldButton({super.key, required this.onHold});
 
@@ -1423,12 +1569,11 @@ class _CompareHoldButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: 'Segure para ver a original',
-      child: GestureDetector(
+      child: Listener(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => onHold(true),
-        onTapUp: (_) => onHold(false),
-        onTapCancel: () => onHold(false),
-        onLongPressEnd: (_) => onHold(false),
+        onPointerDown: (_) => onHold(true),
+        onPointerUp: (_) => onHold(false),
+        onPointerCancel: (_) => onHold(false),
         child: Container(
           width: 36,
           height: 36,

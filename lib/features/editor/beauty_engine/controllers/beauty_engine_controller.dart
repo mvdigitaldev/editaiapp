@@ -16,6 +16,7 @@ import '../body_reshape/passes/anti_folding_pass.dart';
 import '../body_reshape/providers/body_vision_coordinator.dart';
 import '../body_reshape/providers/mediapipe_body_joint_mapper.dart';
 import '../body_reshape/providers/vision_capabilities.dart';
+import '../body_reshape/rendering/fragment_program_warp_backend.dart';
 import '../filters/body/body_filter_pipeline.dart';
 import '../filters/body/body_warp_chain.dart';
 import '../filters/color/color_filter_pipeline.dart';
@@ -40,6 +41,8 @@ import '../quality/face_quality_context.dart';
 import '../performance/landmark_throttle.dart';
 import '../performance/tiled_export_engine.dart';
 import '../pose/pose_detector.dart';
+import '../rendering/dense_displacement_pack.dart';
+import '../rendering/drag_gpu_preview.dart';
 import '../rendering/gpu_renderer_impl.dart';
 import '../rendering/render_stage_cache.dart';
 import '../rendering/render_target.dart';
@@ -130,6 +133,9 @@ class BeautyEngineController {
   final MattePreprocessor _mattePreprocessor = const MattePreprocessor();
 
   final RenderStageCache _renderStageCache = RenderStageCache();
+  DragGpuSession? _dragGpu;
+  int _dragGpuPaints = 0;
+  int _dragGpuEpoch = 0;
   final MaskFactory maskFactory = MaskFactory();
   final JawFieldRuntime _jawRuntime = JawFieldRuntime();
   final HeadFieldRuntime _headRuntime = HeadFieldRuntime();
@@ -338,6 +344,409 @@ class BeautyEngineController {
     );
   }
 
+  /// Preview do arrasto: a foto fica na GPU e o dedo só muda a amplitude.
+  ///
+  /// Devolve `null` para o caminho CPU de hoje (pele, cor, pincel, shader
+  /// indisponível, ou um slider que não é warp). O export não chama isto.
+  Future<Image?> renderDragPreview({
+    required ImageSource source,
+    required ProcessingPipeline pipeline,
+    required String dragKey,
+    FaceMeshResult? face,
+    PoseResult? pose,
+    PersonMask? personMask,
+  }) async {
+    final params = pipeline.effectiveParameters;
+    if (_dragGpuBlocked(pipeline, params)) {
+      return null;
+    }
+    final keys = _dragParameterKeys(dragKey);
+    if (keys.isEmpty) {
+      return null;
+    }
+    final backend = FragmentProgramWarpBackend.shared;
+    await backend.initialize();
+    if (!backend.isAvailable) {
+      return null;
+    }
+
+    final epoch = _dragGpuEpoch;
+    final rgba = ImageSourceRgba.ensureRgba(source);
+    final frozen = _dragFrozenSignature(params, keys);
+    final held = _dragGpu;
+    final same = held != null &&
+        held.dragKey == dragKey &&
+        held.width == rgba.width &&
+        held.height == rgba.height &&
+        identical(held.face, face) &&
+        identical(held.pose, pose) &&
+        identical(held.maskSource, personMask) &&
+        held.frozen == frozen;
+
+    if (!same) {
+      _dropDragSession();
+      final built = await _openDragSession(
+        rgba: rgba,
+        dragKey: dragKey,
+        params: params,
+        face: face,
+        pose: pose,
+        personMask: personMask,
+        frozen: frozen,
+        backend: backend,
+      );
+      if (built == null || _dragGpuEpoch != epoch) {
+        built?.dispose();
+        return null;
+      }
+      _dragGpu = built;
+    } else {
+      final live = held;
+      final scale = live.hasActiveLayer
+          ? dragUniformScale(live.activePacked, params, keys)
+          : null;
+      if (scale == null) {
+        final repacked = await _repackActiveDrag(
+          session: live,
+          dragKey: dragKey,
+          keys: keys,
+          params: params,
+          pose: pose,
+          personMask: personMask,
+          backend: backend,
+        );
+        if (!repacked) {
+          _dropDragSession();
+          final built = await _openDragSession(
+            rgba: rgba,
+            dragKey: dragKey,
+            params: params,
+            face: face,
+            pose: pose,
+            personMask: personMask,
+            frozen: frozen,
+            backend: backend,
+          );
+          if (built == null || _dragGpuEpoch != epoch) {
+            built?.dispose();
+            return null;
+          }
+          _dragGpu = built;
+        }
+      } else if (_dragGpuEpoch != epoch) {
+        return null;
+      } else {
+        live.setAmplitude(scale);
+      }
+    }
+
+    final painting = _dragGpu;
+    if (painting == null || _dragGpuEpoch != epoch) {
+      return null;
+    }
+    _dragGpuPaints++;
+    try {
+      final painted = await painting.paint(backend);
+      if (painted == null || _dragGpuEpoch != epoch) {
+        painted?.dispose();
+        _dropDragSession();
+        return null;
+      }
+      return painted;
+    } finally {
+      _dragGpuPaints--;
+      if (_dragGpuPaints == 0 && _dragGpuEpoch != epoch) {
+        _dropDragSession();
+      }
+    }
+  }
+
+  /// Soltar o dedo, trocar de foto, mudar de cara, ou sair do editor.
+  ///
+  /// Se um passe ainda está a desenhar, a sessão só cai quando ele acaba —
+  /// dispô-la a meio rebenta o shader.
+  void clearDragGpuPreview() {
+    _dragGpuEpoch++;
+    if (_dragGpuPaints > 0) {
+      return;
+    }
+    _dropDragSession();
+  }
+
+  void _dropDragSession() {
+    _dragGpu?.dispose();
+    _dragGpu = null;
+  }
+
+  bool _dragGpuBlocked(
+      ProcessingPipeline pipeline, Map<String, double> params) {
+    if (skinFilterPipeline.hasActiveSkin(params) ||
+        colorFilterPipeline.hasActiveColor(params)) {
+      return true;
+    }
+    if ((params['double_eyelid'] ?? 0) > 0) {
+      return true;
+    }
+    final lut = pipeline.preset?.lutAssetPath;
+    if (lut != null && lut.isNotEmpty) {
+      return true;
+    }
+    final brush = manualBrushField;
+    return brush != null && !brush.isIdentity;
+  }
+
+  List<String> _dragParameterKeys(String dragKey) {
+    for (final stage in faceWarpChainStages) {
+      if (stage.parameters.contains(dragKey)) {
+        return stage.parameters;
+      }
+    }
+    if (BodyWarpChain.parameterKeys.contains(dragKey)) {
+      return [dragKey];
+    }
+    return const [];
+  }
+
+  String _dragFrozenSignature(
+    Map<String, double> params,
+    List<String> activeKeys,
+  ) {
+    final skip = activeKeys.toSet();
+    final buffer = StringBuffer();
+    for (final stage in faceWarpChainStages) {
+      for (final name in stage.parameters) {
+        if (skip.contains(name)) {
+          continue;
+        }
+        buffer.write('$name=${params[name] ?? 0};');
+      }
+    }
+    for (final name in BodyWarpChain.parameterKeys) {
+      if (skip.contains(name)) {
+        continue;
+      }
+      buffer.write('$name=${params[name] ?? 0};');
+    }
+    buffer.write('lock=${params[BodyWarpChain.backgroundLockKey] ?? 0}');
+    return buffer.toString();
+  }
+
+  Future<DragGpuSession?> _openDragSession({
+    required ImageSource rgba,
+    required String dragKey,
+    required Map<String, double> params,
+    required FaceMeshResult? face,
+    required PoseResult? pose,
+    required PersonMask? personMask,
+    required String frozen,
+    required FragmentProgramWarpBackend backend,
+  }) async {
+    final width = rgba.width;
+    final height = rgba.height;
+    final imageSize = Size(width.toDouble(), height.toDouble());
+    final layers = <DragGpuLayer>[];
+    FaceMeshResult? entryFace;
+    int? entryStage;
+
+    if (face != null) {
+      var current = face;
+      for (var stage = 0; stage < faceWarpChainStages.length; stage++) {
+        final names = faceWarpChainStages[stage].parameters;
+        final ownsDrag = names.contains(dragKey);
+        if (ownsDrag) {
+          entryFace = current;
+          entryStage = stage;
+        }
+        final field = _buildFaceWarpStage(
+          stage: stage,
+          face: current,
+          imageSize: imageSize,
+          parameters: params,
+        );
+        if (field != null) {
+          layers.add(
+            await _packDragLayer(
+              field: field,
+              owner: ownsDrag ? dragKey : names.first,
+              params: params,
+              keys: names,
+              backend: backend,
+            ),
+          );
+        }
+        if (field != null && stage + 1 < faceWarpChainStages.length) {
+          current = _advectFace(
+            stage: stage,
+            from: current,
+            field: field,
+            imageSize: imageSize,
+            parameters: params,
+          );
+        }
+      }
+    }
+
+    if (pose != null && BodyWarpChain.hasActive(params)) {
+      final assembled = _assembleBodyFields(
+        pose: pose,
+        imageSize: imageSize,
+        personMask: personMask,
+        parameters: params,
+      );
+      for (var i = 0; i < assembled.fields.length; i++) {
+        final owner = assembled.owners[i];
+        layers.add(
+          await _packDragLayer(
+            field: assembled.fields[i],
+            owner: owner,
+            params: params,
+            keys: [owner],
+            backend: backend,
+          ),
+        );
+      }
+    }
+
+    if (layers.isEmpty) {
+      return null;
+    }
+
+    final sourceImage = await backend.imageFromRgba(rgba.bytes, width, height);
+    final mask = await backend.imageFromRgba(
+      Uint8List.fromList(const [255, 255, 255, 255]),
+      1,
+      1,
+    );
+    final influence = await backend.imageFromRgba(
+      Uint8List.fromList(const [255, 255, 255, 255]),
+      1,
+      1,
+    );
+    final protection = await backend.imageFromRgba(
+      Uint8List.fromList(const [0, 0, 0, 255]),
+      1,
+      1,
+    );
+    return DragGpuSession(
+      source: sourceImage,
+      mask: mask,
+      influence: influence,
+      protection: protection,
+      layers: layers,
+      dragKey: dragKey,
+      width: width,
+      height: height,
+      frozen: frozen,
+      face: face,
+      pose: pose,
+      maskSource: personMask,
+      activeEntryFace: entryFace,
+      activeFaceStage: entryStage,
+    );
+  }
+
+  Future<bool> _repackActiveDrag({
+    required DragGpuSession session,
+    required String dragKey,
+    required List<String> keys,
+    required Map<String, double> params,
+    required PoseResult? pose,
+    required PersonMask? personMask,
+    required FragmentProgramWarpBackend backend,
+  }) async {
+    final targets = [
+      for (final layer in session.layers)
+        if (layer.owner == dragKey) layer,
+    ];
+    if (targets.isEmpty) {
+      return false;
+    }
+    final imageSize = Size(session.width.toDouble(), session.height.toDouble());
+    final stage = session.activeFaceStage;
+    if (stage != null) {
+      final entry = session.activeEntryFace;
+      if (entry is! FaceMeshResult || targets.length != 1) {
+        return false;
+      }
+      final field = _buildFaceWarpStage(
+        stage: stage,
+        face: entry,
+        imageSize: imageSize,
+        parameters: params,
+      );
+      if (field == null) {
+        session.setAmplitude(0);
+        return true;
+      }
+      final packed = DenseDisplacementPack.pack(field);
+      final image = await backend.imageFromRgba(
+        packed.rgba,
+        field.width,
+        field.height,
+      );
+      targets.single.replace(
+        displacement: image,
+        scale: packed.scale,
+        packed: {for (final key in keys) key: params[key] ?? 0},
+      );
+      return true;
+    }
+
+    if (pose == null) {
+      return false;
+    }
+    final assembled = _assembleBodyFields(
+      pose: pose,
+      imageSize: imageSize,
+      personMask: personMask,
+      parameters: params,
+    );
+    final fields = <DisplacementField>[];
+    for (var i = 0; i < assembled.fields.length; i++) {
+      if (assembled.owners[i] == dragKey) {
+        fields.add(assembled.fields[i]);
+      }
+    }
+    if (fields.length != targets.length) {
+      return false;
+    }
+    for (var i = 0; i < fields.length; i++) {
+      final packed = DenseDisplacementPack.pack(fields[i]);
+      final image = await backend.imageFromRgba(
+        packed.rgba,
+        fields[i].width,
+        fields[i].height,
+      );
+      targets[i].replace(
+        displacement: image,
+        scale: packed.scale,
+        packed: {dragKey: params[dragKey] ?? 0},
+      );
+    }
+    return true;
+  }
+
+  Future<DragGpuLayer> _packDragLayer({
+    required DisplacementField field,
+    required String owner,
+    required Map<String, double> params,
+    required List<String> keys,
+    required FragmentProgramWarpBackend backend,
+  }) async {
+    final packed = DenseDisplacementPack.pack(field);
+    final image = await backend.imageFromRgba(
+      packed.rgba,
+      field.width,
+      field.height,
+    );
+    return DragGpuLayer(
+      displacement: image,
+      scale: packed.scale,
+      owner: owner,
+      packed: {for (final key in keys) key: params[key] ?? 0},
+    );
+  }
+
   /// Exporta JPEG; usa tiles automaticamente acima de 8MP (Sprint 25).
   Future<Uint8List> exportJpeg({
     required ImageSource source,
@@ -468,21 +877,15 @@ class BeautyEngineController {
   }
 
   /// Menu Corpo V2: um remap por Field, depois do rosto. Sem pose, identidade.
-  Uint8List applyBodyWarpChain({
-    required Uint8List sourceRgba,
-    required int width,
-    required int height,
-    required PoseResult? pose,
+  ({List<DisplacementField> fields, List<String> owners, double maxShift})
+      _assembleBodyFields({
+    required PoseResult pose,
+    required Size imageSize,
     required PersonMask? personMask,
     required Map<String, double> parameters,
   }) {
-    if (pose == null ||
-        !BodyWarpChain.hasActive(parameters) ||
-        sourceRgba.length != width * height * 4) {
-      return sourceRgba;
-    }
-    final imageSize = Size(width.toDouble(), height.toDouble());
     final fields = <DisplacementField>[];
+    final owners = <String>[];
     var maxShift = 0.0;
 
     final waist = BodyWaistField.build(
@@ -495,6 +898,7 @@ class BeautyEngineController {
     final waistGeometry = _bodyWaistRuntime.geometry;
     if (waist != null && waistGeometry != null) {
       fields.add(waist);
+      owners.add(BodyWarpChain.waistKey);
       maxShift = math.max(maxShift, BodyWaistField.maxEdgeShift(waistGeometry));
     }
 
@@ -509,6 +913,7 @@ class BeautyEngineController {
     final hipsGeometry = _bodyHipsRuntime.geometry;
     if (hips != null && hipsGeometry != null) {
       fields.add(hips);
+      owners.add(BodyWarpChain.hipsKey);
       maxShift = math.max(
         maxShift,
         BodyWaistField.maxEdgeShift(hipsGeometry, BodyTorsoBand.hips),
@@ -525,6 +930,7 @@ class BeautyEngineController {
     final legsGeometry = _bodyLegsRuntime.geometry;
     if (legs != null && legsGeometry != null) {
       fields.add(legs);
+      owners.add(BodyWarpChain.legsKey);
       maxShift = math.max(maxShift, BodyLegsField.maxEdgeShift(legsGeometry));
     }
 
@@ -539,6 +945,7 @@ class BeautyEngineController {
     final thighsGeometry = _bodyThighsRuntime.geometry;
     if (thighs != null && thighsGeometry != null) {
       fields.add(thighs);
+      owners.add(BodyWarpChain.thighsKey);
       maxShift = math.max(
         maxShift,
         BodyLegsField.maxEdgeShift(thighsGeometry, BodyLegBand.thighs),
@@ -556,6 +963,7 @@ class BeautyEngineController {
     final calvesGeometry = _bodyCalvesRuntime.geometry;
     if (calves != null && calvesGeometry != null) {
       fields.add(calves);
+      owners.add(BodyWarpChain.calvesKey);
       maxShift = math.max(
         maxShift,
         BodyLegsField.maxEdgeShift(calvesGeometry, BodyLegBand.calves),
@@ -572,6 +980,7 @@ class BeautyEngineController {
     final armsGeometry = _bodyArmsRuntime.geometry;
     if (arms != null && armsGeometry != null) {
       fields.add(arms);
+      owners.add(BodyWarpChain.armsKey);
       maxShift = math.max(maxShift, BodyArmsField.maxEdgeShift(armsGeometry));
     }
 
@@ -586,6 +995,7 @@ class BeautyEngineController {
     final chestWidthGeometry = _bodyChestWidthRuntime.geometry;
     if (chestWidth != null && chestWidthGeometry != null) {
       fields.add(chestWidth);
+      owners.add(BodyWarpChain.chestKey);
       maxShift = math.max(
         maxShift,
         BodyWaistField.maxEdgeShift(chestWidthGeometry, BodyTorsoBand.chest),
@@ -601,6 +1011,7 @@ class BeautyEngineController {
     final chestGeometry = _bodyChestRuntime.geometry;
     if (chest != null && chestGeometry != null) {
       fields.add(chest);
+      owners.add(BodyWarpChain.chestKey);
       maxShift = math.max(maxShift, BodyChestField.maxEdgeShift(chestGeometry));
     }
 
@@ -614,6 +1025,7 @@ class BeautyEngineController {
     final shouldersGeometry = _bodyShouldersRuntime.geometry;
     if (shoulders != null && shouldersGeometry != null) {
       fields.add(shoulders);
+      owners.add(BodyWarpChain.shouldersKey);
       maxShift = math.max(
         maxShift,
         BodyShouldersField.maxEdgeShift(shouldersGeometry),
@@ -629,8 +1041,35 @@ class BeautyEngineController {
     final neckGeometry = _bodyNeckRuntime.geometry;
     if (neck != null && neckGeometry != null) {
       fields.add(neck);
+      owners.add(BodyWarpChain.neckKey);
       maxShift = math.max(maxShift, BodyNeckField.maxEdgeShift(neckGeometry));
     }
+
+    return (fields: fields, owners: owners, maxShift: maxShift);
+  }
+
+  Uint8List applyBodyWarpChain({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required PoseResult? pose,
+    required PersonMask? personMask,
+    required Map<String, double> parameters,
+  }) {
+    if (pose == null ||
+        !BodyWarpChain.hasActive(parameters) ||
+        sourceRgba.length != width * height * 4) {
+      return sourceRgba;
+    }
+    final imageSize = Size(width.toDouble(), height.toDouble());
+    final assembled = _assembleBodyFields(
+      pose: pose,
+      imageSize: imageSize,
+      personMask: personMask,
+      parameters: parameters,
+    );
+    final fields = assembled.fields;
+    final maxShift = assembled.maxShift;
 
     if (fields.isEmpty) {
       return sourceRgba;
@@ -1130,6 +1569,14 @@ class BeautyEngineController {
     }
     gpuRenderer.release(texture);
     return pixels;
+  }
+
+  /// Só o frame em cache do preview. Não mexe em Fields, máscara nem gating.
+  void invalidatePreviewFrameCache() {
+    final gpu = gpuRenderer;
+    if (gpu is GpuRendererImpl) {
+      _renderStageCache.clear(gpu);
+    }
   }
 
   /// Limpa cache de estágio (ex.: ao trocar foto).

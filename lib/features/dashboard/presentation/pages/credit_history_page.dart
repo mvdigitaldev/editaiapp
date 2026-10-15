@@ -173,7 +173,7 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
                   ),
                   const Spacer(),
                   Text(
-                    'Historico de creditos',
+                    'Histórico de créditos',
                     style: AppTextStyles.headingMedium.copyWith(
                       color:
                           isDark ? AppColors.textLight : AppColors.textPrimary,

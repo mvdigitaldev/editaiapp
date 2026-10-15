@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../theme/brand_visual.dart';
 
 /// Card de ação principal (Home, hubs de navegação).
 class HeroActionCard extends StatelessWidget {
@@ -45,13 +46,16 @@ class HeroActionCard extends StatelessWidget {
       );
     }
 
-    final cardBg = isDark
-        ? Color.lerp(
-            backgroundColorDark ?? accent.withValues(alpha: 0.25),
-            Colors.black,
-            0.35,
-          )!
-        : (backgroundColor ?? accent.withValues(alpha: 0.08));
+    final tint =
+        isDark ? (backgroundColorDark ?? accent) : (backgroundColor ?? accent);
+    final cardBg = Color.alphaBlend(
+      tint.withValues(alpha: isDark ? 0.5 : 0.72),
+      isDark ? BrandVisual.navy : Colors.white,
+    );
+    final titleColor = isDark ? Colors.white : BrandVisual.navy;
+    final descriptionColor = isDark
+        ? Colors.white.withValues(alpha: 0.78)
+        : BrandVisual.navy.withValues(alpha: 0.72);
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
@@ -73,10 +77,22 @@ class HeroActionCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+            padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
             decoration: BoxDecoration(
               color: cardBg,
               borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: isDark
+                    ? accent.withValues(alpha: 0.45)
+                    : Colors.white.withValues(alpha: 0.9),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: accent.withValues(alpha: isDark ? 0.28 : 0.14),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
             child: Row(
               children: [
@@ -84,12 +100,14 @@ class HeroActionCard extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.12)
-                        : Colors.white,
+                    color: isDark ? accent : Colors.white,
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(icon, size: 24, color: accent),
+                  child: Icon(
+                    icon,
+                    size: 24,
+                    color: isDark ? Colors.white : accent,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -99,13 +117,10 @@ class HeroActionCard extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: AppTextStyles.labelLarge.copyWith(
-                          color: isDark
-                              ? AppColors.textLight
-                              : AppColors.textPrimary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
+                        style: BrandVisual.title(
+                          size: 16,
                           height: 1.25,
+                          color: titleColor,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -113,15 +128,13 @@ class HeroActionCard extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         description,
-                        style: AppTextStyles.labelLarge.copyWith(
-                          color: isDark
-                              ? AppColors.textTertiary
-                              : AppColors.textSecondary,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 15,
-                          height: 1.25,
+                        style: BrandVisual.text(
+                          size: 14,
+                          weight: FontWeight.w400,
+                          height: 1.3,
+                          color: descriptionColor,
                         ),
-                        maxLines: 2,
+                        maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],

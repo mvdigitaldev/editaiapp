@@ -6,12 +6,22 @@ import 'package:image/image.dart' as img;
 import 'seamless_blend_curve.dart';
 
 /// Configuração da colagem sem emenda.
+/// Deslocamento do enquadramento de uma foto no slot. 0 é o centro.
+/// -1 encosta no início da foto, 1 no fim.
+class SeamlessPhotoPan {
+  const SeamlessPhotoPan({this.x = 0, this.y = 0});
+
+  final double x;
+  final double y;
+}
+
 class SeamlessBlendConfig {
   const SeamlessBlendConfig({
     this.aspect = CollageAspectPreset.ratio16x9Portrait,
     this.fusionStrength = 0.5,
     this.maxEdge = 2048,
     this.jpegQuality = 92,
+    this.photoPans = const [],
   });
 
   final CollageAspectPreset aspect;
@@ -19,6 +29,9 @@ class SeamlessBlendConfig {
   /// Maior lado do canvas (export 2048, preview 720).
   final int maxEdge;
   final int jpegQuality;
+
+  /// Um valor por foto, na mesma ordem. Os que faltam ficam centrados.
+  final List<SeamlessPhotoPan> photoPans;
 
   /// Compat: aliases antigos.
   int get maxCrossAxis => maxEdge;
@@ -93,36 +106,28 @@ class SeamlessBlendEngine {
   }
 
   img.Image _blendVertical(List<img.Image> images, SeamlessBlendConfig config) {
-    final size = config.aspect.canvasSize(config.maxEdge);
-    final canvasW = size.width;
-    final canvasH = size.height;
     final n = images.length;
-
-    var overlap = SeamlessBlendCurve.overlapPixels(
-      axisLength: canvasH,
+    final layout = SeamlessSlotLayout.compute(
+      aspect: config.aspect,
       photoCount: n,
       fusionStrength: config.fusionStrength,
+      maxEdge: config.maxEdge,
     );
-    overlap = _applyMiddleBudget(
-      overlap: overlap,
-      photoCount: n,
-      slotHint: SeamlessBlendCurve.slotSpan(
-        axisLength: canvasH,
-        photoCount: n,
-        overlap: overlap,
-      ),
-      fusionStrength: config.fusionStrength,
-    );
-
-    final slotH = SeamlessBlendCurve.slotSpan(
-      axisLength: canvasH,
-      photoCount: n,
-      overlap: overlap,
-    );
-    final step = math.max(1, slotH - overlap);
+    final canvasW = layout.canvasWidth;
+    final canvasH = layout.canvasHeight;
+    final overlap = layout.overlap;
+    final slotH = layout.slotMain;
+    final step = layout.step;
 
     final slots = [
-      for (final image in images) _coverCrop(image, canvasW, slotH),
+      for (var i = 0; i < images.length; i++)
+        _coverCrop(
+          images[i],
+          canvasW,
+          slotH,
+          panX: _panAt(config, i).x,
+          panY: _panAt(config, i).y,
+        ),
     ];
 
     final canvas = img.Image(width: canvasW, height: canvasH);
@@ -159,36 +164,28 @@ class SeamlessBlendEngine {
   }
 
   img.Image _blendHorizontal(List<img.Image> images, SeamlessBlendConfig config) {
-    final size = config.aspect.canvasSize(config.maxEdge);
-    final canvasW = size.width;
-    final canvasH = size.height;
     final n = images.length;
-
-    var overlap = SeamlessBlendCurve.overlapPixels(
-      axisLength: canvasW,
+    final layout = SeamlessSlotLayout.compute(
+      aspect: config.aspect,
       photoCount: n,
       fusionStrength: config.fusionStrength,
+      maxEdge: config.maxEdge,
     );
-    overlap = _applyMiddleBudget(
-      overlap: overlap,
-      photoCount: n,
-      slotHint: SeamlessBlendCurve.slotSpan(
-        axisLength: canvasW,
-        photoCount: n,
-        overlap: overlap,
-      ),
-      fusionStrength: config.fusionStrength,
-    );
-
-    final slotW = SeamlessBlendCurve.slotSpan(
-      axisLength: canvasW,
-      photoCount: n,
-      overlap: overlap,
-    );
-    final step = math.max(1, slotW - overlap);
+    final canvasW = layout.canvasWidth;
+    final canvasH = layout.canvasHeight;
+    final overlap = layout.overlap;
+    final slotW = layout.slotMain;
+    final step = layout.step;
 
     final slots = [
-      for (final image in images) _coverCrop(image, slotW, canvasH),
+      for (var i = 0; i < images.length; i++)
+        _coverCrop(
+          images[i],
+          slotW,
+          canvasH,
+          panX: _panAt(config, i).x,
+          panY: _panAt(config, i).y,
+        ),
     ];
 
     final canvas = img.Image(width: canvasW, height: canvasH);
@@ -223,44 +220,44 @@ class SeamlessBlendEngine {
     return canvas;
   }
 
-  int _applyMiddleBudget({
-    required int overlap,
-    required int photoCount,
-    required int slotHint,
-    required double fusionStrength,
-  }) {
-    if (photoCount <= 2) return overlap;
-    final budget = (slotHint *
-            SeamlessBlendCurve.middlePhotoOverlapBudget(fusionStrength))
-        .round();
-    // Cada foto do meio participa de 2 emendas → limita overlap individual.
-    final maxEach = math.max(4, budget ~/ 2);
-    return math.min(overlap, maxEach);
+  SeamlessPhotoPan _panAt(SeamlessBlendConfig config, int index) {
+    if (index < 0 || index >= config.photoPans.length) {
+      return const SeamlessPhotoPan();
+    }
+    return config.photoPans[index];
   }
 
-  img.Image _coverCrop(img.Image source, int targetW, int targetH) {
+  img.Image _coverCrop(
+    img.Image source,
+    int targetW,
+    int targetH, {
+    double panX = 0,
+    double panY = 0,
+  }) {
     if (targetW <= 0 || targetH <= 0) {
       return img.Image(width: 1, height: 1);
     }
-    final scale = math.max(
-      targetW / source.width,
-      targetH / source.height,
+    final frame = SeamlessCoverFrame.measure(
+      sourceWidth: source.width.toDouble(),
+      sourceHeight: source.height.toDouble(),
+      slotWidth: targetW.toDouble(),
+      slotHeight: targetH.toDouble(),
     );
-    final newW = math.max(targetW, (source.width * scale).round());
-    final newH = math.max(targetH, (source.height * scale).round());
+    final newW = math.max(targetW, frame.scaledWidth.round());
+    final newH = math.max(targetH, frame.scaledHeight.round());
     final resized = img.copyResize(source, width: newW, height: newH);
-    final x = ((resized.width - targetW) / 2).round().clamp(
-          0,
-          math.max(0, resized.width - targetW),
-        );
-    final y = ((resized.height - targetH) / 2).round().clamp(
-          0,
-          math.max(0, resized.height - targetH),
-        );
+    final maxX = math.max(0, resized.width - targetW);
+    final maxY = math.max(0, resized.height - targetH);
+    final x = (maxX * (panX.clamp(-1.0, 1.0) + 1) / 2)
+        .round()
+        .clamp(0, maxX);
+    final y = (maxY * (panY.clamp(-1.0, 1.0) + 1) / 2)
+        .round()
+        .clamp(0, maxY);
     return img.copyCrop(
       resized,
-      x: x.toInt(),
-      y: y.toInt(),
+      x: x,
+      y: y,
       width: targetW,
       height: targetH,
     );

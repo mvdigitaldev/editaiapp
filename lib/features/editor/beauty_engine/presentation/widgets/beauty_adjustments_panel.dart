@@ -64,6 +64,7 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
     required this.enabled,
     required this.linkEyes,
     required this.onParamChanged,
+    this.onParamChangeStart,
     this.onParamChangeEnd,
     required this.onLinkEyesChanged,
     this.bodyWarpPlan,
@@ -92,6 +93,9 @@ class BeautyAdjustmentsPanel extends StatefulWidget {
   final bool enabled;
   final bool linkEyes;
   final void Function(String key, double value) onParamChanged;
+
+  /// Dedo pousou no slider de [key].
+  final void Function(String key, double value)? onParamChangeStart;
 
   /// Dedo levantado do slider de [key].
   final void Function(String key, double value)? onParamChangeEnd;
@@ -431,6 +435,10 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                               ? _onLipBandSliderChanged(activeKey, value)
                               : widget.onParamChanged(activeKey, value)
                       : null,
+                  onChangeStart: paramEnabled &&
+                          widget.onParamChangeStart != null
+                      ? (value) => widget.onParamChangeStart!(activeKey, value)
+                      : null,
                   onChangeEnd: paramEnabled && widget.onParamChangeEnd != null
                       ? (value) => widget.onParamChangeEnd!(activeKey, value)
                       : null,
@@ -525,11 +533,23 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
               ),
             SizedBox(
               height: 72,
-              child: Row(
-                children: [
-                  for (final def in _visibleCategories)
-                    Expanded(
-                      child: _CategoryNavItem(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final count = _visibleCategories.length;
+                  final visibleSlots = count > 6 ? 6 : count;
+                  final itemWidth = visibleSlots == 0
+                      ? constraints.maxWidth
+                      : constraints.maxWidth / visibleSlots;
+                  return ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    physics: count > 6
+                        ? const BouncingScrollPhysics()
+                        : const NeverScrollableScrollPhysics(),
+                    itemCount: count,
+                    itemExtent: itemWidth,
+                    itemBuilder: (context, index) {
+                      final def = _visibleCategories[index];
+                      return _CategoryNavItem(
                         icon: def.icon,
                         label: def.label,
                         selected: _category == def.category,
@@ -540,9 +560,10 @@ class _BeautyAdjustmentsPanelState extends State<BeautyAdjustmentsPanel> {
                             _selectedKey = null;
                           });
                         },
-                      ),
-                    ),
-                ],
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ],

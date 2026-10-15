@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
+import '../color/display_p3.dart';
 import 'image_source.dart';
 import '../performance/adaptive_preview_policy.dart';
 
@@ -21,6 +22,7 @@ abstract final class ImageSourceRgba {
     if (decoded == null) {
       throw StateError('image_decode_failed');
     }
+    DisplayP3.applyToSrgb(decoded);
 
     final rgba = Uint8List(decoded.width * decoded.height * 4);
     var offset = 0;
@@ -49,7 +51,8 @@ abstract final class ImageSourceRgba {
     bool highQuality = false,
   }) {
     final rgbaSource = ensureRgba(source);
-    final edgeLimit = maxEdge ?? AdaptivePreviewPolicy.maxEdgeForSource(rgbaSource);
+    final edgeLimit =
+        maxEdge ?? AdaptivePreviewPolicy.maxEdgeForSource(rgbaSource);
     final longest = rgbaSource.width > rgbaSource.height
         ? rgbaSource.width
         : rgbaSource.height;

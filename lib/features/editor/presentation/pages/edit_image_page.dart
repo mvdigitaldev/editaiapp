@@ -7,8 +7,8 @@ import 'package:uuid/uuid.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/utils/image_resize_utils.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/brand_visual.dart';
+import '../../../../core/widgets/brand_blue_wash.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/prompt_input_field.dart';
 import '../../../../core/widgets/upload_area.dart';
@@ -157,136 +157,127 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurface = isDark ? Colors.white : BrandVisual.navy;
 
     return PopScope(
       canPop: !_isLoading,
       child: Scaffold(
-        body: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
+        backgroundColor: isDark ? BrandVisual.navy : Colors.white,
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          forceMaterialTransparency: true,
+          foregroundColor: onSurface,
+          title: Text(
+            'Editar imagem',
+            style: BrandVisual.title(size: 18, color: onSurface),
+          ),
+        ),
+        body: Stack(
+          children: [
+            Positioned.fill(child: BrandBlueWash(isDark: isDark)),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.only(top: kToolbarHeight),
+                child: Column(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new),
-                      onPressed:
-                          _isLoading ? null : () => Navigator.of(context).pop(),
-                    ),
-                    const Spacer(),
-                    Text(
-                      'Editar imagem',
-                      style: AppTextStyles.headingMedium.copyWith(
-                        color: isDark
-                            ? AppColors.textLight
-                            : AppColors.textPrimary,
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            UploadArea(
+                              imagePath: _selectedImagePath,
+                              onImageSelected: (File file) {
+                                setState(() => _selectedImagePath = file.path);
+                              },
+                              title: 'Selecione uma imagem',
+                              subtitle: 'Toque para carregar',
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
+                              'Descreva o que gostaria de fazer:',
+                              style:
+                                  BrandVisual.title(size: 18, color: onSurface),
+                            ),
+                            const SizedBox(height: 8),
+                            PromptInputField(
+                              controller: _promptController,
+                              maxLines: 4,
+                              hintText:
+                                  'Por exemplo: troque o fundo da foto por uma paisagem com pôr do sol',
+                              micCaption: 'se preferir, peça por áudio',
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const Spacer(),
-                    const SizedBox(width: 48),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                      child: Consumer(
+                        builder: (context, ref, _) {
+                          final creditsAsync = ref.watch(creditsUsageProvider);
+                          final balance =
+                              creditsAsync.valueOrNull?.balance ?? 0;
+                          final isLoadingCredits = creditsAsync.isLoading;
+                          final hasEnoughCredits =
+                              isLoadingCredits || balance >= 7;
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: () async {
+                                  if (!hasEnoughCredits && !_isLoading) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Créditos insuficientes. Compre mais para continuar.'),
+                                      ),
+                                    );
+                                    Navigator.of(context)
+                                        .pushNamed('/credits-shop');
+                                  }
+                                },
+                                behavior: HitTestBehavior.opaque,
+                                child: AbsorbPointer(
+                                  absorbing: !hasEnoughCredits,
+                                  child: AppButton(
+                                    text: 'Gerar',
+                                    onPressed: hasEnoughCredits
+                                        ? _handleGenerate
+                                        : null,
+                                    icon: Icons.auto_awesome,
+                                    width: double.infinity,
+                                    isLoading: _isLoading,
+                                  ),
+                                ),
+                              ),
+                              if (!isLoadingCredits && balance < 7) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Você precisa de 7 créditos. Toque no botão para comprar.',
+                                  style: BrandVisual.text(
+                                    size: 13,
+                                    color: onSurface.withValues(alpha: 0.62),
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ],
+                          );
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      UploadArea(
-                        imagePath: _selectedImagePath,
-                        onImageSelected: (File file) {
-                          setState(() => _selectedImagePath = file.path);
-                        },
-                        title: 'Selecione uma imagem',
-                        subtitle: 'Toque para carregar',
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        'Descreva a edição',
-                        style: AppTextStyles.labelLarge.copyWith(
-                          color: isDark
-                              ? AppColors.textLight
-                              : AppColors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      PromptInputField(
-                        controller: _promptController,
-                        maxLines: 4,
-                        hintText: 'Ex: Deixe a iluminação mais quente',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.backgroundDark
-                      : AppColors.backgroundLight,
-                  border: Border(
-                    top: BorderSide(
-                      color: isDark ? AppColors.borderDark : AppColors.border,
-                    ),
-                  ),
-                ),
-                child: Consumer(
-                  builder: (context, ref, _) {
-                    final creditsAsync = ref.watch(creditsUsageProvider);
-                    final balance = creditsAsync.valueOrNull?.balance ?? 0;
-                    final isLoadingCredits = creditsAsync.isLoading;
-                    final hasEnoughCredits = isLoadingCredits || balance >= 7;
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        GestureDetector(
-                          onTap: () async {
-                            if (!hasEnoughCredits && !_isLoading) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                      'Créditos insuficientes. Compre mais para continuar.'),
-                                ),
-                              );
-                              Navigator.of(context).pushNamed('/credits-shop');
-                            }
-                          },
-                          behavior: HitTestBehavior.opaque,
-                          child: AbsorbPointer(
-                            absorbing: !hasEnoughCredits,
-                            child: AppButton(
-                              text: 'Gerar',
-                              onPressed:
-                                  hasEnoughCredits ? _handleGenerate : null,
-                              icon: Icons.auto_awesome,
-                              width: double.infinity,
-                              isLoading: _isLoading,
-                            ),
-                          ),
-                        ),
-                        if (!isLoadingCredits && balance < 7) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'Você precisa de 7 créditos. Toque no botão para comprar.',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              color: isDark
-                                  ? AppColors.textTertiary
-                                  : AppColors.textSecondary,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

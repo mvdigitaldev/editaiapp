@@ -12,6 +12,7 @@ uniform vec2 uImageSize;
 uniform vec2 uTileOrigin;
 uniform vec2 uTileSize;
 uniform vec2 uDisplacementScalePx;
+uniform float uAmplitude;
 uniform sampler2D uInputTexture;
 uniform sampler2D uDisplacementMap;
 uniform sampler2D uMaskMap;
@@ -39,7 +40,7 @@ void main() {
   }
 
   vec2 encoded = texture(uDisplacementMap, uv).rg;
-  vec2 dispPx = (encoded * 2.0 - 1.0) * uDisplacementScalePx;
+  vec2 dispPx = (encoded * 2.0 - 1.0) * uDisplacementScalePx * uAmplitude;
   vec2 pullPx = dispPx * effectiveMask;
   float maxPull = max(uImageSize.x, uImageSize.y) * 0.08;
   float pullLength = length(pullPx);

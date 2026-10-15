@@ -78,6 +78,62 @@ class FragmentProgramWarpBackend implements FragmentProgramBackend {
     }
   }
 
+  /// Remap para o ecrã. Não lê os pixels de volta.
+  ///
+  /// [amplitude] escala o deslocamento já codificado na textura. O arrasto
+  /// manda 1 na textura unitária e varia só este valor.
+  Future<ui.Image?> paintDisplacement({
+    required ui.Image source,
+    required ui.Image displacement,
+    required ui.Image mask,
+    required ui.Image influence,
+    required ui.Image protection,
+    required ui.Offset scale,
+    required double amplitude,
+  }) async {
+    await initialize();
+    if (!isAvailable || _program == null) {
+      return null;
+    }
+    final width = source.width;
+    final height = source.height;
+    if (width <= 0 || height <= 0) {
+      return null;
+    }
+    try {
+      final shader = _program!.fragmentShader();
+      shader.setFloat(0, width.toDouble());
+      shader.setFloat(1, height.toDouble());
+      shader.setFloat(2, 0);
+      shader.setFloat(3, 0);
+      shader.setFloat(4, width.toDouble());
+      shader.setFloat(5, height.toDouble());
+      shader.setFloat(6, scale.dx);
+      shader.setFloat(7, scale.dy);
+      shader.setFloat(8, amplitude);
+      shader.setImageSampler(0, source);
+      shader.setImageSampler(1, displacement);
+      shader.setImageSampler(2, mask);
+      shader.setImageSampler(3, influence);
+      shader.setImageSampler(4, protection);
+
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      canvas.drawRect(
+        ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+        ui.Paint()..shader = shader,
+      );
+      final picture = recorder.endRecording();
+      final output = await picture.toImage(width, height);
+      picture.dispose();
+      shader.dispose();
+      return output;
+    } catch (error) {
+      _lastError = error.toString();
+      return null;
+    }
+  }
+
   /// Aplica remap GPU. Retorna null se indisponível ou em falha (fallback CPU).
   Future<Uint8List?> apply({
     required Uint8List rgba,
@@ -177,6 +233,7 @@ class FragmentProgramWarpBackend implements FragmentProgramBackend {
       shader.setFloat(5, height.toDouble());
       shader.setFloat(6, displacement.displacementScalePx.dx);
       shader.setFloat(7, displacement.displacementScalePx.dy);
+      shader.setFloat(8, 1);
       shader.setImageSampler(0, sourceImage);
       shader.setImageSampler(1, displacementImage);
       shader.setImageSampler(2, maskImage);
@@ -221,6 +278,10 @@ class FragmentProgramWarpBackend implements FragmentProgramBackend {
     _program = null;
     _available = false;
     _initAttempted = false;
+  }
+
+  Future<ui.Image> imageFromRgba(Uint8List rgba, int width, int height) {
+    return _imageFromRgba(rgba, width, height);
   }
 
   static Future<ui.Image> _imageFromRgba(

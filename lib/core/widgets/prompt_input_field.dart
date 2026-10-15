@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../services/voice_prompt_service.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
+import '../theme/brand_visual.dart';
 import 'voice_recording_waveform.dart';
 
 /// Campo de prompt com botão de mic por voz.
@@ -29,6 +29,7 @@ class PromptInputField extends StatefulWidget {
     this.showBorderContainer = true,
     this.micInFooter = false,
     this.footerLeading,
+    this.micCaption,
   });
 
   final TextEditingController controller;
@@ -53,6 +54,9 @@ class PromptInputField extends StatefulWidget {
   /// Conteúdo à esquerda na barra de footer (junto ao mic).
   final Widget? footerLeading;
 
+  /// Texto curto ao lado do microfone, dentro do campo.
+  final String? micCaption;
+
   @override
   State<PromptInputField> createState() => _PromptInputFieldState();
 }
@@ -62,6 +66,7 @@ class _PromptInputFieldState extends State<PromptInputField>
   final VoicePromptService _voice = VoicePromptService();
 
   bool _listening = false;
+
   /// true quando a sessão atual foi iniciada por long-press (para ao soltar).
   bool _holdMode = false;
   String _baseText = '';
@@ -217,8 +222,7 @@ class _PromptInputFieldState extends State<PromptInputField>
 
   Widget _buildMicButton({required bool isDark}) {
     const activeColor = AppColors.error;
-    final idleColor =
-        isDark ? AppColors.textTertiary : AppColors.textSecondary;
+    final idleColor = isDark ? AppColors.textTertiary : AppColors.textSecondary;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -227,9 +231,7 @@ class _PromptInputFieldState extends State<PromptInputField>
       onLongPressEnd: (_) => _onHoldEnd(),
       onLongPressCancel: () => _onHoldEnd(),
       child: Tooltip(
-        message: _listening
-            ? 'Toque para parar'
-            : 'Toque ou segure para falar',
+        message: _listening ? 'Toque para parar' : 'Toque ou segure para falar',
         child: AnimatedBuilder(
           animation: _pulse,
           builder: (context, child) {
@@ -271,7 +273,8 @@ class _PromptInputFieldState extends State<PromptInputField>
               elapsed: _elapsed,
             ),
           ),
-          _buildMicButton(isDark: Theme.of(context).brightness == Brightness.dark),
+          _buildMicButton(
+              isDark: Theme.of(context).brightness == Brightness.dark),
         ],
       ),
     );
@@ -281,8 +284,10 @@ class _PromptInputFieldState extends State<PromptInputField>
     return InputDecoration(
       hintText: widget.hintText,
       hintStyle: widget.hintStyle ??
-          AppTextStyles.bodyLarge.copyWith(
-            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+          BrandVisual.text(
+            size: 16,
+            color: (isDark ? Colors.white : BrandVisual.navy)
+                .withValues(alpha: 0.45),
           ),
       border: InputBorder.none,
       contentPadding: widget.contentPadding,
@@ -293,8 +298,9 @@ class _PromptInputFieldState extends State<PromptInputField>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textStyle = widget.style ??
-        AppTextStyles.bodyLarge.copyWith(
-          color: isDark ? AppColors.textLight : AppColors.textPrimary,
+        BrandVisual.text(
+          size: 16,
+          color: isDark ? Colors.white : BrandVisual.navy,
         );
 
     final field = TextField(
@@ -357,13 +363,33 @@ class _PromptInputFieldState extends State<PromptInputField>
             Stack(
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 40),
+                  padding: EdgeInsets.only(
+                    bottom: widget.micCaption == null ? 40 : 48,
+                  ),
                   child: field,
                 ),
                 Positioned(
+                  left: 12,
                   right: 4,
-                  bottom: 4,
-                  child: mic,
+                  bottom: 0,
+                  child: Row(
+                    children: [
+                      if (widget.micCaption != null)
+                        Expanded(
+                          child: Text(
+                            widget.micCaption!,
+                            style: BrandVisual.text(
+                              size: 13,
+                              color: (isDark ? Colors.white : BrandVisual.navy)
+                                  .withValues(alpha: 0.55),
+                            ),
+                          ),
+                        )
+                      else
+                        const Spacer(),
+                      mic,
+                    ],
+                  ),
                 ),
               ],
             ),

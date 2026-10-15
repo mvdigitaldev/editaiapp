@@ -12,6 +12,7 @@ uniform sampler2D uDisplacementMap;
 uniform sampler2D uMaskMap;
 uniform vec2 uImageSize;
 uniform vec2 uGridSize;
+uniform float uAmplitude;
 
 void main() {
   float mask = texture(uMaskMap, vTexCoord).r;
@@ -21,7 +22,7 @@ void main() {
   }
 
   vec2 dispNorm = texture(uDisplacementMap, vTexCoord).rg;
-  vec2 dispPx = dispNorm * uImageSize;
+  vec2 dispPx = dispNorm * uImageSize * uAmplitude;
   // Liquify-style: scale displacement by mask — NEVER color-mix (avoids ghosting).
   vec2 srcCoord = vTexCoord + (dispPx * mask) / uImageSize;
   fragColor = texture(uInputTexture, srcCoord);

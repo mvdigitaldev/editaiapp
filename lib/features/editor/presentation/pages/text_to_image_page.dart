@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/brand_visual.dart';
+import '../../../../core/widgets/brand_blue_wash.dart';
 import '../../../../core/utils/aspect_ratio_utils.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/aspect_ratio_selector.dart';
@@ -31,7 +31,9 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
     final balance = ref.read(creditsUsageProvider).valueOrNull?.balance ?? 0;
     if (balance < 5) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+        const SnackBar(
+            content:
+                Text('Créditos insuficientes. Recarregue para continuar.')),
       );
       Navigator.of(context).pushNamed('/credits-shop');
       return;
@@ -61,7 +63,9 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
       if (response.statusCode == 402) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+          const SnackBar(
+              content:
+                  Text('Créditos insuficientes. Recarregue para continuar.')),
         );
         Navigator.of(context).pushNamed('/credits-shop');
         return;
@@ -78,7 +82,8 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Não foi possível iniciar a geração da imagem. Tente novamente.'),
+            content: Text(
+                'Não foi possível iniciar a geração da imagem. Tente novamente.'),
           ),
         );
         return;
@@ -107,20 +112,24 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
         final statusCode = e.response?.statusCode;
         if (statusCode == 402) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Créditos insuficientes. Recarregue para continuar.')),
+            const SnackBar(
+                content:
+                    Text('Créditos insuficientes. Recarregue para continuar.')),
           );
           Navigator.of(context).pushNamed('/credits-shop');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
+              content: Text(
+                  'Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
             ),
           );
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
+            content: Text(
+                'Erro ao comunicar com o servidor. Verifique sua conexão e tente novamente.'),
           ),
         );
       }
@@ -136,133 +145,135 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurface = isDark ? Colors.white : BrandVisual.navy;
 
     return PopScope(
       canPop: !_isLoading,
       child: Scaffold(
-        body: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new),
-                      onPressed:
-                          _isLoading ? null : () => Navigator.of(context).pop(),
-                    ),
-                  const Spacer(),
-                  Text(
-                    'Texto para imagem',
-                    style: AppTextStyles.headingMedium.copyWith(
-                      color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                    ),
-                  ),
-                  const Spacer(),
-                  const SizedBox(width: 48),
-                ],
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
+        backgroundColor: isDark ? BrandVisual.navy : Colors.white,
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          forceMaterialTransparency: true,
+          foregroundColor: onSurface,
+          title: Text(
+            'Texto para imagem',
+            style: BrandVisual.title(size: 18, color: onSurface),
+          ),
+        ),
+        body: Stack(
+          children: [
+            Positioned.fill(child: BrandBlueWash(isDark: isDark)),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.only(top: kToolbarHeight),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Descreva a imagem que deseja criar',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Descreva a imagem que deseja criar',
+                              style: BrandVisual.text(
+                                size: 15,
+                                color: onSurface.withValues(alpha: 0.62),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            PromptInputField(
+                              controller: _promptController,
+                              maxLines: 6,
+                              hintText:
+                                  'Ex: Um gato astronauta em Marte, estilo cartoon',
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
+                              'Proporção da imagem',
+                              style:
+                                  BrandVisual.title(size: 18, color: onSurface),
+                            ),
+                            const SizedBox(height: 12),
+                            AspectRatioSelector(
+                              selected: _selectedAspectRatio,
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedAspectRatio = value;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    PromptInputField(
-                      controller: _promptController,
-                      maxLines: 6,
-                      hintText: 'Ex: Um gato astronauta em Marte, estilo cartoon',
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Proporção da imagem',
-                      style: AppTextStyles.labelLarge.copyWith(
-                        color: isDark ? AppColors.textLight : AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                      child: Consumer(
+                        builder: (context, ref, _) {
+                          final creditsAsync = ref.watch(creditsUsageProvider);
+                          final balance =
+                              creditsAsync.valueOrNull?.balance ?? 0;
+                          final isLoadingCredits = creditsAsync.isLoading;
+                          final hasEnoughCredits =
+                              isLoadingCredits || balance >= 5;
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: () async {
+                                  if (!hasEnoughCredits && !_isLoading) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Créditos insuficientes. Compre mais para continuar.'),
+                                      ),
+                                    );
+                                    Navigator.of(context)
+                                        .pushNamed('/credits-shop');
+                                  }
+                                },
+                                behavior: HitTestBehavior.opaque,
+                                child: AbsorbPointer(
+                                  absorbing: !hasEnoughCredits,
+                                  child: AppButton(
+                                    text: 'Gerar',
+                                    onPressed: hasEnoughCredits
+                                        ? _handleGenerate
+                                        : null,
+                                    icon: Icons.auto_awesome,
+                                    isLoading: _isLoading,
+                                    width: double.infinity,
+                                  ),
+                                ),
+                              ),
+                              if (!isLoadingCredits && balance < 5) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Você precisa de 5 créditos. Toque no botão para comprar.',
+                                  style: BrandVisual.text(
+                                    size: 13,
+                                    color: onSurface.withValues(alpha: 0.62),
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ],
+                          );
+                        },
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    AspectRatioSelector(
-                      selected: _selectedAspectRatio,
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedAspectRatio = value;
-                        });
-                      },
                     ),
                   ],
                 ),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-                border: Border(
-                  top: BorderSide(
-                    color: isDark ? AppColors.borderDark : AppColors.border,
-                  ),
-                ),
-              ),
-              child: Consumer(
-                builder: (context, ref, _) {
-                  final creditsAsync = ref.watch(creditsUsageProvider);
-                  final balance = creditsAsync.valueOrNull?.balance ?? 0;
-                  final isLoadingCredits = creditsAsync.isLoading;
-                  final hasEnoughCredits = isLoadingCredits || balance >= 5;
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        onTap: () async {
-                          if (!hasEnoughCredits && !_isLoading) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Créditos insuficientes. Compre mais para continuar.'),
-                              ),
-                            );
-                            Navigator.of(context).pushNamed('/credits-shop');
-                          }
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        child: AbsorbPointer(
-                          absorbing: !hasEnoughCredits,
-                          child: AppButton(
-                            text: 'Gerar',
-                            onPressed: hasEnoughCredits ? _handleGenerate : null,
-                            icon: Icons.auto_awesome,
-                            isLoading: _isLoading,
-                            width: double.infinity,
-                          ),
-                        ),
-                      ),
-                      if (!isLoadingCredits && balance < 5) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Você precisa de 5 créditos. Toque no botão para comprar.',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: isDark ? AppColors.textTertiary : AppColors.textSecondary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ],
-                  );
-                },
-              ),
-            ),
           ],
         ),
-      ),
       ),
     );
   }

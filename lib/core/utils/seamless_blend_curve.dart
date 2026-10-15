@@ -126,6 +126,29 @@ class SeamlessBlendCurve {
     return (n - 1) / n;
   }
 
+  /// Overlap já com o tecto da foto do meio.
+  static int resolvedOverlap({
+    required int axisLength,
+    required int photoCount,
+    required double fusionStrength,
+  }) {
+    final overlap = overlapPixels(
+      axisLength: axisLength,
+      photoCount: photoCount,
+      fusionStrength: fusionStrength,
+    );
+    if (photoCount <= 2) return overlap;
+    final slotHint = slotSpan(
+      axisLength: axisLength,
+      photoCount: photoCount,
+      overlap: overlap,
+    );
+    final budget =
+        (slotHint * middlePhotoOverlapBudget(fusionStrength)).round();
+    final maxEach = math.max(4, budget ~/ 2);
+    return math.min(overlap, maxEach);
+  }
+
   /// Overlap em pixels ao longo do eixo de empilhamento.
   static int overlapPixels({
     required int axisLength,
@@ -202,5 +225,123 @@ class SeamlessColorBlend {
     final c = channel.clamp(0.0, 1.0);
     if (c <= 0.0031308) return c * 12.92 * 255.0;
     return (1.055 * math.pow(c, 1.0 / 2.4) - 0.055) * 255.0;
+  }
+}
+
+/// Geometria dos slots. A pré-visualização e o export usam a mesma conta.
+class SeamlessSlotLayout {
+  const SeamlessSlotLayout({
+    required this.canvasWidth,
+    required this.canvasHeight,
+    required this.horizontal,
+    required this.overlap,
+    required this.slotMain,
+    required this.step,
+    required this.photoCount,
+  });
+
+  final int canvasWidth;
+  final int canvasHeight;
+  final bool horizontal;
+  final int overlap;
+  final int slotMain;
+  final int step;
+  final int photoCount;
+
+  int get axisLength => horizontal ? canvasWidth : canvasHeight;
+
+  static SeamlessSlotLayout compute({
+    required CollageAspectPreset aspect,
+    required int photoCount,
+    required double fusionStrength,
+    int maxEdge = 1000,
+  }) {
+    final size = aspect.canvasSize(maxEdge);
+    final horizontal = aspect.isHorizontalStack;
+    final axis = horizontal ? size.width : size.height;
+    final overlap = SeamlessBlendCurve.resolvedOverlap(
+      axisLength: axis,
+      photoCount: photoCount,
+      fusionStrength: fusionStrength,
+    );
+    final slotMain = SeamlessBlendCurve.slotSpan(
+      axisLength: axis,
+      photoCount: photoCount,
+      overlap: overlap,
+    );
+    return SeamlessSlotLayout(
+      canvasWidth: size.width,
+      canvasHeight: size.height,
+      horizontal: horizontal,
+      overlap: overlap,
+      slotMain: slotMain,
+      step: math.max(1, slotMain - overlap),
+      photoCount: photoCount,
+    );
+  }
+}
+
+/// Enquadramento cover de uma foto no slot, com folga para arrastar.
+class SeamlessCoverFrame {
+  const SeamlessCoverFrame({
+    required this.scale,
+    required this.scaledWidth,
+    required this.scaledHeight,
+    required this.overflowX,
+    required this.overflowY,
+  });
+
+  /// Folga mínima numa das direcções, para a foto sempre poder mexer um pouco.
+  static const double minPanSlack = 0.12;
+
+  final double scale;
+  final double scaledWidth;
+  final double scaledHeight;
+  final double overflowX;
+  final double overflowY;
+
+  static SeamlessCoverFrame measure({
+    required double sourceWidth,
+    required double sourceHeight,
+    required double slotWidth,
+    required double slotHeight,
+  }) {
+    if (sourceWidth <= 0 ||
+        sourceHeight <= 0 ||
+        slotWidth <= 0 ||
+        slotHeight <= 0) {
+      return const SeamlessCoverFrame(
+        scale: 1,
+        scaledWidth: 1,
+        scaledHeight: 1,
+        overflowX: 0,
+        overflowY: 0,
+      );
+    }
+
+    var scale = math.max(slotWidth / sourceWidth, slotHeight / sourceHeight);
+    var scaledW = sourceWidth * scale;
+    var scaledH = sourceHeight * scale;
+    var overflowX = math.max(0.0, scaledW - slotWidth);
+    var overflowY = math.max(0.0, scaledH - slotHeight);
+    final tightX = overflowX < slotWidth * minPanSlack;
+    final tightY = overflowY < slotHeight * minPanSlack;
+    if (tightX && tightY) {
+      final kx = (slotWidth * (1 + minPanSlack)) / scaledW;
+      final ky = (slotHeight * (1 + minPanSlack)) / scaledH;
+      scale *= math.max(1.0, math.min(kx, ky));
+      scaledW = sourceWidth * scale;
+      scaledH = sourceHeight * scale;
+      overflowX = math.max(0.0, scaledW - slotWidth);
+      overflowY = math.max(0.0, scaledH - slotHeight);
+    }
+
+    return SeamlessCoverFrame(
+      scale: scale,
+      scaledWidth: scaledW,
+      scaledHeight: scaledH,
+      overflowX: overflowX,
+      overflowY: overflowY,
+    );
   }
 }

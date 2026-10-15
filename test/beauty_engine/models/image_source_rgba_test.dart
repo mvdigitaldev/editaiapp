@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:editaiapp/features/editor/beauty_engine/color/display_p3.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/image_source.dart';
 import 'package:editaiapp/features/editor/beauty_engine/models/image_source_rgba.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,6 +33,45 @@ void main() {
       expect(rgba.width, 4);
       expect(rgba.height, 3);
       expect(rgba.bytes[0], inInclusiveRange(115, 125));
+    });
+
+    test('JPEG sem perfil fica como a descodificação de hoje', () {
+      final image = img.Image(width: 2, height: 2);
+      image.setPixelRgb(0, 0, 200, 80, 40);
+      final jpeg = Uint8List.fromList(img.encodeJpg(image, quality: 100));
+      final rgba = ImageSourceRgba.ensureRgba(
+        ImageSource(bytes: jpeg, width: 2, height: 2),
+      );
+      final plain = img.decodeImage(jpeg)!;
+      expect(rgba.bytes[0], plain.getPixel(0, 0).r.toInt());
+      expect(rgba.bytes[1], plain.getPixel(0, 0).g.toInt());
+      expect(rgba.bytes[2], plain.getPixel(0, 0).b.toInt());
+    });
+
+    test('JPEG Display P3 muda os pixels para sRGB', () {
+      final image = img.Image(width: 2, height: 2);
+      image.setPixelRgb(0, 0, 200, 80, 40);
+      image.iccProfile = displayP3ProfileStub();
+      final jpeg = Uint8List.fromList(img.encodeJpg(image, quality: 100));
+      final rgba = ImageSourceRgba.ensureRgba(
+        ImageSource(bytes: jpeg, width: 2, height: 2),
+      );
+      final converted = DisplayP3.toSrgb(200 / 255, 80 / 255, 40 / 255);
+      expect(rgba.bytes[0],
+          inInclusiveRange(converted.$1.round() - 8, converted.$1.round() + 8));
+      expect((rgba.bytes[0] - 200).abs() > 4, isTrue);
+    });
+
+    test('perfil sRGB não converte', () {
+      final image = img.Image(width: 1, height: 1);
+      image.setPixelRgb(0, 0, 200, 80, 40);
+      image.iccProfile = img.IccProfile(
+        'ICC_PROFILE',
+        img.IccProfileCompression.none,
+        Uint8List.fromList('sRGB IEC61966-2.1'.codeUnits),
+      );
+      expect(DisplayP3.applyToSrgb(image), isFalse);
+      expect(image.getPixel(0, 0).r.toInt(), 200);
     });
 
     test('downscaleForPreview limits long edge to 1080', () {

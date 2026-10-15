@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
+import '../theme/brand_visual.dart';
 
 class AppButton extends StatelessWidget {
   final String text;
@@ -31,12 +31,12 @@ class AppButton extends StatelessWidget {
         child: ElevatedButton(
           onPressed: isLoading ? null : onPressed,
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: AppColors.textLight,
+            backgroundColor: BrandVisual.blue,
+            foregroundColor: Colors.white,
             elevation: isLoading ? 0 : 8,
-            shadowColor: AppColors.primary.withOpacity(0.3),
+            shadowColor: BrandVisual.blue.withValues(alpha: 0.3),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(28),
             ),
           ),
           child: isLoading
@@ -59,9 +59,10 @@ class AppButton extends StatelessWidget {
                         'Enviando…',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.labelLarge.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textLight,
+                        style: BrandVisual.text(
+                          size: 16,
+                          weight: FontWeight.w800,
+                          color: Colors.white,
                         ),
                       ),
                     ),
@@ -77,9 +78,10 @@ class AppButton extends StatelessWidget {
                     ],
                     Text(
                       text,
-                      style: AppTextStyles.labelLarge.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textLight,
+                      style: BrandVisual.text(
+                        size: 16,
+                        weight: FontWeight.w800,
+                        color: Colors.white,
                       ),
                     ),
                   ],
@@ -94,10 +96,10 @@ class AppButton extends StatelessWidget {
       child: OutlinedButton(
         onPressed: isLoading ? null : onPressed,
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.primary, width: 1.5),
+          foregroundColor: BrandVisual.blue,
+          side: const BorderSide(color: BrandVisual.blue, width: 1.5),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(28),
           ),
         ),
         child: isLoading
@@ -111,7 +113,7 @@ class AppButton extends StatelessWidget {
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       valueColor:
-                          AlwaysStoppedAnimation<Color>(AppColors.primary),
+                          AlwaysStoppedAnimation<Color>(BrandVisual.blue),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -120,9 +122,10 @@ class AppButton extends StatelessWidget {
                       'Enviando…',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.labelLarge.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                      style: BrandVisual.text(
+                        size: 16,
+                        weight: FontWeight.w800,
+                        color: BrandVisual.blue,
                       ),
                     ),
                   ),
@@ -138,9 +141,10 @@ class AppButton extends StatelessWidget {
                   ],
                   Text(
                     text,
-                    style: AppTextStyles.labelLarge.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                    style: BrandVisual.text(
+                      size: 16,
+                      weight: FontWeight.w800,
+                      color: BrandVisual.blue,
                     ),
                   ),
                 ],

@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/brand_visual.dart';
+import '../../../../core/widgets/brand_blue_wash.dart';
 import '../../../../core/utils/image_save_utils.dart';
 import '../../../../core/utils/seamless_blend_curve.dart';
 import '../../../../core/utils/seamless_blend_engine.dart';
@@ -24,26 +25,37 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
   static const _engine = SeamlessBlendEngine();
 
   List<String> _imagePaths = [];
+  List<SeamlessPhotoPan> _photoPans = [];
   CollageAspectPreset _aspect = CollageAspectPreset.ratio16x9Portrait;
   double _fusionStrength = 0.5;
   bool _isExporting = false;
-  int _collageRevision = 0;
 
   bool get _canExport =>
       _imagePaths.length >= SeamlessBlendEngine.minPhotos && !_isExporting;
 
-  String get _previewKey =>
-      '$_collageRevision|${_aspect.family}|${_aspect.orientation}|${_aspect.stackDirection}|${_imagePaths.join('\u0001')}';
+  List<SeamlessPhotoPan> get _alignedPans => [
+        for (var i = 0; i < _imagePaths.length; i++)
+          i < _photoPans.length ? _photoPans[i] : const SeamlessPhotoPan(),
+      ];
 
   SeamlessBlendConfig get _config => SeamlessBlendConfig(
         aspect: _aspect,
         fusionStrength: _fusionStrength,
+        photoPans: _alignedPans,
       );
 
   void _onImagesChanged(List<String> paths) {
+    final previous = <String, SeamlessPhotoPan>{};
+    for (var i = 0; i < _imagePaths.length; i++) {
+      previous[_imagePaths[i]] =
+          i < _photoPans.length ? _photoPans[i] : const SeamlessPhotoPan();
+    }
     setState(() {
       _imagePaths = List<String>.from(paths);
-      _collageRevision++;
+      _photoPans = [
+        for (final path in _imagePaths)
+          previous[path] ?? const SeamlessPhotoPan(),
+      ];
     });
   }
 
@@ -55,22 +67,32 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
     setState(() => _fusionStrength = value);
   }
 
+  void _onPhotoPanChanged(int index, SeamlessPhotoPan pan) {
+    final pans = _alignedPans;
+    if (index < 0 || index >= pans.length) return;
+    pans[index] = pan;
+    _photoPans = pans;
+  }
+
   void _onReorder(int oldIndex, int newIndex) {
     setState(() {
       if (newIndex > oldIndex) newIndex -= 1;
       final updated = List<String>.from(_imagePaths);
       final item = updated.removeAt(oldIndex);
       updated.insert(newIndex, item);
+      final pans = List<SeamlessPhotoPan>.from(_alignedPans);
+      final pan = pans.removeAt(oldIndex);
+      pans.insert(newIndex, pan);
       _imagePaths = updated;
-      _collageRevision++;
+      _photoPans = pans;
     });
   }
 
   void _removeAt(int index) {
     setState(() {
-      final updated = List<String>.from(_imagePaths)..removeAt(index);
-      _imagePaths = updated;
-      _collageRevision++;
+      final pans = List<SeamlessPhotoPan>.from(_alignedPans)..removeAt(index);
+      _imagePaths = List<String>.from(_imagePaths)..removeAt(index);
+      _photoPans = pans;
     });
   }
 
@@ -137,138 +159,149 @@ class _SeamlessCollagePageState extends State<SeamlessCollagePage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurface = isDark ? Colors.white : BrandVisual.navy;
     final horizontal = _aspect.isHorizontalStack;
 
     return Scaffold(
+      backgroundColor: isDark ? BrandVisual.navy : Colors.white,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Colagem sem emenda'),
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        forceMaterialTransparency: true,
+        foregroundColor: onSurface,
+        title: Text(
+          'Colagem sem emenda',
+          style: BrandVisual.title(size: 18, color: onSurface),
+        ),
       ),
       body: Stack(
         children: [
+          Positioned.fill(child: BrandBlueWash(isDark: isDark)),
           SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  flex: 11,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? AppColors.surfaceDark
-                            : AppColors.surfaceLight,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.primary.withOpacity(0.2),
+            child: Padding(
+              padding: const EdgeInsets.only(top: kToolbarHeight),
+              child: Column(
+                children: [
+                  Expanded(
+                    flex: 11,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.surfaceDark
+                              : AppColors.surfaceLight,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppColors.primary.withOpacity(0.2),
+                          ),
                         ),
-                      ),
-                      child: SeamlessCollagePreview(
-                        key: ValueKey(_previewKey),
-                        imagePaths: _imagePaths,
-                        aspect: _aspect,
-                        fusionStrength: _fusionStrength,
+                        child: SeamlessCollagePreview(
+                          imagePaths: _imagePaths,
+                          aspect: _aspect,
+                          fusionStrength: _fusionStrength,
+                          photoPans: _alignedPans,
+                          onPhotoPanChanged: _onPhotoPanChanged,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Expanded(
-                  flex: 13,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        MultiUploadArea(
-                          imagePaths: _imagePaths,
-                          onChanged: _onImagesChanged,
-                          maxCount: SeamlessBlendEngine.maxPhotos,
-                        ),
-                        if (_imagePaths.length >=
-                            SeamlessBlendEngine.minPhotos) ...[
+                  Expanded(
+                    flex: 13,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          MultiUploadArea(
+                            imagePaths: _imagePaths,
+                            onChanged: _onImagesChanged,
+                            maxCount: SeamlessBlendEngine.maxPhotos,
+                          ),
+                          if (_imagePaths.length >=
+                              SeamlessBlendEngine.minPhotos) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              'Ordem das fotos',
+                              style: BrandVisual.title(
+                                size: 16,
+                                color: onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            _PhotoOrderList(
+                              imagePaths: _imagePaths,
+                              horizontal: horizontal,
+                              onReorder: _onReorder,
+                              onRemove: _removeAt,
+                            ),
+                          ],
                           const SizedBox(height: 16),
                           Text(
-                            'Ordem das fotos',
-                            style: AppTextStyles.labelLarge.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: isDark
-                                  ? AppColors.textLight
-                                  : AppColors.textPrimary,
+                            'Proporção',
+                            style: BrandVisual.title(
+                              size: 16,
+                              color: onSurface,
                             ),
                           ),
                           const SizedBox(height: 8),
-                          _PhotoOrderList(
-                            imagePaths: _imagePaths,
-                            horizontal: horizontal,
-                            onReorder: _onReorder,
-                            onRemove: _removeAt,
+                          CollageAspectSelector(
+                            aspect: _aspect,
+                            onChanged: _onAspectChanged,
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Text(
+                                'Mesclagem',
+                                style: BrandVisual.title(
+                                  size: 16,
+                                  color: onSurface,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                _fusionStrength >= 0.98
+                                    ? 'Fusão máxima'
+                                    : '${(_fusionStrength * 100).round()}%',
+                                style: BrandVisual.text(
+                                  size: 14,
+                                  weight: FontWeight.w800,
+                                  color: BrandVisual.blue,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Slider(
+                            value: _fusionStrength,
+                            min: 0,
+                            max: 1,
+                            onChanged: _onFusionChanged,
+                          ),
+                          const SizedBox(height: 8),
+                          AppButton(
+                            text: 'Salvar na galeria',
+                            icon: Icons.save_alt,
+                            onPressed: _canExport ? _exportAndSave : null,
+                            isLoading: _isExporting,
+                          ),
+                          const SizedBox(height: 12),
+                          AppButton(
+                            text: 'Compartilhar',
+                            icon: Icons.share_outlined,
+                            isPrimary: false,
+                            onPressed: _canExport ? _exportAndShare : null,
                           ),
                         ],
-                        const SizedBox(height: 16),
-                        Text(
-                          'Proporção',
-                          style: AppTextStyles.labelLarge.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? AppColors.textLight
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        CollageAspectSelector(
-                          aspect: _aspect,
-                          onChanged: _onAspectChanged,
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Text(
-                              'Mesclagem',
-                              style: AppTextStyles.labelLarge.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: isDark
-                                    ? AppColors.textLight
-                                    : AppColors.textPrimary,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              _fusionStrength >= 0.98
-                                  ? 'Fusão máxima'
-                                  : '${(_fusionStrength * 100).round()}%',
-                              style: AppTextStyles.labelMedium.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Slider(
-                          value: _fusionStrength,
-                          min: 0,
-                          max: 1,
-                          divisions: 20,
-                          label: '${(_fusionStrength * 100).round()}%',
-                          onChanged: _onFusionChanged,
-                        ),
-                        const SizedBox(height: 8),
-                        AppButton(
-                          text: 'Salvar na galeria',
-                          icon: Icons.save_alt,
-                          onPressed: _canExport ? _exportAndSave : null,
-                          isLoading: _isExporting,
-                        ),
-                        const SizedBox(height: 12),
-                        AppButton(
-                          text: 'Compartilhar',
-                          icon: Icons.share_outlined,
-                          isPrimary: false,
-                          onPressed: _canExport ? _exportAndShare : null,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           if (_isExporting)

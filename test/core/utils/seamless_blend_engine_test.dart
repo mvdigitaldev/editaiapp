@@ -209,6 +209,43 @@ void main() {
       expect(mid.r + mid.b, greaterThan(100));
     });
 
+    test('pan desloca o recorte da foto', () async {
+      final wide = img.Image(width: 400, height: 80);
+      for (var y = 0; y < wide.height; y++) {
+        for (var x = 0; x < wide.width; x++) {
+          final leftHalf = x < wide.width / 2;
+          wide.setPixelRgb(x, y, leftHalf ? 255 : 0, 0, leftHalf ? 0 : 255);
+        }
+      }
+      final paths = [
+        await writeTemp(wide),
+        await writeTemp(solidImage(80, 80, 0, 255, 0)),
+      ];
+
+      Future<img.Image> blendAt(double panX) async {
+        final result = await engine.blend(
+          imagePaths: paths,
+          config: SeamlessBlendConfig(
+            aspect: CollageAspectPreset.square,
+            fusionStrength: 0.05,
+            maxEdge: 400,
+            photoPans: [
+              SeamlessPhotoPan(x: panX),
+              const SeamlessPhotoPan(),
+            ],
+          ),
+        );
+        return result.image;
+      }
+
+      final towardLeft = await blendAt(-1);
+      final towardRight = await blendAt(1);
+      final leftSample = towardLeft.getPixel(200, 20);
+      final rightSample = towardRight.getPixel(200, 20);
+      expect(leftSample.r, greaterThan(rightSample.r));
+      expect(rightSample.b, greaterThan(leftSample.b));
+    });
+
     test('fusionStrength alto aumenta overlap efetivo (slot maior)', () {
       const axis = 900;
       final lowO = SeamlessBlendCurve.overlapPixels(
