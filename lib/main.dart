@@ -17,6 +17,7 @@ import 'features/profile/data/datasources/app_settings_datasource.dart';
 import 'firebase_options.dart';
 import 'core/storage/local_storage.dart' as app_storage;
 import 'core/theme/app_theme.dart';
+import 'core/theme/brand_visual.dart';
 import 'core/theme/theme_mode_provider.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/pages/register_page.dart';
@@ -424,21 +425,24 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
         return const LoginPage();
       }
       return Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Colors.white,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(
-                color: Theme.of(context).colorScheme.primary,
+              Image.asset(
+                'assets/branding/logo_lockup.png',
+                height: 140,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(height: 28),
+              const CircularProgressIndicator(
+                color: BrandVisual.blue,
               ),
               const SizedBox(height: 16),
               Text(
                 'Carregando...',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontSize: 16,
-                ),
+                style: BrandVisual.text(size: 16, color: BrandVisual.navy),
               ),
             ],
           ),
