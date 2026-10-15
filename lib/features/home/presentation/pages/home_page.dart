@@ -39,6 +39,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       body: Stack(
         children: [
           BrandBlueWash(isDark: isDark),
+          const ProPlanHomeOfferHost(),
           SafeArea(
             child: RefreshIndicator(
               onRefresh: () async {
@@ -160,7 +161,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    const ProPlanHomeBanner(),
                     // Opções principais
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),

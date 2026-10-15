@@ -65,6 +65,7 @@ import 'features/models/presentation/pages/edit_model_guided_page.dart';
 import 'features/models/presentation/pages/models_by_category_page.dart';
 import 'features/models/presentation/pages/admin_categoria_form_page.dart';
 import 'features/models/presentation/pages/admin_modelo_form_page.dart';
+import 'features/admin/presentation/pages/admin_usage_page.dart';
 import 'features/support/presentation/pages/admin_support_ticket_list_page.dart';
 import 'features/support/presentation/pages/support_ticket_detail_page.dart';
 import 'features/support/presentation/pages/support_ticket_list_page.dart';
@@ -287,6 +288,7 @@ class MyApp extends ConsumerWidget {
         '/support-tickets/new': (context) => const SupportTicketNewPage(),
         '/admin/support-tickets': (context) =>
             const AdminSupportTicketListPage(),
+        '/admin/usage': (context) => const AdminUsagePage(),
         '/support-ticket': (context) {
           final args = ModalRoute.of(context)!.settings.arguments;
           String ticketId = '';

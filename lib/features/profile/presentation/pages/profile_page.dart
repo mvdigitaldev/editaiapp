@@ -552,6 +552,19 @@ class ProfilePage extends ConsumerWidget {
                                     .pushNamed('/admin/support-tickets');
                               },
                             ),
+                            Divider(
+                              height: 1,
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : AppColors.border,
+                            ),
+                            _ProfileOption(
+                              icon: Icons.insights_outlined,
+                              label: 'Uso',
+                              onTap: () {
+                                Navigator.of(context).pushNamed('/admin/usage');
+                              },
+                            ),
                           ],
                           Divider(
                             height: 1,

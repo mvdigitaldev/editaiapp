@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -147,6 +149,17 @@ void openProPlans(BuildContext context) {
   Navigator.of(context).pushNamed('/subscription');
 }
 
+Future<void> recordProBannerClick(ProBannerKind kind) async {
+  final userId = Supabase.instance.client.auth.currentUser?.id;
+  if (userId == null) return;
+  try {
+    await Supabase.instance.client.from('pro_banner_clicks').insert({
+      'user_id': userId,
+      'banner_kind': kind.name,
+    });
+  } catch (_) {}
+}
+
 /// Créditos de IA a zero. Fechar segue para a loja. O toque abre os planos.
 Future<void> showOutOfAiCreditsOffer(
   BuildContext context,
@@ -166,23 +179,14 @@ Future<void> showOutOfAiCreditsOffer(
   if (!context.mounted) return;
   final highlights = await ref.read(proBannerHighlightsProvider.future);
   if (!context.mounted) return;
-  final openPlans = await showDialog<bool>(
+  final openPlans = await showProBannerOverlay(
     context: context,
-    builder: (dialogContext) {
-      return Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        child: ProPlanBanner(
-          kind: ProBannerKind.offer,
-          highlights: highlights,
-          onTap: () => Navigator.of(dialogContext).pop(true),
-          onClose: () => Navigator.of(dialogContext).pop(false),
-        ),
-      );
-    },
+    kind: ProBannerKind.offer,
+    highlights: highlights,
   );
   if (!context.mounted) return;
-  if (openPlans == true) {
+  if (openPlans) {
+    unawaited(recordProBannerClick(ProBannerKind.offer));
     openProPlans(context);
   } else {
     await Navigator.of(context).pushNamed('/credits-shop');
@@ -202,33 +206,16 @@ Future<void> showExclusiveFeatureOffer(
     return;
   }
   if (!context.mounted) return;
-  return showModalBottomSheet<void>(
+  final highlights = await ref.read(proBannerHighlightsProvider.future);
+  if (!context.mounted) return;
+  final openPlans = await showProBannerOverlay(
     context: context,
-    backgroundColor: Colors.transparent,
-    builder: (sheetContext) {
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Consumer(
-            builder: (context, ref, _) {
-              final highlights =
-                  ref.watch(proBannerHighlightsProvider).valueOrNull ??
-                      ProBannerHighlights.fallback;
-              return ProPlanBanner(
-                kind: ProBannerKind.opportunity,
-                highlights: highlights,
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  openProPlans(context);
-                },
-                onClose: () => Navigator.of(sheetContext).pop(),
-              );
-            },
-          ),
-        ),
-      );
-    },
+    kind: ProBannerKind.opportunity,
+    highlights: highlights,
   );
+  if (!context.mounted || !openPlans) return;
+  unawaited(recordProBannerClick(ProBannerKind.opportunity));
+  openProPlans(context);
 }
 
 /// Banner principal na comparação, no lugar do anúncio, a cada N edições.
@@ -265,27 +252,18 @@ Future<bool> showPrincipalAfterManualEdit(
 
   final highlights = await ref.read(proBannerHighlightsProvider.future);
   if (!context.mounted) return false;
-  await showDialog<void>(
+  final openPlans = await showProBannerOverlay(
     context: context,
-    builder: (dialogContext) {
-      return Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: ProPlanBanner(
-          kind: ProBannerKind.principal,
-          highlights: highlights,
-          onTap: () {
-            Navigator.of(dialogContext).pop();
-            openProPlans(context);
-          },
-          onClose: () async {
-            await _silence(_dismissPrincipalKey);
-            if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-          },
-        ),
-      );
-    },
+    kind: ProBannerKind.principal,
+    highlights: highlights,
   );
+  if (!context.mounted) return true;
+  if (openPlans) {
+    unawaited(recordProBannerClick(ProBannerKind.principal));
+    openProPlans(context);
+  } else {
+    await _silence(_dismissPrincipalKey);
+  }
   return true;
 }
 
