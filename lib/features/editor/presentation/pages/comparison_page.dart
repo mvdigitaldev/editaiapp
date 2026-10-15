@@ -13,6 +13,7 @@ import '../../../../core/utils/image_save_utils.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../gallery/presentation/providers/gallery_provider.dart';
+import '../../../subscription/presentation/pro_plan_invite.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../subscription/presentation/providers/plan_limits_provider.dart';
 
@@ -51,9 +52,10 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
       _isLoadingEdit = true;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _maybeShowInterstitial();
       if (widget.editId != null && widget.editId!.isNotEmpty) {
         _fetchEdit();
+      } else {
+        _maybeShowInterstitial();
       }
     });
   }
@@ -76,12 +78,24 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
           _height = res['height'] as int?;
           _isLoadingEdit = false;
         });
+        await _maybeOfferManualPro(res['operation_type'] as String?);
       } else if (mounted) {
         setState(() => _isLoadingEdit = false);
+        _maybeShowInterstitial();
       }
     } catch (_) {
       if (mounted) setState(() => _isLoadingEdit = false);
+      _maybeShowInterstitial();
     }
+  }
+
+  Future<void> _maybeOfferManualPro(String? operationType) async {
+    if (operationType != 'manual_edit') {
+      _maybeShowInterstitial();
+      return;
+    }
+    final offered = await showPrincipalAfterManualEdit(context, ref);
+    if (!offered && mounted) _maybeShowInterstitial();
   }
 
   void _maybeShowInterstitial() {

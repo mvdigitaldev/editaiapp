@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../subscription/presentation/pro_plan_invite.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../../core/theme/brand_visual.dart';
 import '../../../../core/widgets/brand_blue_wash.dart';
@@ -30,12 +31,7 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
 
     final balance = ref.read(creditsUsageProvider).valueOrNull?.balance ?? 0;
     if (balance < 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content:
-                Text('Créditos insuficientes. Recarregue para continuar.')),
-      );
-      Navigator.of(context).pushNamed('/credits-shop');
+      await showOutOfAiCreditsOffer(context, ref);
       return;
     }
 
@@ -62,12 +58,7 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
 
       if (response.statusCode == 402) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content:
-                  Text('Créditos insuficientes. Recarregue para continuar.')),
-        );
-        Navigator.of(context).pushNamed('/credits-shop');
+        await showOutOfAiCreditsOffer(context, ref);
         return;
       }
 
@@ -111,12 +102,7 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
         if (statusCode == 402) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content:
-                    Text('Créditos insuficientes. Recarregue para continuar.')),
-          );
-          Navigator.of(context).pushNamed('/credits-shop');
+          await showOutOfAiCreditsOffer(context, ref);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -228,14 +214,7 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
                               GestureDetector(
                                 onTap: () async {
                                   if (!hasEnoughCredits && !_isLoading) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                            'Créditos insuficientes. Compre mais para continuar.'),
-                                      ),
-                                    );
-                                    Navigator.of(context)
-                                        .pushNamed('/credits-shop');
+                                    await showOutOfAiCreditsOffer(context, ref);
                                   }
                                 },
                                 behavior: HitTestBehavior.opaque,

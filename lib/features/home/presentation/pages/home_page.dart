@@ -13,6 +13,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../gallery/data/models/gallery_edit_model.dart';
 import '../../../gallery/presentation/providers/gallery_provider.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
+import '../../../subscription/presentation/widgets/pro_plan_banner.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -159,6 +160,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    const ProPlanHomeBanner(),
                     // Opções principais
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),

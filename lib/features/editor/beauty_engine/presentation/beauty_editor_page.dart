@@ -14,6 +14,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/brand_visual.dart';
 import '../../../../core/widgets/brand_blue_wash.dart';
 import '../../../../core/widgets/photo_pick_card.dart';
+import '../../../subscription/presentation/pro_plan_invite.dart';
 import '../../manual_editor/di/manual_editor_providers.dart';
 import '../../presentation/utils/edit_submission_helpers.dart';
 import '../body_reshape/brush/brush_warp_field_builder.dart';
@@ -563,10 +564,9 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     return controller.applyToolGating(params);
   }
 
-  void _showBackgroundLockPaywall() => _showPaidFeaturePaywall(
-        title: BodyReshapeLabels.backgroundLockPaywallTitle,
-        body: BodyReshapeLabels.backgroundLockPaywallBody,
-      );
+  void _showBackgroundLockPaywall() {
+    unawaited(showExclusiveFeatureOffer(context, ref));
+  }
 
   /// Ferramentas de corpo que a pose detectada não deixa usar. Antes da
   /// detecção acabar, nenhuma (o painel não pisca cinzento ao abrir).
@@ -602,45 +602,8 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     });
   }
 
-  void _showProToolPaywall(String key) => _showPaidFeaturePaywall(
-        title: BeautyEngineLabels.parameterLabel(key),
-        body: BodyReshapeLabels.proToolPaywallBody,
-      );
-
-  void _showPaidFeaturePaywall({required String title, required String body}) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: Theme.of(sheetContext).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(body),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () {
-                    Navigator.of(sheetContext).pop();
-                    Navigator.of(context).pushNamed('/subscription');
-                  },
-                  child: const Text(
-                    BodyReshapeLabels.backgroundLockPaywallAction,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  void _showProToolPaywall(String _) {
+    unawaited(showExclusiveFeatureOffer(context, ref));
   }
 
   Widget _labPhotoPanel() {

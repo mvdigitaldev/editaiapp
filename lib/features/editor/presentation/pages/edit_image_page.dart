@@ -12,6 +12,7 @@ import '../../../../core/widgets/brand_blue_wash.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/prompt_input_field.dart';
 import '../../../../core/widgets/upload_area.dart';
+import '../../../subscription/presentation/pro_plan_invite.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../utils/edit_submission_helpers.dart';
 
@@ -34,12 +35,7 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
     final creditsAsync = ref.read(creditsUsageProvider);
     final balance = creditsAsync.valueOrNull?.balance ?? 0;
     if (balance < 7) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content:
-                Text('Créditos insuficientes. Recarregue para continuar.')),
-      );
-      Navigator.of(context).pushNamed('/credits-shop');
+      await showOutOfAiCreditsOffer(context, ref);
       return;
     }
 
@@ -123,12 +119,7 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
         if (statusCode == 402) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content:
-                    Text('Créditos insuficientes. Recarregue para continuar.')),
-          );
-          Navigator.of(context).pushNamed('/credits-shop');
+          await showOutOfAiCreditsOffer(context, ref);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -233,14 +224,7 @@ class _EditImagePageState extends ConsumerState<EditImagePage> {
                               GestureDetector(
                                 onTap: () async {
                                   if (!hasEnoughCredits && !_isLoading) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                            'Créditos insuficientes. Compre mais para continuar.'),
-                                      ),
-                                    );
-                                    Navigator.of(context)
-                                        .pushNamed('/credits-shop');
+                                    await showOutOfAiCreditsOffer(context, ref);
                                   }
                                 },
                                 behavior: HitTestBehavior.opaque,
