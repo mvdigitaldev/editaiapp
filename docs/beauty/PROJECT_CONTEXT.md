@@ -1,9 +1,9 @@
 # PROJECT_CONTEXT — Facial Warp V2
 
 **Fonte oficial do estado do projeto.**  
-Última actualização: 2026-10-08 (o arrasto do slider usa a mesma cadeia que o frame assente)
+Última actualização: 2026-10-16 (a cadeia do preview interactivo corre fora da thread da UI)
 
-O slider de warp, no arrasto e ao soltar, pede a cadeia CPU (`applyFaceWarpChain`, depois `applyBodyWarpChain`). Não há um preview GPU enquanto o dedo está pousado: esse atalho mostrava outra foto e o efeito só aparecia ao soltar. `renderDragPreview` fica no controlador, fora do editor. O export usa a mesma cadeia. `ensureRgba` converte Display P3 para sRGB uma vez por foto. Resolução e Fields não mudam.
+O slider de warp, no arrasto e ao soltar, pede a cadeia CPU (`applyFaceWarpChain`, depois `applyBodyWarpChain`). No preview interactivo essa chamada sai da thread da UI (`WarpChainWorker`), com os mesmos métodos e os mesmos pixels; a foto, a cara, a pose e a máscara só voltam a ser enviadas quando mudam, e o RGBA das etapas que não mudaram fica no isolate. Não há um preview GPU enquanto o dedo está pousado: esse atalho mostrava outra foto e o efeito só aparecia ao soltar. `renderDragPreview` fica no controlador, fora do editor. O export usa a mesma cadeia, no isolate de quem chama. `ensureRgba` converte Display P3 para sRGB uma vez por foto. Resolução e Fields não mudam.
 
 Todo chat novo começa aqui. Segue **somente** o estado deste ficheiro.  
 Hipóteses antigas que não estejam neste documento **não existem**.
@@ -75,7 +75,7 @@ Pipeline viva no produto:
 RGBA → applyFaceWarpChain → applyBodyWarpChain → Body → Skin → Color
 ```
 
-`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → eye_height → eye_width → eye_length → eye_distance → nose_size → nose_lift → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → lip_plump → lip_smile → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Olheiras (`eye_puffy`) não entra nesta cadeia: clareia a pele no passe de pele. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
+`applyFaceWarpChain` percorre, nesta ordem, `head → hairline → eyebrow_height → eyebrow_width → eyebrow_end → eye_size → eye_height → eye_width → eye_length → eye_distance → nose_size → nose_lift → nose_ala → nose_bridge → lip_size → lip_width → lip_height → lip_angle → lip_plump → lip_smile → jaw → jaw_angle → chin → v_chin → v_shape → cheekbone`. Olheiras (`eye_puffy`) não entra nesta cadeia: clareia a pele no passe de pele. Etapa com slider em identidade é saltada. Preview (`_renderTexture`) e export (`TiledExportEngine`) usam o **mesmo** método, para não existirem duas ordens possíveis. No preview interactivo o método corre noutro isolate, para o slider não ficar à espera dos efeitos que já estão activos. As `applyXWarp` continuam públicas e inalteradas, para uso isolado e testes.
 
 Entre etapas os landmarks são **advectados** para a geometria já deformada (`warp/v2/landmark_advection.dart`). Sem isso o efeito a jusante recebia o RGBA deformado mas media a geometria da origem, e a crista caía 6–10 px fora da silhueta. Ver [`v2-composicao-cadeia.md`](./v2-composicao-cadeia.md).
 

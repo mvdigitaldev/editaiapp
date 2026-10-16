@@ -93,6 +93,7 @@ import '../warp/v2/displacement_field.dart';
 import '../warp/v2/landmark_advection.dart';
 import '../warp/v2/v_chin/v_chin_field.dart';
 import '../warp/v2/v_shape/v_shape_field.dart';
+import '../warp/v2/warp_chain_worker.dart';
 
 /// Orquestrador do Beauty Engine — ponto unico para a UI (sem Widget).
 class BeautyEngineController {
@@ -3210,6 +3211,57 @@ class BeautyEngineController {
     return advected;
   }
 
+  /// No preview a cadeia corre noutro isolate, com o mesmo código. Se o isolate
+  /// não arrancar, volta ao caminho da thread da UI para o frame não falhar.
+  Future<Uint8List> _previewWarpRgba({
+    required Uint8List sourceRgba,
+    required int width,
+    required int height,
+    required FaceMeshResult? face,
+    required PoseResult? pose,
+    required PersonMask? personMask,
+    required Map<String, double> parameters,
+    required bool interactivePreview,
+  }) async {
+    Uint8List locally() {
+      final faceRgba = applyFaceWarpChain(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        face: face,
+        parameters: parameters,
+      );
+      return applyBodyWarpChain(
+        sourceRgba: faceRgba,
+        width: width,
+        height: height,
+        pose: pose,
+        personMask: personMask,
+        parameters: parameters,
+      );
+    }
+
+    if (!interactivePreview || WarpChainWorker.instance.isDisabled) {
+      return locally();
+    }
+    try {
+      return await WarpChainWorker.instance.apply(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        face: face,
+        pose: pose,
+        personMask: personMask,
+        parameters: parameters,
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('warp-chain worker: $error');
+      }
+      return locally();
+    }
+  }
+
   Future<TextureHandle> _renderTexture({
     required ImageSource source,
     required ProcessingPipeline pipeline,
@@ -3263,20 +3315,15 @@ class BeautyEngineController {
       return output;
     }
 
-    final faceRgba = applyFaceWarpChain(
+    final cheekRgba = await _previewWarpRgba(
       sourceRgba: rgbaSource.bytes,
       width: rgbaSource.width,
       height: rgbaSource.height,
       face: face,
-      parameters: params,
-    );
-    final cheekRgba = applyBodyWarpChain(
-      sourceRgba: faceRgba,
-      width: rgbaSource.width,
-      height: rgbaSource.height,
       pose: pose,
       personMask: personMask,
       parameters: params,
+      interactivePreview: interactivePreview,
     );
 
     final texture = await gpuRenderer.upload(
