@@ -1075,40 +1075,93 @@ class BeautyEngineController {
       return sourceRgba;
     }
 
-    final prepared =
-        BodyWarpChain.backgroundLockRequested(parameters) && personMask != null
-            ? BodyBackgroundLock.prepare(
-                sourceRgba: sourceRgba,
-                width: width,
-                height: height,
-                mask: personMask,
-                fields: fields,
-                bandPx: maxShift.ceil() + 6,
-                runtime: _bodyBackgroundLockRuntime,
-              )
-            : null;
+    final lock = BodyWarpChain.backgroundLockRequested(parameters) &&
+        personMask != null;
+    if (lock) {
+      _clearBodyChainCache();
+      final prepared = BodyBackgroundLock.prepare(
+        sourceRgba: sourceRgba,
+        width: width,
+        height: height,
+        mask: personMask,
+        fields: fields,
+        bandPx: maxShift.ceil() + 6,
+        runtime: _bodyBackgroundLockRuntime,
+      );
+      var rgba = prepared == null
+          ? sourceRgba
+          : BodyBackgroundLock.packAlpha(sourceRgba, prepared);
+      for (final f in fields) {
+        rgba = v2.BackwardBilinearWarp.apply(
+          v2.WarpRequest(
+            sourceRgba: rgba,
+            width: width,
+            height: height,
+            field: f,
+          ),
+        ).rgba;
+      }
+      if (prepared == null) {
+        return rgba;
+      }
+      return BodyBackgroundLock.composite(
+        warpedRgba: rgba,
+        prepared: prepared,
+        fields: fields,
+      );
+    }
 
-    var rgba = prepared == null
-        ? sourceRgba
-        : BodyBackgroundLock.packAlpha(sourceRgba, prepared);
-    for (final f in fields) {
+    final cacheHit = identical(_bodyChainSource, sourceRgba) &&
+        identical(_bodyChainPose, pose) &&
+        identical(_bodyChainMask, personMask) &&
+        _bodyChainWidth == width &&
+        _bodyChainHeight == height;
+    if (!cacheHit) {
+      _clearBodyChainCache();
+      _bodyChainSource = sourceRgba;
+      _bodyChainPose = pose;
+      _bodyChainMask = personMask;
+      _bodyChainWidth = width;
+      _bodyChainHeight = height;
+    }
+
+    var rgba = sourceRgba;
+    var start = 0;
+    if (cacheHit) {
+      final limit = math.min(_bodyChainSnapshots.length, fields.length);
+      for (var i = 0; i < limit; i++) {
+        final signature = _bodyFieldPrefixSignature(
+          assembled.owners,
+          parameters,
+          i,
+        );
+        if (_bodyChainSnapshots[i].signature != signature) {
+          break;
+        }
+        rgba = _bodyChainSnapshots[i].rgba;
+        start = i + 1;
+      }
+    }
+    if (_bodyChainSnapshots.length > start) {
+      _bodyChainSnapshots.removeRange(start, _bodyChainSnapshots.length);
+    }
+    for (var i = start; i < fields.length; i++) {
       rgba = v2.BackwardBilinearWarp.apply(
         v2.WarpRequest(
           sourceRgba: rgba,
           width: width,
           height: height,
-          field: f,
+          field: fields[i],
         ),
       ).rgba;
+      _bodyChainSnapshots.add(
+        _BodyChainSnapshot(
+          signature: _bodyFieldPrefixSignature(assembled.owners, parameters, i),
+          rgba: rgba,
+        ),
+      );
     }
-    if (prepared == null) {
-      return rgba;
-    }
-    return BodyBackgroundLock.composite(
-      warpedRgba: rgba,
-      prepared: prepared,
-      fields: fields,
-    );
+    return rgba;
   }
 
   bool _shouldDetectFaceParts(Map<String, double> parameters) {
@@ -1585,6 +1638,8 @@ class BeautyEngineController {
     if (gpu is GpuRendererImpl) {
       _renderStageCache.clear(gpu);
     }
+    _clearFaceChainCache();
+    _clearBodyChainCache();
     maskFactory.clearCache();
     lastQualityContext = null;
     lastToolGatePlan = null;
@@ -2696,6 +2751,23 @@ class BeautyEngineController {
   final List<String?> _advectionKey =
       List.filled(faceWarpChainStages.length, null);
 
+  /// RGBA já remapeado até cada etapa. Identidade partilha o buffer anterior;
+  /// só uma etapa com campo novo aloca. O slider seguinte recomeça na primeira
+  /// assinatura que mudou, sem refazer os remaps de trás.
+  final List<_FaceChainSnapshot?> _faceChainSnapshots =
+      List.filled(faceWarpChainStages.length, null);
+  Uint8List? _faceChainSource;
+  FaceMeshResult? _faceChainFace;
+  int _faceChainWidth = 0;
+  int _faceChainHeight = 0;
+
+  final List<_BodyChainSnapshot> _bodyChainSnapshots = [];
+  Uint8List? _bodyChainSource;
+  PoseResult? _bodyChainPose;
+  PersonMask? _bodyChainMask;
+  int _bodyChainWidth = 0;
+  int _bodyChainHeight = 0;
+
   /// Cadeia facial única: cada efeito constrói o seu campo sobre os landmarks já
   /// deslocados pelos anteriores e aplica um remap.
   ///
@@ -2707,6 +2779,48 @@ class BeautyEngineController {
   /// Não soma campos. A soma alinharia a geometria com uma única reamostragem,
   /// mas com os seis efeitos no extremo o campo resultante inverte
   /// (`minDetJ ≈ −0,7`); encadear remaps injectivos preserva a garantia.
+  void _clearFaceChainCache() {
+    for (var i = 0; i < _faceChainSnapshots.length; i++) {
+      _faceChainSnapshots[i] = null;
+    }
+    _faceChainSource = null;
+    _faceChainFace = null;
+    _faceChainWidth = 0;
+    _faceChainHeight = 0;
+  }
+
+  void _clearBodyChainCache() {
+    _bodyChainSnapshots.clear();
+    _bodyChainSource = null;
+    _bodyChainPose = null;
+    _bodyChainMask = null;
+    _bodyChainWidth = 0;
+    _bodyChainHeight = 0;
+  }
+
+  String _faceStageSignature(int stage, Map<String, double> parameters) {
+    final key = StringBuffer();
+    for (var i = 0; i <= stage; i++) {
+      for (final name in faceWarpChainStages[i].parameters) {
+        key.write(';$name=${parameters[name] ?? 0}');
+      }
+    }
+    return key.toString();
+  }
+
+  String _bodyFieldPrefixSignature(
+    List<String> owners,
+    Map<String, double> parameters,
+    int inclusiveIndex,
+  ) {
+    final key = StringBuffer();
+    for (var i = 0; i <= inclusiveIndex; i++) {
+      final name = owners[i];
+      key.write(';$i:$name=${parameters[name] ?? 0}');
+    }
+    return key.toString();
+  }
+
   Uint8List applyFaceWarpChain({
     required Uint8List sourceRgba,
     required int width,
@@ -2721,38 +2835,69 @@ class BeautyEngineController {
     }
     final imageSize = Size(width.toDouble(), height.toDouble());
 
+    final cacheHit = identical(_faceChainSource, sourceRgba) &&
+        identical(_faceChainFace, face) &&
+        _faceChainWidth == width &&
+        _faceChainHeight == height;
+    if (!cacheHit) {
+      _clearFaceChainCache();
+      _faceChainSource = sourceRgba;
+      _faceChainFace = face;
+      _faceChainWidth = width;
+      _faceChainHeight = height;
+    }
+
     var rgba = sourceRgba;
     var current = face;
+    var start = 0;
     String? backend;
+    if (cacheHit) {
+      for (var stage = 0; stage < faceWarpChainStages.length; stage++) {
+        final snap = _faceChainSnapshots[stage];
+        final signature = _faceStageSignature(stage, parameters);
+        if (snap == null || snap.signature != signature) {
+          break;
+        }
+        rgba = snap.rgba;
+        current = snap.face;
+        backend = snap.backend;
+        start = stage + 1;
+      }
+    }
 
-    for (var stage = 0; stage < faceWarpChainStages.length; stage++) {
+    for (var stage = start; stage < faceWarpChainStages.length; stage++) {
       final field = _buildFaceWarpStage(
         stage: stage,
         face: current,
         imageSize: imageSize,
         parameters: parameters,
       );
-      if (field == null) {
-        continue;
+      if (field != null) {
+        rgba = v2.BackwardBilinearWarp.apply(
+          v2.WarpRequest(
+            sourceRgba: rgba,
+            width: width,
+            height: height,
+            field: field,
+          ),
+        ).rgba;
+        backend = faceWarpChainStages[stage].backend;
+        if (stage + 1 < faceWarpChainStages.length) {
+          current = _advectFace(
+            stage: stage,
+            from: current,
+            field: field,
+            imageSize: imageSize,
+            parameters: parameters,
+          );
+        }
       }
-      rgba = v2.BackwardBilinearWarp.apply(
-        v2.WarpRequest(
-          sourceRgba: rgba,
-          width: width,
-          height: height,
-          field: field,
-        ),
-      ).rgba;
-      backend = faceWarpChainStages[stage].backend;
-      if (stage + 1 < faceWarpChainStages.length) {
-        current = _advectFace(
-          stage: stage,
-          from: current,
-          field: field,
-          imageSize: imageSize,
-          parameters: parameters,
-        );
-      }
+      _faceChainSnapshots[stage] = _FaceChainSnapshot(
+        signature: _faceStageSignature(stage, parameters),
+        rgba: rgba,
+        face: current,
+        backend: backend,
+      );
     }
 
     lastFaceWarpBackend = backend;
@@ -3328,6 +3473,30 @@ class BeautyEngineController {
       ),
     ];
   }
+}
+
+class _FaceChainSnapshot {
+  const _FaceChainSnapshot({
+    required this.signature,
+    required this.rgba,
+    required this.face,
+    required this.backend,
+  });
+
+  final String signature;
+  final Uint8List rgba;
+  final FaceMeshResult face;
+  final String? backend;
+}
+
+class _BodyChainSnapshot {
+  const _BodyChainSnapshot({
+    required this.signature,
+    required this.rgba,
+  });
+
+  final String signature;
+  final Uint8List rgba;
 }
 
 class _RenderInputs {

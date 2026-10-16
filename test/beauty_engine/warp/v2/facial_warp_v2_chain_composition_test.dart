@@ -820,5 +820,38 @@ void main() {
       // resultado: a memoização por etapa não pode contaminar o estado.
       expect(run(0.4), orderedEquals(first));
     });
+
+    test('cache da cadeia coincide com uma cadeia limpa ao mudar só o último',
+        () {
+      final sample = faces.first;
+      final width = sample.imageSize.width.round();
+      final height = sample.imageSize.height.round();
+      final source = _pattern(width, height);
+      final cached = _controller();
+
+      Uint8List run(BeautyEngineController controller, double cheek) =>
+          controller.applyFaceWarpChain(
+            sourceRgba: source,
+            width: width,
+            height: height,
+            face: sample.face,
+            parameters: {
+              'head': -0.6,
+              'jaw': 0.8,
+              'cheekbone': cheek,
+            },
+          );
+
+      Uint8List fresh(double cheek) => run(_controller(), cheek);
+
+      final warm = run(cached, 0.3);
+      expect(warm, orderedEquals(fresh(0.3)));
+
+      final moved = run(cached, 0.9);
+      expect(moved, orderedEquals(fresh(0.9)));
+      expect(moved, isNot(orderedEquals(warm)));
+
+      expect(run(cached, 0.3), orderedEquals(warm));
+    });
   });
 }

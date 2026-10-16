@@ -74,6 +74,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
 
   Uint8List? _imageBytes;
   ui.Image? _previewImage;
+  ui.Image? _originalPreviewImage;
   int _previewImageGeneration = 0;
   String? _imagePath;
   ImageSource? _source;
@@ -150,6 +151,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     _bodyNoticeTimer?.cancel();
     ref.read(beautyEngineControllerProvider).clearDragGpuPreview();
     _previewImage?.dispose();
+    _originalPreviewImage?.dispose();
     _viewerTransform.dispose();
     super.dispose();
   }
@@ -157,6 +159,11 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
   void _disposePreviewImage() {
     _previewImage?.dispose();
     _previewImage = null;
+  }
+
+  void _disposeOriginalPreviewImage() {
+    _originalPreviewImage?.dispose();
+    _originalPreviewImage = null;
   }
 
   /// Troca a foto do ecrã e só liberta a anterior no frame seguinte.
@@ -184,12 +191,22 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
       rgba.width,
       rgba.height,
     );
+    final original = await PreviewImageDecoder.fromRgba(
+      rgba.bytes,
+      rgba.width,
+      rgba.height,
+    );
     if (!mounted || generation != _previewImageGeneration) {
       image.dispose();
+      original.dispose();
       return;
     }
     _disposePreviewImage();
-    setState(() => _previewImage = image);
+    _disposeOriginalPreviewImage();
+    setState(() {
+      _previewImage = image;
+      _originalPreviewImage = original;
+    });
   }
 
   Future<void> _prewarmShaders() async {
@@ -276,6 +293,7 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
     setState(() {
       _imageBytes = source.bytes;
       _disposePreviewImage();
+      _disposeOriginalPreviewImage();
       _imagePath = path;
       _source = source;
       _previewSource = previewSource;
@@ -1290,12 +1308,14 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
                           height: fitted.height,
                           child: RepaintBoundary(
                             child: _showOriginal
-                                ? Image.memory(
-                                    _imageBytes!,
-                                    fit: BoxFit.fill,
-                                    gaplessPlayback: true,
-                                    key: const ValueKey('original'),
-                                  )
+                                ? _originalPreviewImage == null
+                                    ? const Center(
+                                        child: CircularProgressIndicator(),
+                                      )
+                                    : BeautyRgbaPreview(
+                                        image: _originalPreviewImage!,
+                                        fit: BoxFit.fill,
+                                      )
                                 : _previewImage == null
                                     ? const Center(
                                         child: CircularProgressIndicator(),
