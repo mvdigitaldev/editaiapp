@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/utils/image_resize_utils.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
@@ -36,9 +37,10 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
     final prompt = _promptController.text.trim();
     if (_imagePaths.isEmpty || prompt.isEmpty || _isLoading) return;
 
+    final plansOn = ref.read(enablePlansProvider).valueOrNull == true;
     final requiredCredits = _getCreditsForImageCount(_imagePaths.length);
     final balance = ref.read(creditsUsageProvider).valueOrNull?.balance ?? 0;
-    if (balance < requiredCredits) {
+    if (plansOn && balance < requiredCredits) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content:
@@ -135,12 +137,22 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
       if (e is DioException) {
         final statusCode = e.response?.statusCode;
         if (statusCode == 402) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+          final plansOn = ref.read(enablePlansProvider).valueOrNull == true;
+          if (!plansOn) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
                 content:
-                    Text('Créditos insuficientes. Recarregue para continuar.')),
-          );
-          Navigator.of(context).pushNamed('/credits-shop');
+                    Text('Não foi possível concluir agora. Tente novamente.'),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text(
+                      'Créditos insuficientes. Recarregue para continuar.')),
+            );
+            Navigator.of(context).pushNamed('/credits-shop');
+          }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -249,14 +261,18 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                       child: Consumer(
                         builder: (context, ref, _) {
+                          final plansOn =
+                              ref.watch(enablePlansProvider).valueOrNull ==
+                                  true;
                           final creditsAsync = ref.watch(creditsUsageProvider);
                           final balance =
                               creditsAsync.valueOrNull?.balance ?? 0;
                           final required = _getCreditsForImageCount(
                               _imagePaths.isEmpty ? 1 : _imagePaths.length);
                           final isLoadingCredits = creditsAsync.isLoading;
-                          final hasEnoughCredits =
-                              isLoadingCredits || balance >= required;
+                          final hasEnoughCredits = !plansOn ||
+                              isLoadingCredits ||
+                              balance >= required;
                           return Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -286,7 +302,9 @@ class _CreateCompositionPageState extends ConsumerState<CreateCompositionPage> {
                                   ),
                                 ),
                               ),
-                              if (!isLoadingCredits && balance < required) ...[
+                              if (plansOn &&
+                                  !isLoadingCredits &&
+                                  balance < required) ...[
                                 const SizedBox(height: 8),
                                 Text(
                                   'Você precisa de $required créditos. Toque no botão para comprar.',

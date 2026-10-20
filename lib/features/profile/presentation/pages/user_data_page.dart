@@ -5,6 +5,7 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/utils/server_date_utils.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -408,12 +409,14 @@ class _UserDataPageState extends ConsumerState<UserDataPage> {
                         isDark: isDark,
                       ),
                     ],
-                    const SizedBox(height: 12),
-                    _InfoRow(
-                      label: 'Créditos',
-                      value: user?.creditsBalance?.toString() ?? '0',
-                      isDark: isDark,
-                    ),
+                    if (ref.watch(enablePlansProvider).valueOrNull == true) ...[
+                      const SizedBox(height: 12),
+                      _InfoRow(
+                        label: 'Créditos',
+                        value: user?.creditsBalance?.toString() ?? '0',
+                        isDark: isDark,
+                      ),
+                    ],
                   ],
                 ),
               ),

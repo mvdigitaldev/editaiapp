@@ -144,6 +144,7 @@ class ProfilePage extends ConsumerWidget {
                         ],
                       ),
                     ),
+                    if (enablePlansAsync.valueOrNull == true) ...[
                     const SizedBox(height: 16),
                     // Credits Usage
                     AppCard(
@@ -287,6 +288,7 @@ class ProfilePage extends ConsumerWidget {
                         ],
                       ),
                     ),
+                    ],
                     const SizedBox(height: 24),
                     // Account Section
                     Align(
@@ -354,13 +356,13 @@ class ProfilePage extends ConsumerWidget {
                               },
                             ),
                           ),
-                          Divider(
-                            height: 1,
-                            color: isDark
-                                ? AppColors.borderDark
-                                : AppColors.border,
-                          ),
                           if (enablePlansAsync.valueOrNull == true) ...[
+                            Divider(
+                              height: 1,
+                              color: isDark
+                                  ? AppColors.borderDark
+                                  : AppColors.border,
+                            ),
                             _ProfileOption(
                               icon: Icons.receipt_long,
                               label: 'Histórico de Pagamentos',
@@ -375,7 +377,6 @@ class ProfilePage extends ConsumerWidget {
                                   ? AppColors.borderDark
                                   : AppColors.border,
                             ),
-                          ],
                           _ProfileOption(
                             icon: Icons.card_giftcard,
                             label: 'Indique e Ganhe',
@@ -401,9 +402,11 @@ class ProfilePage extends ConsumerWidget {
                               Navigator.of(context).pushNamed('/affiliate');
                             },
                           ),
+                          ],
                         ],
                       ),
                     ),
+                    if (enablePlansAsync.valueOrNull == true) ...[
                     const SizedBox(height: 24),
                     // Promotional Card
                     Container(
@@ -451,6 +454,7 @@ class ProfilePage extends ConsumerWidget {
                         ],
                       ),
                     ),
+                    ],
                     const SizedBox(height: 24),
                     beautyEnabledAsync.when(
                       loading: () => const SizedBox.shrink(),

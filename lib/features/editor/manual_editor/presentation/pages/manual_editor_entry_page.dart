@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../../core/providers/enable_plans_provider.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/brand_visual.dart';
 import '../../../../../core/widgets/app_button.dart';
@@ -60,6 +61,7 @@ class _ManualEditorEntryPageState extends ConsumerState<ManualEditorEntryPage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final onSurface = isDark ? Colors.white : BrandVisual.navy;
+    final plansOn = ref.watch(enablePlansProvider).valueOrNull == true;
     final planLimitsAsync = ref.watch(planLimitsProvider);
     final beautyEnabledAsync = ref.watch(beautyEngineEnabledProvider);
 
@@ -94,8 +96,11 @@ class _ManualEditorEntryPageState extends ConsumerState<ManualEditorEntryPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Edite localmente no dispositivo. Ao concluir, a foto é salva '
-                    'automaticamente na sua galeria do app — sem usar créditos de IA.',
+                    plansOn
+                        ? 'Edite localmente no dispositivo. Ao concluir, a foto é salva '
+                            'automaticamente na sua galeria do app — sem usar créditos de IA.'
+                        : 'Edite localmente no dispositivo. Ao concluir, a foto é salva '
+                            'automaticamente na sua galeria do app.',
                     style: BrandVisual.text(
                       size: 15,
                       color: onSurface.withValues(alpha: 0.62),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -27,8 +28,17 @@ class ReferralDetailsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final plansOn = ref.watch(enablePlansProvider).valueOrNull == true;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final detailsAsync = ref.watch(referralDetailsProvider);
+
+    if (!plansOn) {
+      return const Scaffold(
+        body: SafeArea(
+          child: Center(child: Text('Indisponível no momento.')),
+        ),
+      );
+    }
 
     return Scaffold(
       body: SafeArea(

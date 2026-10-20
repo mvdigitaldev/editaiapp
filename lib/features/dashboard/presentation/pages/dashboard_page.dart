@@ -56,6 +56,7 @@ class DashboardPage extends ConsumerWidget {
                       : AppColors.textSecondary,
                 ),
               ),
+              if (enablePlansAsync.valueOrNull == true) ...[
               const SizedBox(height: 24),
               AppCard(
                 padding: const EdgeInsets.all(20),
@@ -258,6 +259,7 @@ class DashboardPage extends ConsumerWidget {
                   ],
                 ),
               ),
+              ],
             ],
           ),
         ),

@@ -84,7 +84,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                             ),
                           ),
                           const Spacer(),
-                          // Credits
+                          if (plansOn)
                           GestureDetector(
                             onTap: () {
                               final enabled =

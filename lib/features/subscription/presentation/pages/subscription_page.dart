@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/server_date_utils.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -41,12 +42,21 @@ class _SubscriptionPageState extends ConsumerState<SubscriptionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final plansOn = ref.watch(enablePlansProvider).valueOrNull == true;
     final plansAsync = ref.watch(activePlansProvider);
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
     final hasPaidPlan = user != null &&
         user.subscriptionTier.toLowerCase() != 'free';
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (!plansOn) {
+      return const Scaffold(
+        body: SafeArea(
+          child: Center(child: Text('Indisponível no momento.')),
+        ),
+      );
+    }
 
     return Scaffold(
       body: SafeArea(

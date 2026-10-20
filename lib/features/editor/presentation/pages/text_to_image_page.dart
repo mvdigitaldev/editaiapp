@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../subscription/presentation/pro_plan_invite.dart';
 import '../../../subscription/presentation/providers/credits_usage_provider.dart';
 import '../../../../core/theme/brand_visual.dart';
@@ -29,8 +30,9 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty || _isLoading) return;
 
+    final plansOn = ref.read(enablePlansProvider).valueOrNull == true;
     final balance = ref.read(creditsUsageProvider).valueOrNull?.balance ?? 0;
-    if (balance < 5) {
+    if (plansOn && balance < 5) {
       await showOutOfAiCreditsOffer(context, ref);
       return;
     }
@@ -202,12 +204,16 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                       child: Consumer(
                         builder: (context, ref, _) {
+                          final plansOn =
+                              ref.watch(enablePlansProvider).valueOrNull ==
+                                  true;
                           final creditsAsync = ref.watch(creditsUsageProvider);
                           final balance =
                               creditsAsync.valueOrNull?.balance ?? 0;
                           final isLoadingCredits = creditsAsync.isLoading;
-                          final hasEnoughCredits =
-                              isLoadingCredits || balance >= 5;
+                          final hasEnoughCredits = !plansOn ||
+                              isLoadingCredits ||
+                              balance >= 5;
                           return Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -231,7 +237,7 @@ class _TextToImagePageState extends ConsumerState<TextToImagePage> {
                                   ),
                                 ),
                               ),
-                              if (!isLoadingCredits && balance < 5) ...[
+                              if (plansOn && !isLoadingCredits && balance < 5) ...[
                                 const SizedBox(height: 8),
                                 Text(
                                   'Você precisa de 5 créditos. Toque no botão para comprar.',

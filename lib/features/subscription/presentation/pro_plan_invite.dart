@@ -165,6 +165,16 @@ Future<void> showOutOfAiCreditsOffer(
   BuildContext context,
   WidgetRef ref,
 ) async {
+  final plansOn = await ref.read(enablePlansProvider.future);
+  if (!plansOn) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Não foi possível concluir agora. Tente novamente.'),
+      ),
+    );
+    return;
+  }
   if (!await proInviteAllowed(ref)) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

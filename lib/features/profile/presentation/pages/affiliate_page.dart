@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/stat_card.dart';
@@ -144,9 +145,15 @@ class _AffiliatePageState extends ConsumerState<AffiliatePage> {
 
   @override
   Widget build(BuildContext context) {
+    final plansOn = ref.watch(enablePlansProvider).valueOrNull == true;
+    if (!plansOn) {
+      return const Scaffold(
+        body: SafeArea(
+          child: Center(child: Text('Indisponível no momento.')),
+        ),
+      );
+    }
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final authState = ref.watch(authStateProvider);
-    final user = authState.user;
 
     return Scaffold(
       body: SafeArea(

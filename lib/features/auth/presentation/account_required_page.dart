@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/navigation/shell_tab.dart';
+import '../../../core/providers/enable_plans_provider.dart';
 import '../../../core/theme/brand_visual.dart';
 import '../../../core/widgets/app_bottom_nav.dart';
 import '../../../core/widgets/app_button.dart';
@@ -66,12 +67,15 @@ class AccountRequiredPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final plansOn = ref.watch(enablePlansProvider).valueOrNull == true;
     final title = forSave
         ? 'Crie uma conta para guardar esta edição'
         : 'Crie uma conta para usar a edição com IA';
     final detail = forSave
         ? 'A foto fica aqui. Depois de entrar, grave de novo.'
-        : 'Essa edição gasta créditos.';
+        : plansOn
+            ? 'Essa edição gasta créditos.'
+            : 'Entre na sua conta para continuar.';
 
     return Scaffold(
       backgroundColor: Colors.white,

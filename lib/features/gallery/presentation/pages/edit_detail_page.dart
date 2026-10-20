@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/image_save_utils.dart';
@@ -396,8 +397,10 @@ class _EditDetailPageState extends ConsumerState<EditDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _detailRow('Créditos usados', '${edit.creditsUsed}', isDark),
-          const SizedBox(height: 8),
+          if (ref.watch(enablePlansProvider).valueOrNull == true) ...[
+            _detailRow('Créditos usados', '${edit.creditsUsed}', isDark),
+            const SizedBox(height: 8),
+          ],
           _detailRow('Criado em', edit.formattedCreatedAt, isDark),
           const SizedBox(height: 8),
           _detailRow('Expira em', edit.formattedExpiresAt, isDark),

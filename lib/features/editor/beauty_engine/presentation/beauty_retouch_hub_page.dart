@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/theme/brand_visual.dart';
 import '../../../../core/widgets/brand_blue_wash.dart';
 
 /// Escolha entre retoque de rosto e ajuste de corpo. As rotas não mudam.
-class BeautyRetouchHubPage extends StatelessWidget {
+class BeautyRetouchHubPage extends ConsumerWidget {
   const BeautyRetouchHubPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final onSurface = isDark ? Colors.white : BrandVisual.navy;
+    final plansOn = ref.watch(enablePlansProvider).valueOrNull == true;
 
     return Scaffold(
       backgroundColor: isDark ? BrandVisual.navy : Colors.white,
@@ -54,8 +57,11 @@ class BeautyRetouchHubPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Escolha uma categoria. As edições são processadas no '
-                    'dispositivo e não usam créditos de IA.',
+                    plansOn
+                        ? 'Escolha uma categoria. As edições são processadas no '
+                            'dispositivo e não usam créditos de IA.'
+                        : 'Escolha uma categoria. As edições são processadas no '
+                            'dispositivo.',
                     style: BrandVisual.text(
                       size: 15,
                       height: 1.35,

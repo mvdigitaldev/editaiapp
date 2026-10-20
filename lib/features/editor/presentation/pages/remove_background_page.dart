@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/utils/image_resize_utils.dart';
 import '../../../subscription/presentation/pro_plan_invite.dart';
@@ -30,8 +31,9 @@ class _RemoveBackgroundPageState extends ConsumerState<RemoveBackgroundPage> {
   Future<void> _handleRemove() async {
     if (_selectedImagePath == null || _isLoading) return;
 
+    final plansOn = ref.read(enablePlansProvider).valueOrNull == true;
     final balance = ref.read(creditsUsageProvider).valueOrNull?.balance ?? 0;
-    if (balance < 7) {
+    if (plansOn && balance < 7) {
       await showOutOfAiCreditsOffer(context, ref);
       return;
     }
@@ -194,12 +196,16 @@ class _RemoveBackgroundPageState extends ConsumerState<RemoveBackgroundPage> {
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                       child: Consumer(
                         builder: (context, ref, _) {
+                          final plansOn =
+                              ref.watch(enablePlansProvider).valueOrNull ==
+                                  true;
                           final creditsAsync = ref.watch(creditsUsageProvider);
                           final balance =
                               creditsAsync.valueOrNull?.balance ?? 0;
                           final isLoadingCredits = creditsAsync.isLoading;
-                          final hasEnoughCredits =
-                              isLoadingCredits || balance >= 7;
+                          final hasEnoughCredits = !plansOn ||
+                              isLoadingCredits ||
+                              balance >= 7;
                           return Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -222,7 +228,7 @@ class _RemoveBackgroundPageState extends ConsumerState<RemoveBackgroundPage> {
                                   ),
                                 ),
                               ),
-                              if (!isLoadingCredits && balance < 7) ...[
+                              if (plansOn && !isLoadingCredits && balance < 7) ...[
                                 const SizedBox(height: 8),
                                 Text(
                                   'Você precisa de 7 créditos. Toque no botão para comprar.',

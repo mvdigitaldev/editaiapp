@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/config/app_config.dart';
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -46,11 +47,12 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
       return;
     }
 
+    final plansOn = ref.read(enablePlansProvider).valueOrNull == true;
     final balance = ref.read(creditsUsageProvider).valueOrNull?.balance ?? 0;
-    if (balance < _creditsRequired) {
+    if (plansOn && balance < _creditsRequired) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('CrÃ©ditos insuficientes. Recarregue para continuar.'),
+          content: Text('Créditos insuficientes. Recarregue para continuar.'),
         ),
       );
       Navigator.of(context).pushNamed('/credits-shop');
@@ -159,14 +161,24 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
             ? '${(e.response!.data as Map)['error']}'
             : null;
         if (statusCode == 402) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'CrÃ©ditos insuficientes. Recarregue para continuar.',
+          final plansOn = ref.read(enablePlansProvider).valueOrNull == true;
+          if (!plansOn) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content:
+                    Text('Não foi possível concluir agora. Tente novamente.'),
               ),
-            ),
-          );
-          Navigator.of(context).pushNamed('/credits-shop');
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Créditos insuficientes. Recarregue para continuar.',
+                ),
+              ),
+            );
+            Navigator.of(context).pushNamed('/credits-shop');
+          }
         } else if (statusCode == 404) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -367,11 +379,14 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
                 ),
                 child: Consumer(
                   builder: (context, ref, _) {
+                    final plansOn =
+                        ref.watch(enablePlansProvider).valueOrNull == true;
                     final creditsAsync = ref.watch(creditsUsageProvider);
                     final balance = creditsAsync.valueOrNull?.balance ?? 0;
                     final isLoadingCredits = creditsAsync.isLoading;
-                    final hasEnoughCredits =
-                        isLoadingCredits || balance >= _creditsRequired;
+                    final hasEnoughCredits = !plansOn ||
+                        isLoadingCredits ||
+                        balance >= _creditsRequired;
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -401,7 +416,8 @@ class _EditModelPageState extends ConsumerState<EditModelPage> {
                             ),
                           ),
                         ),
-                        if (!isLoadingCredits &&
+                        if (plansOn &&
+                            !isLoadingCredits &&
                             balance < _creditsRequired) ...[
                           const SizedBox(height: 8),
                           Text(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/providers/enable_plans_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/app_time_utils.dart';
@@ -154,7 +155,16 @@ class _CreditHistoryPageState extends ConsumerState<CreditHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final plansOn = ref.watch(enablePlansProvider).valueOrNull == true;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (!plansOn) {
+      return const Scaffold(
+        body: SafeArea(
+          child: Center(child: Text('Indisponível no momento.')),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor:
