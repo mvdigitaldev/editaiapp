@@ -13,6 +13,23 @@ class AccountRequiredArgs {
   final bool forSave;
 }
 
+/// Depois de entrar, abre [nextRoute]. Sem argumento, o login fica onde está.
+class AuthFlowArgs {
+  const AuthFlowArgs({this.nextRoute});
+
+  final String? nextRoute;
+}
+
+void completeSignIn(BuildContext context) {
+  final navigator = Navigator.of(context);
+  final args = ModalRoute.of(context)?.settings.arguments;
+  final next = args is AuthFlowArgs ? args.nextRoute : null;
+  finishSignedInNavigation(context);
+  if (next != null) {
+    navigator.pushNamed(next);
+  }
+}
+
 /// Fecha o formulário e o aviso. A foto por baixo permanece.
 void finishSignedInNavigation(BuildContext context) {
   Navigator.of(context).popUntil((route) {

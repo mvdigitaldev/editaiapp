@@ -6,25 +6,40 @@ import '../theme/app_colors.dart';
 class ComparisonSlider extends StatelessWidget {
   final String? beforeImagePath;
   final String? beforeImageUrl;
+  final String? beforeAsset;
   final String? afterImagePath;
   final String? afterImageUrl;
+  final String? afterAsset;
   final double initialPosition;
+  final BoxFit fit;
 
   const ComparisonSlider({
     super.key,
     this.beforeImagePath,
     this.beforeImageUrl,
+    this.beforeAsset,
     this.afterImagePath,
     this.afterImageUrl,
+    this.afterAsset,
     this.initialPosition = 0.5,
+    this.fit = BoxFit.contain,
   });
 
-  Image _buildImage(String? path, String? url) {
+  Image _buildImage(String? path, String? url, String? asset) {
     const alignment = Alignment.center;
+    if (asset != null) {
+      return Image.asset(
+        asset,
+        fit: fit,
+        alignment: alignment,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    }
     if (path != null) {
       return Image.file(
         File(path),
-        fit: BoxFit.contain,
+        fit: fit,
         alignment: alignment,
         width: double.infinity,
         height: double.infinity,
@@ -33,7 +48,7 @@ class ComparisonSlider extends StatelessWidget {
     if (url != null) {
       return Image.network(
         url,
-        fit: BoxFit.contain,
+        fit: fit,
         alignment: alignment,
         width: double.infinity,
         height: double.infinity,
@@ -60,17 +75,30 @@ class ComparisonSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final itemOne = _buildImage(beforeImagePath, beforeImageUrl);
-    final itemTwo = _buildImage(afterImagePath, afterImageUrl);
+    final itemOne = _buildImage(beforeImagePath, beforeImageUrl, beforeAsset);
+    final itemTwo = _buildImage(afterImagePath, afterImageUrl, afterAsset);
+
+    // O pacote volta a desenhar com BoxFit.contain e ignora o tamanho.
+    // Com outro fit, as duas fotos ocupam o mesmo retângulo.
+    Widget fill(Image image) {
+      return SizedBox.expand(
+        child: Image(
+          image: image.image,
+          fit: fit,
+          alignment: Alignment.center,
+          gaplessPlayback: true,
+        ),
+      );
+    }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
-      child: SizedBox(
-        width: double.infinity,
-        height: double.infinity,
+      child: SizedBox.expand(
         child: ImageCompareSlider(
           itemOne: itemOne,
           itemTwo: itemTwo,
+          itemOneBuilder: fit == BoxFit.contain ? null : (_, __) => fill(itemOne),
+          itemTwoBuilder: fit == BoxFit.contain ? null : (_, __) => fill(itemTwo),
           handlePosition: initialPosition,
           photoRadius: BorderRadius.zero,
           fillHandle: true,

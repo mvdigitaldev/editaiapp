@@ -46,6 +46,7 @@ import 'features/editor/presentation/widgets/active_edits_coordinator.dart';
 import 'features/profile/presentation/pages/profile_page.dart';
 import 'features/profile/presentation/pages/user_data_page.dart';
 import 'features/profile/presentation/pages/affiliate_page.dart';
+import 'features/subscription/presentation/pages/ai_edit_showcase_page.dart';
 import 'features/subscription/presentation/pages/subscription_page.dart';
 import 'features/subscription/presentation/pages/credits_shop_page.dart';
 import 'core/widgets/app_bottom_nav.dart';
@@ -258,6 +259,7 @@ class MyApp extends ConsumerWidget {
         '/profile': (context) => const ProfilePage(),
         '/user-data': (context) => const UserDataPage(),
         '/affiliate': (context) => const AffiliatePage(),
+        '/ai-edit-showcase': (context) => const AiEditShowcasePage(),
         '/subscription': (context) => const SubscriptionPage(),
         '/credits-shop': (context) => const CreditsShopPage(),
         '/checkout': (context) {

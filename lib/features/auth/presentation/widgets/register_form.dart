@@ -84,7 +84,7 @@ class _RegisterFormState extends ConsumerState<RegisterForm> {
       },
       (user) {
         ref.read(authStateProvider.notifier).setUser(user);
-        finishSignedInNavigation(context);
+        completeSignIn(context);
       },
     );
   }

@@ -141,6 +141,8 @@ abstract final class BeautyEngineLabels {
   static const filterCreatorPublishAdminNote =
       'Apenas administradores podem publicar filtros no marketplace.';
   static const filterMarketplaceTitle = 'Marketplace de filtros';
+  static const filterMarketplaceComingSoon =
+      'A compra de filtros será disponibilizada em breve.';
   static const manualEditorMarketplaceHint =
       'Baixe mais filtros no Marketplace';
   static const filterInstalledHint =

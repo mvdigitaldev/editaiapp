@@ -64,7 +64,7 @@ class _LoginFormState extends ConsumerState<LoginForm> {
       },
       (user) {
         ref.read(authStateProvider.notifier).setUser(user);
-        finishSignedInNavigation(context);
+        completeSignIn(context);
       },
     );
   }
@@ -300,7 +300,10 @@ class _LoginFormState extends ConsumerState<LoginForm> {
             height: 52,
             child: OutlinedButton(
               onPressed: () {
-                Navigator.of(context).pushNamed('/register');
+                Navigator.of(context).pushNamed(
+                  '/register',
+                  arguments: ModalRoute.of(context)?.settings.arguments,
+                );
               },
               style: OutlinedButton.styleFrom(
                 foregroundColor: BrandVisual.blue,

@@ -33,7 +33,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final recentEditsAsync = ref.watch(recentEditsProvider);
     final moduleConfig = ref.watch(homeModuleConfigProvider).valueOrNull ??
         const HomeModuleConfig.allEnabled();
-    ref.watch(enablePlansProvider);
+    final plansOn = ref.watch(enablePlansProvider).valueOrNull == true;
 
     return Scaffold(
       backgroundColor: isDark ? BrandVisual.navy : Colors.white,
@@ -183,7 +183,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 onTap: () => Navigator.of(context)
                                     .pushNamed('/manual-editing-hub'),
                               ),
-                            if (moduleConfig.aiEdit)
+                            if (moduleConfig.aiEdit && plansOn)
                               HeroActionCard(
                                 index: 1,
                                 icon: Icons.auto_awesome,
@@ -194,11 +194,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 title: 'Editar com Inteligência Artificial',
                                 description:
                                     'Faça montagens, troque o fundo, peça o que quiser.',
-                                onTap: () => openAiRoute(
-                                  context,
-                                  ref,
-                                  '/edit-image',
-                                ),
+                                onTap: () {
+                                  if (ref
+                                      .read(authStateProvider)
+                                      .isAuthenticated) {
+                                    Navigator.of(context)
+                                        .pushNamed('/edit-image');
+                                    return;
+                                  }
+                                  Navigator.of(context)
+                                      .pushNamed('/ai-edit-showcase');
+                                },
                               ),
                             if (moduleConfig.textToImage)
                               HeroActionCard(

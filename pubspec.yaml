@@ -106,6 +106,7 @@ flutter:
     - assets/mediapipe/selfie_multiclass_256x256.tflite
     - assets/branding/
     - assets/home/
+    - assets/ai_showcase/
     - assets/illustrations/
     - assets/login/
     - test/beauty_engine/warp/fixtures/

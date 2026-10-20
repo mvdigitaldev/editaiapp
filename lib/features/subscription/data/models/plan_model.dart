@@ -7,6 +7,7 @@ class PlanModel extends Equatable {
   final double? price;
   final int? durationMonths;
   final int? monthlyCredits;
+  final int? addCredit;
   final List<String> features;
   final String? linkPayment;
   final bool isActive;
@@ -18,6 +19,7 @@ class PlanModel extends Equatable {
     this.price,
     this.durationMonths,
     this.monthlyCredits,
+    this.addCredit,
     this.features = const [],
     this.linkPayment,
     required this.isActive,
@@ -63,6 +65,7 @@ class PlanModel extends Equatable {
       price: json['price'] != null ? (json['price'] as num).toDouble() : null,
       durationMonths: json['duration_months'] as int?,
       monthlyCredits: json['monthly_credits'] as int?,
+      addCredit: (json['add_credit'] as num?)?.toInt(),
       features: rawFeatures is List
           ? rawFeatures.map((e) => e.toString()).toList()
           : const [],
@@ -79,6 +82,7 @@ class PlanModel extends Equatable {
         price,
         durationMonths,
         monthlyCredits,
+        addCredit,
         features,
         linkPayment,
         isActive,
