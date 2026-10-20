@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/utils/postgrest_user_message.dart';
+import '../../../auth/presentation/account_required_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/categoria_model.dart';
 import '../../data/models/modelo_model.dart';
@@ -267,6 +268,10 @@ class _ModeloCard extends StatelessWidget {
       children: [
         GestureDetector(
           onTap: () {
+            if (!isSignedIn(context)) {
+              Navigator.of(context).pushNamed('/account-required');
+              return;
+            }
             final args = <String, dynamic>{
               'modeloId': modelo.id,
               'modeloNome': modelo.nome,

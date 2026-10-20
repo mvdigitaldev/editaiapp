@@ -9,6 +9,8 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/theme_mode_provider.dart';
+import '../../../../core/navigation/shell_tab.dart';
+import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart'
     as auth_providers;
@@ -649,13 +651,16 @@ class ProfilePage extends ConsumerWidget {
                               );
                             },
                             (_) {
+                              ref.read(shellTabIndexProvider.notifier).state =
+                                  AppBottomNav.indexEditor;
                               ref
                                   .read(authStateProvider.notifier)
                                   .setUser(null);
-                              Navigator.of(context).pushNamedAndRemoveUntil(
-                                '/login',
-                                (route) => false,
-                              );
+                              if (context.mounted) {
+                                Navigator.of(context).popUntil(
+                                  (route) => route.isFirst,
+                                );
+                              }
                             },
                           );
                         },

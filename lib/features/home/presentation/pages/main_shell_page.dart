@@ -1,10 +1,10 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/navigation/shell_tab.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_update_gate.dart';
-import '../../../../core/widgets/ad_banner_widget.dart';
 import 'home_page.dart';
+import '../../../auth/presentation/pages/login_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
 import '../../../dashboard/presentation/pages/dashboard_page.dart';
@@ -35,15 +35,22 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
-    final isFree = authState.user?.subscriptionTier.toLowerCase() == 'free';
-    final showBanner = !kIsWeb && isFree;
-
+    final requestedTab = ref.watch(shellTabIndexProvider);
+    if (requestedTab != null) {
+      _currentIndex = requestedTab;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (ref.read(shellTabIndexProvider) == requestedTab) {
+          ref.read(shellTabIndexProvider.notifier).state = null;
+        }
+      });
+    }
     final pages = [
       const DashboardPage(),
       const GalleryPage(showBackButton: false, showBottomNav: false),
       const HomePage(),
       const ModelsPage(),
-      const ProfilePage(),
+      authState.isAuthenticated ? const ProfilePage() : const LoginPage(),
     ];
 
     final navBar = AppBottomNav(
@@ -61,15 +68,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
           index: _currentIndex,
           children: pages,
         ),
-        bottomNavigationBar: showBanner
-            ? Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const AdBannerWidget(),
-                  navBar,
-                ],
-              )
-            : navBar,
+        bottomNavigationBar: navBar,
       ),
     );
   }

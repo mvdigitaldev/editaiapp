@@ -1,14 +1,11 @@
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/ad_banner_widget.dart';
 import '../../../../core/widgets/comparison_slider.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/utils/image_save_utils.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
@@ -54,8 +51,6 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.editId != null && widget.editId!.isNotEmpty) {
         _fetchEdit();
-      } else {
-        _maybeShowInterstitial();
       }
     });
   }
@@ -81,28 +76,15 @@ class _ComparisonPageState extends ConsumerState<ComparisonPage> {
         await _maybeOfferManualPro(res['operation_type'] as String?);
       } else if (mounted) {
         setState(() => _isLoadingEdit = false);
-        _maybeShowInterstitial();
       }
     } catch (_) {
       if (mounted) setState(() => _isLoadingEdit = false);
-      _maybeShowInterstitial();
     }
   }
 
   Future<void> _maybeOfferManualPro(String? operationType) async {
-    if (operationType != 'manual_edit') {
-      _maybeShowInterstitial();
-      return;
-    }
-    final offered = await showPrincipalAfterManualEdit(context, ref);
-    if (!offered && mounted) _maybeShowInterstitial();
-  }
-
-  void _maybeShowInterstitial() {
-    if (kIsWeb) return;
-    final user = ref.read(authStateProvider).user;
-    if (user?.subscriptionTier.toLowerCase() != 'free') return;
-    ref.read(adServiceProvider).loadAndShowInterstitial();
+    if (operationType != 'manual_edit') return;
+    await showPrincipalAfterManualEdit(context, ref);
   }
 
   void _goBackToHome() {

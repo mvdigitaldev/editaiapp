@@ -4,6 +4,7 @@ import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../domain/usecases/sign_up.dart';
+import '../account_required_page.dart';
 import '../providers/auth_provider.dart';
 
 class RegisterForm extends ConsumerStatefulWidget {
@@ -83,7 +84,7 @@ class _RegisterFormState extends ConsumerState<RegisterForm> {
       },
       (user) {
         ref.read(authStateProvider.notifier).setUser(user);
-        Navigator.of(context).pushReplacementNamed('/home');
+        finishSignedInNavigation(context);
       },
     );
   }

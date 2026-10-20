@@ -158,13 +158,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final result = await _getCurrentUser();
       result.fold(
         (failure) {
-          state = state.copyWith(
-            isLoading: false,
-            isAuthenticated: false,
-          );
+          state = AuthState(isLoading: false, isAuthenticated: false);
         },
         (user) {
-          state = state.copyWith(
+          state = AuthState(
             user: user,
             isLoading: false,
             isAuthenticated: user != null,
@@ -176,16 +173,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
         // ignore: avoid_print
         print('[Auth] checkAuth error: $e\n$st');
       }
-      state = state.copyWith(
-        isLoading: false,
-        isAuthenticated: false,
-      );
+      state = AuthState(isLoading: false, isAuthenticated: false);
     }
   }
 
   void setUser(domain.User? user) {
-    state = state.copyWith(
+    state = AuthState(
       user: user,
+      isLoading: false,
       isAuthenticated: user != null,
     );
   }

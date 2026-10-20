@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/app_button.dart';
@@ -65,6 +66,17 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   }
 
   Future<void> _loadFirst() async {
+    if (!ref.read(authStateProvider).isAuthenticated) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = null;
+        _items.clear();
+        _hasMore = false;
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -92,6 +104,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
   Future<void> _loadMore() async {
     if (_isLoadingMore || !_hasMore) return;
+    if (!ref.read(authStateProvider).isAuthenticated) return;
 
     setState(() => _isLoadingMore = true);
 
@@ -213,6 +226,12 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     final planLimitsAsync = ref.watch(planLimitsProvider);
     ref.listen(activeEditsProvider, (_, __) {
       if (!mounted) return;
+      _loadFirst();
+    });
+    ref.listen(authStateProvider, (previous, next) {
+      if (!mounted) return;
+      final wasIn = previous?.isAuthenticated ?? false;
+      if (wasIn == next.isAuthenticated) return;
       _loadFirst();
     });
 

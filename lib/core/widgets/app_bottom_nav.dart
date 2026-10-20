@@ -16,6 +16,7 @@ class AppBottomNav extends StatelessWidget {
 
   static const int indexGallery = 1;
   static const int indexEditor = 2;
+  static const int indexProfile = 4;
 
   @override
   Widget build(BuildContext context) {

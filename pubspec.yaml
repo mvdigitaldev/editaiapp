@@ -63,7 +63,6 @@ dependencies:
   equatable: any
   webview_flutter: any
   saver_gallery: ^4.1.0
-  google_mobile_ads: ^5.1.0
 
   # Voice prompt (speech-to-text)
   speech_to_text: ^7.0.0

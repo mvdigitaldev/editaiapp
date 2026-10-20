@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/brand_visual.dart';
 import '../../../../core/utils/validators.dart';
+import '../account_required_page.dart';
 import '../providers/auth_provider.dart';
 
 class LoginForm extends ConsumerStatefulWidget {
@@ -63,7 +64,7 @@ class _LoginFormState extends ConsumerState<LoginForm> {
       },
       (user) {
         ref.read(authStateProvider.notifier).setUser(user);
-        Navigator.of(context).pushReplacementNamed('/home');
+        finishSignedInNavigation(context);
       },
     );
   }

@@ -8,6 +8,8 @@ import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../auth/presentation/account_required_page.dart';
+import '../../../../auth/presentation/providers/auth_provider.dart';
 import '../../../presentation/utils/edit_submission_helpers.dart';
 import '../../config/manual_editor_config.dart';
 import '../../di/manual_editor_providers.dart';
@@ -38,6 +40,13 @@ class _ManualEditorPageState extends ConsumerState<ManualEditorPage> {
 
   Future<void> _handleEditingComplete(Uint8List editedBytes) async {
     if (_isSaving) return;
+    if (!ref.read(authStateProvider).isAuthenticated) {
+      await Navigator.of(context).pushNamed(
+        '/account-required',
+        arguments: const AccountRequiredArgs(forSave: true),
+      );
+      return;
+    }
     setState(() => _isSaving = true);
 
     try {

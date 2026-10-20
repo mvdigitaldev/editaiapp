@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
@@ -10,15 +9,13 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/config/app_config.dart';
 import 'core/navigation/app_navigator.dart';
-import 'core/services/ad_service.dart';
 import 'core/services/notification_service.dart';
-import 'core/widgets/ad_banner_widget.dart';
-import 'features/profile/data/datasources/app_settings_datasource.dart';
 import 'firebase_options.dart';
 import 'core/storage/local_storage.dart' as app_storage;
 import 'core/theme/app_theme.dart';
 import 'core/theme/brand_visual.dart';
 import 'core/theme/theme_mode_provider.dart';
+import 'features/auth/presentation/account_required_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/pages/register_page.dart';
 import 'features/auth/presentation/pages/reset_password_page.dart';
@@ -140,25 +137,9 @@ void main() async {
     debugPrint('[Editai] Erro ao inicializar LocalStorage: $e');
   }
 
-  // AdMob: inicializar apenas em mobile
-  AdService? adServiceInstance;
-  if (!kIsWeb) {
-    try {
-      await MobileAds.instance.initialize();
-      adServiceInstance =
-          AdService(AppSettingsDataSourceImpl(Supabase.instance.client));
-      unawaited(adServiceInstance.preloadInterstitial());
-    } catch (e) {
-      debugPrint('[Editai] AdMob init: $e');
-    }
-  }
-
   // Push notifications: não bloquear abertura do app — inicializar em background
   runApp(
     ProviderScope(
-      overrides: adServiceInstance != null
-          ? [adServiceProvider.overrideWithValue(adServiceInstance)]
-          : [],
       child: MyApp(navigatorKey: appNavigatorKey),
     ),
   );
@@ -210,6 +191,11 @@ class MyApp extends ConsumerWidget {
         '/': (context) => const AuthWrapper(),
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
+        '/account-required': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          final forSave = args is AccountRequiredArgs && args.forSave;
+          return AccountRequiredPage(forSave: forSave);
+        },
         '/reset-password': (context) => const ResetPasswordPage(),
         '/home': (context) {
           final args = ModalRoute.of(context)!.settings.arguments;
@@ -421,11 +407,8 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
 
-    if (authState.isLoading) {
+    if (authState.isLoading && !_loadingTimedOut) {
       _startLoadingTimeout();
-      if (_loadingTimedOut) {
-        return const LoginPage();
-      }
       return Scaffold(
         backgroundColor: Colors.white,
         body: Center(
@@ -452,10 +435,6 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
       );
     }
 
-    if (authState.isAuthenticated) {
-      return const MainShellPage(initialIndex: 2);
-    }
-
-    return const LoginPage();
+    return const MainShellPage(initialIndex: AppBottomNav.indexEditor);
   }
 }

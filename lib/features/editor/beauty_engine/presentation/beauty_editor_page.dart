@@ -14,6 +14,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/brand_visual.dart';
 import '../../../../core/widgets/brand_blue_wash.dart';
 import '../../../../core/widgets/photo_pick_card.dart';
+import '../../../auth/presentation/account_required_page.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../subscription/presentation/pro_plan_invite.dart';
 import '../../manual_editor/di/manual_editor_providers.dart';
 import '../../presentation/utils/edit_submission_helpers.dart';
@@ -1064,6 +1066,14 @@ class _BeautyEditorPageState extends ConsumerState<BeautyEditorPage> {
         imagePath == null ||
         _processing ||
         _saving) {
+      return;
+    }
+
+    if (!ref.read(authStateProvider).isAuthenticated) {
+      await Navigator.of(context).pushNamed(
+        '/account-required',
+        arguments: const AccountRequiredArgs(forSave: true),
+      );
       return;
     }
 

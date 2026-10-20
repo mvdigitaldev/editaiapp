@@ -9,6 +9,7 @@ import '../../../../core/theme/brand_visual.dart';
 import '../../../../core/widgets/brand_blue_wash.dart';
 import '../../../../core/widgets/credit_indicator.dart';
 import '../../../../core/widgets/hero_action_card.dart';
+import '../../../auth/presentation/account_required_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../gallery/data/models/gallery_edit_model.dart';
 import '../../../gallery/presentation/providers/gallery_provider.dart';
@@ -193,8 +194,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 title: 'Editar com Inteligência Artificial',
                                 description:
                                     'Faça montagens, troque o fundo, peça o que quiser.',
-                                onTap: () => Navigator.of(context)
-                                    .pushNamed('/edit-image'),
+                                onTap: () => openAiRoute(
+                                  context,
+                                  ref,
+                                  '/edit-image',
+                                ),
                               ),
                             if (moduleConfig.textToImage)
                               HeroActionCard(
@@ -208,8 +212,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 title: 'Criar imagem com texto',
                                 description:
                                     'Escreva o que você imagina e o Editaí cria para você.',
-                                onTap: () => Navigator.of(context)
-                                    .pushNamed('/text-to-image'),
+                                onTap: () => openAiRoute(
+                                  context,
+                                  ref,
+                                  '/text-to-image',
+                                ),
                               ),
                             if (moduleConfig.multiImage)
                               HeroActionCard(
@@ -223,8 +230,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 title: 'Unir várias fotos',
                                 description:
                                     'Combine vários elementos em uma única foto.',
-                                onTap: () => Navigator.of(context)
-                                    .pushNamed('/create-composition'),
+                                onTap: () => openAiRoute(
+                                  context,
+                                  ref,
+                                  '/create-composition',
+                                ),
                               ),
                             if (moduleConfig.removeBackground)
                               HeroActionCard(
@@ -236,8 +246,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 previewAsset: 'assets/home/home_preview_bg.png',
                                 title: 'Remover Fundo',
                                 description: 'Remova com precisão.',
-                                onTap: () => Navigator.of(context)
-                                    .pushNamed('/remove-background'),
+                                onTap: () => openAiRoute(
+                                  context,
+                                  ref,
+                                  '/remove-background',
+                                ),
                               ),
                           ];
 
